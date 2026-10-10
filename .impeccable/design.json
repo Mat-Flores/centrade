@@ -1,0 +1,521 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-10T23:26:23+00:00",
+  "title": "Design System: Centrade",
+  "extensions": {
+    "colorMeta": {
+      "cobalt-sourd": {
+        "role": "primary",
+        "displayName": "Cobalt sourd",
+        "canonical": "oklch(0.46 0.13 250)",
+        "tonalRamp": [
+          "oklch(15% 0.13 250)",
+          "oklch(26% 0.13 250)",
+          "oklch(38% 0.13 250)",
+          "oklch(49% 0.13 250)",
+          "oklch(61% 0.13 250)",
+          "oklch(72% 0.13 250)",
+          "oklch(84% 0.13 250)",
+          "oklch(95% 0.13 250)"
+        ]
+      },
+      "cobalt-sourd-dark": {
+        "role": "primary",
+        "displayName": "Cobalt sourd (sombre)",
+        "canonical": "oklch(0.78 0.1 245)",
+        "tonalRamp": [
+          "oklch(15% 0.1 245)",
+          "oklch(26% 0.1 245)",
+          "oklch(38% 0.1 245)",
+          "oklch(49% 0.1 245)",
+          "oklch(61% 0.1 245)",
+          "oklch(72% 0.1 245)",
+          "oklch(84% 0.1 245)",
+          "oklch(95% 0.1 245)"
+        ]
+      },
+      "sur-cobalt": {
+        "role": "primary",
+        "displayName": "Sur-cobalt",
+        "canonical": "oklch(0.985 0.004 255)",
+        "tonalRamp": [
+          "oklch(15% 0.004 255)",
+          "oklch(26% 0.004 255)",
+          "oklch(38% 0.004 255)",
+          "oklch(49% 0.004 255)",
+          "oklch(61% 0.004 255)",
+          "oklch(72% 0.004 255)",
+          "oklch(84% 0.004 255)",
+          "oklch(95% 0.004 255)"
+        ]
+      },
+      "sur-cobalt-dark": {
+        "role": "primary",
+        "displayName": "Sur-cobalt (sombre)",
+        "canonical": "oklch(0.2 0.03 255)",
+        "tonalRamp": [
+          "oklch(15% 0.03 255)",
+          "oklch(26% 0.03 255)",
+          "oklch(38% 0.03 255)",
+          "oklch(49% 0.03 255)",
+          "oklch(61% 0.03 255)",
+          "oklch(72% 0.03 255)",
+          "oklch(84% 0.03 255)",
+          "oklch(95% 0.03 255)"
+        ]
+      },
+      "anneau-focus": {
+        "role": "primary",
+        "displayName": "Anneau de focus",
+        "canonical": "oklch(0.5 0.15 250)",
+        "tonalRamp": [
+          "oklch(15% 0.15 250)",
+          "oklch(26% 0.15 250)",
+          "oklch(38% 0.15 250)",
+          "oklch(49% 0.15 250)",
+          "oklch(61% 0.15 250)",
+          "oklch(72% 0.15 250)",
+          "oklch(84% 0.15 250)",
+          "oklch(95% 0.15 250)"
+        ]
+      },
+      "anneau-focus-dark": {
+        "role": "primary",
+        "displayName": "Anneau de focus (sombre)",
+        "canonical": "oklch(0.78 0.1 245)",
+        "tonalRamp": [
+          "oklch(15% 0.1 245)",
+          "oklch(26% 0.1 245)",
+          "oklch(38% 0.1 245)",
+          "oklch(49% 0.1 245)",
+          "oklch(61% 0.1 245)",
+          "oklch(72% 0.1 245)",
+          "oklch(84% 0.1 245)",
+          "oklch(95% 0.1 245)"
+        ]
+      },
+      "rouge-alarme": {
+        "role": "secondary",
+        "displayName": "Rouge alarme",
+        "canonical": "oklch(0.5 0.19 27)",
+        "tonalRamp": [
+          "oklch(15% 0.19 27)",
+          "oklch(26% 0.19 27)",
+          "oklch(38% 0.19 27)",
+          "oklch(49% 0.19 27)",
+          "oklch(61% 0.19 27)",
+          "oklch(72% 0.19 27)",
+          "oklch(84% 0.19 27)",
+          "oklch(95% 0.19 27)"
+        ]
+      },
+      "rouge-alarme-dark": {
+        "role": "secondary",
+        "displayName": "Rouge alarme (sombre)",
+        "canonical": "oklch(0.7 0.17 25)",
+        "tonalRamp": [
+          "oklch(15% 0.17 25)",
+          "oklch(26% 0.17 25)",
+          "oklch(38% 0.17 25)",
+          "oklch(49% 0.17 25)",
+          "oklch(61% 0.17 25)",
+          "oklch(72% 0.17 25)",
+          "oklch(84% 0.17 25)",
+          "oklch(95% 0.17 25)"
+        ]
+      },
+      "sur-alarme": {
+        "role": "secondary",
+        "displayName": "Sur-alarme",
+        "canonical": "oklch(0.985 0.004 255)",
+        "tonalRamp": [
+          "oklch(15% 0.004 255)",
+          "oklch(26% 0.004 255)",
+          "oklch(38% 0.004 255)",
+          "oklch(49% 0.004 255)",
+          "oklch(61% 0.004 255)",
+          "oklch(72% 0.004 255)",
+          "oklch(84% 0.004 255)",
+          "oklch(95% 0.004 255)"
+        ]
+      },
+      "sur-alarme-dark": {
+        "role": "secondary",
+        "displayName": "Sur-alarme (sombre)",
+        "canonical": "oklch(0.2 0.03 255)",
+        "tonalRamp": [
+          "oklch(15% 0.03 255)",
+          "oklch(26% 0.03 255)",
+          "oklch(38% 0.03 255)",
+          "oklch(49% 0.03 255)",
+          "oklch(61% 0.03 255)",
+          "oklch(72% 0.03 255)",
+          "oklch(84% 0.03 255)",
+          "oklch(95% 0.03 255)"
+        ]
+      },
+      "brume-froide": {
+        "role": "neutral",
+        "displayName": "Brume froide",
+        "canonical": "oklch(0.975 0.005 255)",
+        "tonalRamp": [
+          "oklch(15% 0.005 255)",
+          "oklch(26% 0.005 255)",
+          "oklch(38% 0.005 255)",
+          "oklch(49% 0.005 255)",
+          "oklch(61% 0.005 255)",
+          "oklch(72% 0.005 255)",
+          "oklch(84% 0.005 255)",
+          "oklch(95% 0.005 255)"
+        ]
+      },
+      "brume-froide-dark": {
+        "role": "neutral",
+        "displayName": "Brume froide (sombre)",
+        "canonical": "oklch(0.195 0.014 255)",
+        "tonalRamp": [
+          "oklch(15% 0.014 255)",
+          "oklch(26% 0.014 255)",
+          "oklch(38% 0.014 255)",
+          "oklch(49% 0.014 255)",
+          "oklch(61% 0.014 255)",
+          "oklch(72% 0.014 255)",
+          "oklch(84% 0.014 255)",
+          "oklch(95% 0.014 255)"
+        ]
+      },
+      "nuit-bleutee": {
+        "role": "neutral",
+        "displayName": "Nuit bleutée",
+        "canonical": "oklch(0.24 0.025 255)",
+        "tonalRamp": [
+          "oklch(15% 0.025 255)",
+          "oklch(26% 0.025 255)",
+          "oklch(38% 0.025 255)",
+          "oklch(49% 0.025 255)",
+          "oklch(61% 0.025 255)",
+          "oklch(72% 0.025 255)",
+          "oklch(84% 0.025 255)",
+          "oklch(95% 0.025 255)"
+        ]
+      },
+      "nuit-bleutee-dark": {
+        "role": "neutral",
+        "displayName": "Nuit bleutée (sombre)",
+        "canonical": "oklch(0.94 0.008 255)",
+        "tonalRamp": [
+          "oklch(15% 0.008 255)",
+          "oklch(26% 0.008 255)",
+          "oklch(38% 0.008 255)",
+          "oklch(49% 0.008 255)",
+          "oklch(61% 0.008 255)",
+          "oklch(72% 0.008 255)",
+          "oklch(84% 0.008 255)",
+          "oklch(95% 0.008 255)"
+        ]
+      },
+      "brume-panneau": {
+        "role": "neutral",
+        "displayName": "Brume panneau",
+        "canonical": "oklch(0.995 0.003 255)",
+        "tonalRamp": [
+          "oklch(15% 0.003 255)",
+          "oklch(26% 0.003 255)",
+          "oklch(38% 0.003 255)",
+          "oklch(49% 0.003 255)",
+          "oklch(61% 0.003 255)",
+          "oklch(72% 0.003 255)",
+          "oklch(84% 0.003 255)",
+          "oklch(95% 0.003 255)"
+        ]
+      },
+      "brume-panneau-dark": {
+        "role": "neutral",
+        "displayName": "Brume panneau (sombre)",
+        "canonical": "oklch(0.235 0.016 255)",
+        "tonalRamp": [
+          "oklch(15% 0.016 255)",
+          "oklch(26% 0.016 255)",
+          "oklch(38% 0.016 255)",
+          "oklch(49% 0.016 255)",
+          "oklch(61% 0.016 255)",
+          "oklch(72% 0.016 255)",
+          "oklch(84% 0.016 255)",
+          "oklch(95% 0.016 255)"
+        ]
+      },
+      "brume-sourde": {
+        "role": "neutral",
+        "displayName": "Brume sourde",
+        "canonical": "oklch(0.945 0.008 255)",
+        "tonalRamp": [
+          "oklch(15% 0.008 255)",
+          "oklch(26% 0.008 255)",
+          "oklch(38% 0.008 255)",
+          "oklch(49% 0.008 255)",
+          "oklch(61% 0.008 255)",
+          "oklch(72% 0.008 255)",
+          "oklch(84% 0.008 255)",
+          "oklch(95% 0.008 255)"
+        ]
+      },
+      "brume-sourde-dark": {
+        "role": "neutral",
+        "displayName": "Brume sourde (sombre)",
+        "canonical": "oklch(0.285 0.016 255)",
+        "tonalRamp": [
+          "oklch(15% 0.016 255)",
+          "oklch(26% 0.016 255)",
+          "oklch(38% 0.016 255)",
+          "oklch(49% 0.016 255)",
+          "oklch(61% 0.016 255)",
+          "oklch(72% 0.016 255)",
+          "oklch(84% 0.016 255)",
+          "oklch(95% 0.016 255)"
+        ]
+      },
+      "texte-secondaire": {
+        "role": "neutral",
+        "displayName": "Texte secondaire",
+        "canonical": "oklch(0.46 0.022 255)",
+        "tonalRamp": [
+          "oklch(15% 0.022 255)",
+          "oklch(26% 0.022 255)",
+          "oklch(38% 0.022 255)",
+          "oklch(49% 0.022 255)",
+          "oklch(61% 0.022 255)",
+          "oklch(72% 0.022 255)",
+          "oklch(84% 0.022 255)",
+          "oklch(95% 0.022 255)"
+        ]
+      },
+      "texte-secondaire-dark": {
+        "role": "neutral",
+        "displayName": "Texte secondaire (sombre)",
+        "canonical": "oklch(0.74 0.016 255)",
+        "tonalRamp": [
+          "oklch(15% 0.016 255)",
+          "oklch(26% 0.016 255)",
+          "oklch(38% 0.016 255)",
+          "oklch(49% 0.016 255)",
+          "oklch(61% 0.016 255)",
+          "oklch(72% 0.016 255)",
+          "oklch(84% 0.016 255)",
+          "oklch(95% 0.016 255)"
+        ]
+      },
+      "filet": {
+        "role": "neutral",
+        "displayName": "Filet",
+        "canonical": "oklch(0.88 0.01 255)",
+        "tonalRamp": [
+          "oklch(15% 0.01 255)",
+          "oklch(26% 0.01 255)",
+          "oklch(38% 0.01 255)",
+          "oklch(49% 0.01 255)",
+          "oklch(61% 0.01 255)",
+          "oklch(72% 0.01 255)",
+          "oklch(84% 0.01 255)",
+          "oklch(95% 0.01 255)"
+        ]
+      },
+      "filet-dark": {
+        "role": "neutral",
+        "displayName": "Filet (sombre)",
+        "canonical": "oklch(0.35 0.016 255)",
+        "tonalRamp": [
+          "oklch(15% 0.016 255)",
+          "oklch(26% 0.016 255)",
+          "oklch(38% 0.016 255)",
+          "oklch(49% 0.016 255)",
+          "oklch(61% 0.016 255)",
+          "oklch(72% 0.016 255)",
+          "oklch(84% 0.016 255)",
+          "oklch(95% 0.016 255)"
+        ]
+      },
+      "contour-champ": {
+        "role": "neutral",
+        "displayName": "Contour de champ",
+        "canonical": "oklch(0.58 0.02 255)",
+        "tonalRamp": [
+          "oklch(15% 0.02 255)",
+          "oklch(26% 0.02 255)",
+          "oklch(38% 0.02 255)",
+          "oklch(49% 0.02 255)",
+          "oklch(61% 0.02 255)",
+          "oklch(72% 0.02 255)",
+          "oklch(84% 0.02 255)",
+          "oklch(95% 0.02 255)"
+        ]
+      },
+      "contour-champ-dark": {
+        "role": "neutral",
+        "displayName": "Contour de champ (sombre)",
+        "canonical": "oklch(0.62 0.022 255)",
+        "tonalRamp": [
+          "oklch(15% 0.022 255)",
+          "oklch(26% 0.022 255)",
+          "oklch(38% 0.022 255)",
+          "oklch(49% 0.022 255)",
+          "oklch(61% 0.022 255)",
+          "oklch(72% 0.022 255)",
+          "oklch(84% 0.022 255)",
+          "oklch(95% 0.022 255)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "headline": {
+        "displayName": "Headline",
+        "purpose": "Le nom du produit en tête d'écran."
+      },
+      "title": {
+        "displayName": "Title",
+        "purpose": "Le titre d'un panneau."
+      },
+      "body": {
+        "displayName": "Body",
+        "purpose": "Texte courant et libellé des boutons (500 sur un bouton)."
+      },
+      "label": {
+        "displayName": "Label",
+        "purpose": "Étiquettes de champ, titres d'alerte."
+      },
+      "support": {
+        "displayName": "Support",
+        "purpose": "Sous-titres, descriptions d'alerte, pied de page."
+      },
+      "data": {
+        "displayName": "Data",
+        "purpose": "Tout ce que l'opérateur saisit ; identifiants, prix et horodatages."
+      }
+    },
+    "shadows": [
+      {
+        "name": "elevation-panel",
+        "value": "0 1px 2px oklch(0.24 0.025 255 / 0.06), 0 4px 16px oklch(0.24 0.025 255 / 0.05)",
+        "purpose": "Un panneau posé directement sur le fond de page (thème clair)."
+      },
+      {
+        "name": "elevation-panel-dark",
+        "value": "0 1px 2px oklch(0.1 0.02 255 / 0.4), 0 4px 16px oklch(0.1 0.02 255 / 0.3)",
+        "purpose": "Le même panneau en thème sombre."
+      }
+    ],
+    "motion": [
+      {
+        "name": "duration-fast",
+        "value": "120ms",
+        "purpose": "Durée de toute transition d'état."
+      },
+      {
+        "name": "ease-out",
+        "value": "cubic-bezier(0.22, 1, 0.36, 1)",
+        "purpose": "Courbe par défaut des transitions."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "sm",
+        "value": "640px"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Bouton principal",
+      "kind": "button",
+      "refersTo": "button-primary-lg",
+      "description": "L'action principale d'une vue, une seule par vue. Taille lg (48 px) pour l'envoi d'un formulaire.",
+      "html": "<button class=\"ds-btn-primary\">Se connecter</button>",
+      "css": ".ds-btn-primary { font-family: 'Hanken Grotesk Variable', ui-sans-serif, sans-serif; display: inline-flex; align-items: center; justify-content: center; height: 48px; padding: 0 20px; font-size: 1rem; font-weight: 500; color: var(--primary-foreground); background: var(--primary); border: 1px solid transparent; border-radius: 8px; cursor: pointer; transition: background-color 120ms cubic-bezier(0.22, 1, 0.36, 1); } .ds-btn-primary:hover { background: color-mix(in oklab, var(--primary) 80%, transparent); } .ds-btn-primary:active { transform: translateY(1px); } .ds-btn-primary:focus-visible { outline: 2px solid var(--ring); outline-offset: 2px; } .ds-btn-primary:disabled { opacity: 0.5; pointer-events: none; }"
+    },
+    {
+      "name": "Champ de saisie",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Champ de 44 px en chasse fixe, étiquette au-dessus.",
+      "html": "<label class=\"ds-field\"><span class=\"ds-field-label\">Identifiant</span><input class=\"ds-input\" type=\"text\" value=\"operateur\"></label>",
+      "css": ".ds-field { font-family: 'Hanken Grotesk Variable', ui-sans-serif, sans-serif; display: flex; flex-direction: column; gap: 8px; width: 320px; } .ds-field-label { font-size: 0.875rem; font-weight: 500; line-height: 1.375; color: var(--foreground); } .ds-input { font-family: 'Geist Mono Variable', ui-monospace, monospace; height: 44px; padding: 4px 12px; font-size: 1rem; color: var(--foreground); background: var(--background); border: 1px solid var(--input); border-radius: 8px; outline: none; transition: border-color 120ms cubic-bezier(0.22, 1, 0.36, 1); } .ds-input:focus-visible { border-color: var(--ring); outline: 2px solid var(--ring); outline-offset: 2px; } .ds-input:disabled { opacity: 0.6; cursor: not-allowed; } .ds-input[aria-invalid='true'] { border-color: var(--foreground); }"
+    },
+    {
+      "name": "Alerte",
+      "kind": "custom",
+      "refersTo": "alert",
+      "description": "Message d'échec ou de réussite : même style, la différence est dans l'icône et le texte. Jamais de rouge.",
+      "html": "<div class=\"ds-alert\" role=\"alert\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"/><line x1=\"12\" x2=\"12\" y1=\"8\" y2=\"12\"/><line x1=\"12\" x2=\"12.01\" y1=\"16\" y2=\"16\"/></svg><div class=\"ds-alert-title\">Connexion impossible</div><div class=\"ds-alert-desc\">Identifiant ou mot de passe refusé. Vérifier la saisie, puis réessayer.</div></div>",
+      "css": ".ds-alert { font-family: 'Hanken Grotesk Variable', ui-sans-serif, sans-serif; display: grid; grid-template-columns: auto 1fr; gap: 4px 8px; width: 320px; padding: 12px; font-size: 0.875rem; line-height: 1.43; color: var(--card-foreground); background: var(--card); border: 1px solid color-mix(in oklab, var(--foreground) 40%, transparent); border-radius: 8px; } .ds-alert svg { grid-row: span 2; transform: translateY(2px); } .ds-alert-title { font-weight: 500; } .ds-alert-desc { grid-column: 2; color: var(--muted-foreground); }"
+    },
+    {
+      "name": "Panneau",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Surface posée sur le fond de page ; porte la seule ombre du système.",
+      "html": "<section class=\"ds-panel\"><h2 class=\"ds-panel-title\">Connexion</h2><p class=\"ds-panel-sub\">Accès réservé à l'opérateur, par VPN.</p></section>",
+      "css": ".ds-panel { font-family: 'Hanken Grotesk Variable', ui-sans-serif, sans-serif; width: 320px; padding: 24px; color: var(--card-foreground); background: var(--card); border: 1px solid var(--border); border-radius: 12px; box-shadow: var(--elevation-panel); } .ds-panel-title { margin: 0; font-size: 1.25rem; font-weight: 600; line-height: 1.4; letter-spacing: -0.025em; } .ds-panel-sub { margin: 4px 0 0; font-size: 0.875rem; line-height: 1.43; color: var(--muted-foreground); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Le tableau d'instruments",
+    "overview": "Centrade se lit comme un panneau de mesures : chaque valeur est à sa place, lue et datée, et rien ne bouge sans raison. Tant que tout va bien, l'écran est calme, presque monochrome : des gris froids teintés de bleu, un seul bleu d'accent pour l'action principale, des chiffres alignés. Quand quelque chose ne va pas, c'est le contenu qui change (un mot, un contour, une couleur réservée), pas le décor.\n\nLes composants sont retenus à l'œil et francs sous le doigt. Au repos : bords nets, aucun effet, aucune ombre sauf celle du panneau. À l'action : cibles de 44 à 48 px, retour immédiat (120 ms), anneau de focus opaque de 2 px. Le même écran sert le coup d'œil, la session longue au bureau et l'arrivée sur alerte depuis une tablette.\n\nLe système est un socle shadcn (style `radix-nova`) réduit à ce que les jetons permettent : toute couleur, tout rayon, toute ombre et toute durée vient de `apps/web/src/index.css`. Les deux thèmes dérivent des mêmes jetons et suivent le réglage du système.",
+    "keyCharacteristics": [
+      "Gris teintés (teinte 255), jamais de noir ni de gris purs.",
+      "Un seul accent, le Cobalt sourd ; le Rouge alarme est réservé au mode LIVE et au danger.",
+      "Hiérarchie par taille et graisse, pas par couleur.",
+      "Chiffres tabulaires partout ; chasse fixe pour ce qui se saisit ou se compare.",
+      "Plat par défaut : une seule ombre, celle du panneau.",
+      "Cibles d'au moins 44 px, focus toujours visible, mouvement réduit respecté."
+    ],
+    "rules": [
+      {
+        "name": "Règle du rouge réservé",
+        "body": "Le rouge ne décore jamais. Il dit « LIVE » ou « danger », et rien d'autre. Une erreur de saisie ou de connexion n'est pas un danger : elle s'écrit en Nuit bleutée, avec une icône et un texte qui donne la cause et l'action possible.",
+        "section": "colors"
+      },
+      {
+        "name": "Règle de l'accent unique",
+        "body": "Un seul élément en Cobalt sourd plein par vue : l'action principale. Sa rareté fait qu'on le trouve sans chercher.",
+        "section": "colors"
+      },
+      {
+        "name": "Règle du gris teinté",
+        "body": "Aucune couleur en dur dans un composant, aucun `#000`, aucun `#fff`, aucun gris sans teinte. Tout passe par un jeton.",
+        "section": "colors"
+      },
+      {
+        "name": "Règle des chiffres alignés",
+        "body": "`font-variant-numeric: tabular-nums` est posé sur `html` : tout chiffre s'aligne, même en Hanken Grotesk. La chasse fixe s'ajoute pour ce qui se compare colonne à colonne ou se recopie.",
+        "section": "typography"
+      },
+      {
+        "name": "Règle taille et graisse",
+        "body": "On hiérarchise par taille (1.5 / 1.25 / 1 / 0.875rem) et par graisse (600 / 500 / 400). La couleur ne distingue que deux niveaux de texte : principal et secondaire.",
+        "section": "typography"
+      },
+      {
+        "name": "Règle de l'ombre unique",
+        "body": "Boutons, champs et alertes n'ont pas d'ombre, ni au repos ni au survol. Un panneau dans un panneau n'existe pas.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "prendre toute couleur, tout rayon, toute ombre et toute durée dans `apps/web/src/index.css`, par les utilitaires Tailwind qui en découlent (`bg-primary`, `rounded-lg`, `shadow-panel`).",
+      "garder un seul élément en Cobalt sourd plein par vue.",
+      "donner au moins 44 px de haut à tout contrôle (bouton par défaut, champ), 48 px à l'action principale d'un formulaire.",
+      "écrire en Geist Mono ce qui se saisit ou se compare : identifiants, prix, quantités, horodatages.",
+      "dire une erreur par un contour Nuit bleutée, une icône et un texte « cause, puis action possible ».",
+      "vérifier chaque écran dans les deux thèmes, à 1280 px et à 820 px, avec `axe` sans violation.",
+      "garder l'anneau de focus opaque de 2 px, décalé de 2 px, sur tout élément interactif."
+    ],
+    "donts": [
+      "employer le Rouge alarme hors du mode LIVE et des états dangereux, ni le vert ou le rouge de PnL comme décoration.",
+      "ajouter de dégradé décoratif, d'ombre lourde, de carte dans une carte, ni d'icône dans une pastille au-dessus d'un titre.",
+      "écrire une couleur en dur dans un composant, ni du noir ou un gris pur.",
+      "choisir Inter, Arial ou une police système, ni charger une police, un script ou un style depuis un tiers.",
+      "hiérarchiser par la couleur ce qui peut l'être par la taille ou la graisse.",
+      "animer autre chose que la couleur d'un état, ni au-delà de 120 ms ; `prefers-reduced-motion` coupe tout.",
+      "employer la variante de bouton `secondary` tant que le jeton `--secondary` n'existe pas."
+    ]
+  }
+}

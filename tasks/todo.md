@@ -20,7 +20,7 @@
 - [x] `PRODUCT.md` — opérateur : `/impeccable init`
 - [x] Lot B — `apps/web` : jetons, login, gates frontend
 - [x] Lot C — Compose `core`, Dockerfiles, Caddy
-- [ ] `DESIGN.md` — opérateur : `/impeccable document`
+- [x] `DESIGN.md` — opérateur : `/impeccable document`
 
 ## Points de contrôle
 
