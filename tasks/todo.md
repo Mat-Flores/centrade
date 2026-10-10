@@ -14,17 +14,17 @@
 ## Contenu du jalon
 
 - [x] `CLAUDE.md` et `.claude/` vérifiés (rapport `Explore`)
-- [ ] Lot A — socle Python, `apps/api`, Makefile, `.env.example`
-- [ ] Lot D — CI, Dependabot, pre-commit (gitleaks, ruff), semgrep
-- [ ] Lot E — README, threat-model, accepted-risks, invariants.md, docs/agentic
+- [x] Lot A — socle Python, `apps/api`, Makefile, `.env.example`
+- [x] Lot D — CI, Dependabot, pre-commit (gitleaks, ruff), semgrep
+- [x] Lot E — README, threat-model, accepted-risks, invariants.md, docs/agentic
 - [ ] `PRODUCT.md` — opérateur : `/impeccable init`
 - [ ] Lot B — `apps/web` : jetons, login, gates frontend
-- [ ] Lot C — Compose `core`, Dockerfiles, Caddy
+- [x] Lot C — Compose `core`, Dockerfiles, Caddy
 - [ ] `DESIGN.md` — opérateur : `/impeccable document`
 
 ## Points de contrôle
 
-- [ ] Après la vague 1 : `uv run ruff check .`, `uv run mypy`, `uv run pytest` verts
+- [x] Après la vague 1 : `uv run ruff check .`, `uv run mypy`, `uv run pytest` verts
 - [ ] Après la vague 2 : `make lint test` vert (agent `test-runner`), `make up` sain
 - [ ] Revues indépendantes : `agent-skills:security-auditor`, `agent-skills:code-reviewer`, revue d'interface ; aucun constat critique ou élevé ouvert
 - [ ] Vérification des skills déclenchés, mise à jour du threat-model, `docs/agentic/couts.md`
