@@ -1,0 +1,121 @@
+@import "tailwindcss";
+@import "@fontsource-variable/hanken-grotesk";
+@import "@fontsource-variable/geist-mono";
+
+/*
+ * Jetons de design de Centrade : seule source des couleurs, espacements, rayons,
+ * ombres et durées. Les composants n'emploient que les utilitaires qui en découlent.
+ * Gris teintés (teinte 255), jamais de noir ni de gris purs. Un seul accent (bleu).
+ * Le rouge (--live, --destructive) est réservé au mode LIVE et aux états dangereux.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* Surfaces et texte */
+  --background: oklch(0.975 0.005 255);
+  --foreground: oklch(0.24 0.025 255);
+  --card: oklch(0.995 0.003 255);
+  --card-foreground: var(--foreground);
+  --muted: oklch(0.945 0.008 255);
+  --muted-foreground: oklch(0.46 0.022 255);
+  --border: oklch(0.88 0.01 255);
+  --input: oklch(0.58 0.02 255);
+
+  /* Accent unique */
+  --primary: oklch(0.46 0.13 250);
+  --primary-foreground: oklch(0.985 0.004 255);
+  --ring: oklch(0.5 0.15 250);
+
+  /* Réservés : LIVE et danger. Ne servent jamais de décoration. */
+  --live: oklch(0.5 0.19 27);
+  --live-foreground: oklch(0.985 0.004 255);
+  --destructive: var(--live);
+
+  /* Forme, profondeur, mouvement */
+  --radius: 0.5rem;
+  --elevation-panel: 0 1px 2px oklch(0.24 0.025 255 / 0.06), 0 4px 16px oklch(0.24 0.025 255 / 0.05);
+  --duration-fast: 120ms;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(0.195 0.014 255);
+    --foreground: oklch(0.94 0.008 255);
+    --card: oklch(0.235 0.016 255);
+    --muted: oklch(0.285 0.016 255);
+    --muted-foreground: oklch(0.74 0.016 255);
+    --border: oklch(0.35 0.016 255);
+    --input: oklch(0.62 0.022 255);
+
+    --primary: oklch(0.78 0.1 245);
+    --primary-foreground: oklch(0.2 0.03 255);
+    --ring: oklch(0.78 0.1 245);
+
+    --live: oklch(0.7 0.17 25);
+    --live-foreground: oklch(0.2 0.03 255);
+
+    --elevation-panel: 0 1px 2px oklch(0.1 0.02 255 / 0.4), 0 4px 16px oklch(0.1 0.02 255 / 0.3);
+  }
+}
+
+@theme {
+  --font-sans: "Hanken Grotesk Variable", ui-sans-serif, sans-serif;
+  --font-mono: "Geist Mono Variable", ui-monospace, monospace;
+  --spacing: 0.25rem;
+  --default-transition-duration: var(--duration-fast);
+  --default-transition-timing-function: var(--ease-out);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-ring: var(--ring);
+  --color-live: var(--live);
+  --color-live-foreground: var(--live-foreground);
+  --color-destructive: var(--destructive);
+  --shadow-panel: var(--elevation-panel);
+  --radius-sm: calc(var(--radius) * 0.5);
+  --radius-md: calc(var(--radius) * 0.75);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.5);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring;
+  }
+  html {
+    @apply bg-background font-sans text-foreground antialiased;
+    font-variant-numeric: tabular-nums;
+  }
+  button,
+  input {
+    touch-action: manipulation;
+  }
+  ::selection {
+    background: color-mix(in oklch, var(--primary) 30%, transparent);
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

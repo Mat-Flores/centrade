@@ -7,3 +7,4 @@ Format : titre `ADR-NNNN : …`, puis les sections Statut (Proposée, Acceptée,
 | ADR | Titre | Statut |
 | --- | --- | --- |
 | 0001 | Ossature du jalon M0 | Acceptée |
+| 0002 | Dépendances du front à M0 | Acceptée |
