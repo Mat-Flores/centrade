@@ -2,7 +2,7 @@
 
 Source : SPEC §13 (Sécurité), §3, §11, §12, §17.5. Créé à M0 (2026-10-10), mis à jour à chaque jalon (§17.3 étape 7).
 
-**Lecture de l'état.** `prévu` = la parade est décrite par le SPEC mais n'existe pas encore. `M0, à confirmer` = livré par M0 (dépôt, CI, hooks, Compose `core`) et à vérifier à la clôture du jalon. `politique seule` = règle écrite (SPEC, `CLAUDE.md`), sans contrôle technique dans le dépôt. Rien d'autre n'est présenté comme fait. Le SPEC ne décrit pas d'autre parade que celles citées ; les manques sont en section 4.
+**Lecture de l'état.** `prévu` = la parade est décrite par le SPEC mais n'existe pas encore. `livré (M0)` = présent dans le dépôt et vérifié à la clôture de M0 (CI exécutée, pile démarrée, revues indépendantes). `politique seule` = règle écrite (SPEC, `CLAUDE.md`), sans contrôle technique dans le dépôt. Rien d'autre n'est présenté comme fait. Le SPEC ne décrit pas d'autre parade que celles citées ; les manques sont en section 4.
 
 ## 1. Actifs
 
@@ -45,7 +45,7 @@ Jalon = jalon où la parade est livrée, d'après la ligne du §14 qui livre le 
 | A1 | Un agent d'exécution passe ou modifie un ordre | Serveur MCP | E | `place_order`, `raise_limit`, accès aux secrets, levée du kill switch absents du serveur (§12) ; test d'absence (§14 M5) ; I11 | M5 (test), M7 (I11) | prévu |
 | A2 | Un agent fait approuver une action qui augmente le risque | Propositions (F5) | E | Approbation dans le dashboard avec 2FA uniquement ; test (§14 M6) ; mode shadow par défaut (§12) | M6 | prévu |
 | A3 | Un agent présente une donnée périmée ou paper comme réelle | Outils de lecture MCP | I | Outils renvoyant l'état avec son âge ; cas dans les évals (§12, I1) | M5 | prévu |
-| A4 | Un agent de construction écrit une clé live ou active le live | Poste de dev, dépôt | E, I | Aucune clé live en développement (§0.10, §17.5) ; hook bloquant toute écriture qui active un mode live (§17.5) ; aucun skill ni MCP d'ordres (§17.7). Limite : le hook ne voit que les outils Write et Edit (une écriture par le shell lui échappe) et exempte `docs/`, `tests/` et `*.md` | M0 | M0, à confirmer |
+| A4 | Un agent de construction écrit une clé live ou active le live | Poste de dev, dépôt | E, I | Aucune clé live en développement (§0.10, §17.5) ; hook bloquant toute écriture qui active un mode live (§17.5) ; aucun skill ni MCP d'ordres (§17.7). Limite : le hook ne voit que les outils Write et Edit (une écriture par le shell lui échappe) et exempte `docs/`, `tests/` et `*.md` | M0 | livré (M0) |
 | A5 | Un agent de construction modifie ses propres garde-fous (`.claude/settings.json`, hooks) | `.claude/` | T, E | Interdit sans demande de l'opérateur (§0.9). Aucune règle de refus ni hook ne protège ces fichiers : la parade est la relecture du diff par l'opérateur | M0 | politique seule |
 | A6 | Un agent épuise le budget (boucle d'outils) | Agents | D | Plafonds de coût journaliers, timeouts, sorties validées par schéma (§12) | M5 (déduit) | prévu |
 | A7 | Action d'agent non attribuée | API | R | I14 : audit inaltérable avec auteur | M1 | prévu |
@@ -57,7 +57,7 @@ Jalon = jalon où la parade est livrée, d'après la ligne du §14 qui livre le 
 | K1 | Relecture d'une clé via l'API ou l'interface | SecretStore, API | I | Saisie en écriture seule, jamais relue (F6, I12) ; test que l'API ne renvoie jamais la valeur (§14 M2) | M2 | prévu |
 | K2 | Clé dans les logs | Journalisation | I | Processeur structlog de masquage, test à valeurs sentinelles (§13) | M2 (§14) ; l'authentification de M1 manipule déjà mots de passe, TOTP et sessions : avancer le masquage à M1 est à décider par l'opérateur | prévu |
 | K3 | Clé dans une image, un fichier Compose, une variable d'environnement ou un volume persistant | Runner, moteurs | I | Fichier en lecture seule monté en mémoire, supprimé à l'arrêt (F6, §13) | M2 | prévu |
-| K4 | Secrets de la plateforme dans l'environnement ou le dépôt | Compose, dépôt | I | Docker secrets (§13) ; gitleaks en pre-commit et en CI ; `.env.example` sans valeur (§0.5) | M0 | M0, à confirmer |
+| K4 | Secrets de la plateforme dans l'environnement ou le dépôt | Compose, dépôt | I | Docker secrets (§13) ; gitleaks en pre-commit et en CI ; `.env.example` sans valeur (§0.5) | M0 | livré (M0) |
 | K5 | Sauvegarde volée donnant accès aux clés | Sauvegardes | I | Sauvegardes chiffrées ; clé maître et `N8N_ENCRYPTION_KEY` sauvegardées à part, hors serveur (§13) | M7 (déduit) | prévu |
 | K6 | Clé volée utilisée depuis une autre adresse ou pour retirer des fonds | Venue | S, E | Test de connexion : trading autorisé, retrait interdit, sinon refus ; avertissement bloquant pour le live sans restriction d'IP (F6) | M2 | prévu |
 | K7 | Moteur compromis tente de lire d'autres clés ou d'atteindre la base | Moteurs | I, E | Réseau `engines` restreint ; gabarit de conteneur durci ; clé transmise à une seule instance (§13, I12) ; plafond de capital par sous-compte (F6) | M2 | prévu |
@@ -82,30 +82,30 @@ Jalon = jalon où la parade est livrée, d'après la ligne du §14 qui livre le 
 | P1 | Instruction cachée dans une news ou un flux | WF-04, agents | T, E | Données externes jamais traitées comme instructions (§12) ; corpus dans `tests/agents/injection/`, aucun appel d'outil imprévu (§12, §14 M5) | M5 | prévu |
 | P2 | Classement LLM de WF-04 détourné | WF-04 | T | Même corpus ; le flux n'écrit que `POST /events/external`, sans scope d'ordre (§11) | M5 | prévu |
 | P3 | Décision de risque confiée à un modèle | Risk service | E | Décision de risque déterministe, jamais déléguée à un LLM (§1 principe 6) | M3 | prévu |
-| P4 | Agent de construction qui lit une page, une issue ou un document piégé | Poste de dev | T, E | Contenus externes = données ; action confirmée par l'opérateur (§17.5, `CLAUDE.md`) | M0 | M0, à confirmer |
+| P4 | Agent de construction qui lit une page, une issue ou un document piégé | Poste de dev | T, E | Contenus externes = données ; action confirmée par l'opérateur (§17.5, `CLAUDE.md`) | M0 | livré (M0) |
 
 ### 3.5 Compromission de la chaîne d'approvisionnement
 
 | ID | Menace | Composant | STRIDE | Parade prévue (SPEC) | Jalon | État |
 | --- | --- | --- | --- | --- | --- | --- |
-| C1 | Dépendance vulnérable ou malveillante | Python, npm | T | Dépendances épinglées par fichier de verrouillage ; pip-audit, `pnpm audit` et Trivy en CI (§13) ; audit `supply-chain` (versions, mainteneurs, scripts d'installation) passé à la main à chaque ajout de dépendance, pas en CI ; ADR pour toute dépendance hors §5 (§0.2) | M0 | M0, à confirmer |
-| C2 | Image de base ou de moteur altérée | Docker | T | Tags exacts, jamais `latest` ; image de moteur vérifiée par digest ; Trivy et SBOM en CI (§13) | M0 (images core), M2 (moteurs) | M0, à confirmer |
-| C3 | Secret ou faille introduite dans le code | Dépôt | I | gitleaks, semgrep, CodeQL en CI (§13) | M0 | M0, à confirmer |
-| C4 | Workflow GitHub Actions injectable | CI | T, E | zizmor et actionlint sans constat (§13) | M0 | M0, à confirmer |
+| C1 | Dépendance vulnérable ou malveillante | Python, npm | T | Dépendances épinglées par fichier de verrouillage ; pip-audit, `pnpm audit` et Trivy en CI (§13) ; audit `supply-chain` (versions, mainteneurs, scripts d'installation) passé à la main à chaque ajout de dépendance, pas en CI ; ADR pour toute dépendance hors §5 (§0.2) | M0 | livré (M0) |
+| C2 | Image de base ou de moteur altérée | Docker | T | Tags exacts, jamais `latest` ; image de moteur vérifiée par digest ; Trivy et SBOM en CI (§13) | M0 (images core), M2 (moteurs) | livré (M0) |
+| C3 | Secret ou faille introduite dans le code | Dépôt | I | gitleaks, semgrep, CodeQL en CI (§13) | M0 | livré (M0) |
+| C4 | Workflow GitHub Actions injectable | CI | T, E | zizmor et actionlint sans constat (§13) | M0 | livré (M0) |
 | C5 | Moteur modifié hors plateforme | Moteurs | T | Empreinte de déploiement (I10) ; dérive de configuration détectée en 60 s (S8) | M2 | prévu |
 | C6 | Plugin, skill ou MCP tiers malveillant ou capable d'ordres | Poste de dev | T, E | Relus avant installation, épinglés à une version, hooks téléchargeant des binaires désactivés (§17.5) ; interdits d'exécution d'ordres (§17.7). `claude-mem` 13.35.0 (Apache-2.0, commit `fa8ab09`), ajouté par l'opérateur : ses hooks s'exécutent à chaque appel d'outil et en gardent une trace hors du dépôt ; ses scripts n'ont pas été relus en entier | M0 | politique seule |
-| C8 | Outil de CI exécuté à la volée (`uvx`, `npx`, image Docker) remplacé en amont | CI | T, E | Versions exactes ; images de la CI épinglées par digest ; jeton en lecture seule et aucun secret dans les workflows (§13). Les dépendances transitives de ces outils ne sont pas verrouillées par empreinte : voir section 4 | M0 | M0, à confirmer |
+| C8 | Outil de CI exécuté à la volée (`uvx`, `npx`, image Docker) remplacé en amont | CI | T, E | Versions exactes ; images de la CI épinglées par digest ; jeton en lecture seule et aucun secret dans les workflows (§13). Les dépendances transitives de ces outils ne sont pas verrouillées par empreinte : voir section 4 | M0 | livré (M0) |
 | C7 | Faille résiduelle non vue par l'auteur du code | Dépôt | T, I | Revue de sécurité indépendante à chaque jalon (§13) ; revue complète finale et recherche de secrets dans l'historique (§14 M7) | M7 | prévu |
 
 ### 3.6 Poste de développement agentique (§17.5)
 
 | ID | Menace | Composant | STRIDE | Parade prévue (SPEC) | Jalon | État |
 | --- | --- | --- | --- | --- | --- | --- |
-| D1 | Lecture de `.env`, `secrets/`, clés SSH, identifiants cloud | Poste | I | Règles de refus de lecture et d'écriture dans `.claude/settings.json` ; aucun secret réel (§17.5). Le bac à sable `/sandbox` s'active sur le poste : rien dans le dépôt ne le prouve | M0 | M0, à confirmer (règles de refus) ; politique seule (bac à sable) |
-| D2 | Commande destructrice (suppression récursive, poussée forcée ou sur la branche principale, destruction de volumes Docker, `curl \| sh`) | Poste | T, D | Hooks bloquants (§17.5) | M0 | M0, à confirmer |
+| D1 | Lecture de `.env`, `secrets/`, clés SSH, identifiants cloud | Poste | I | Règles de refus de lecture et d'écriture dans `.claude/settings.json` ; aucun secret réel (§17.5). Le bac à sable `/sandbox` s'active sur le poste : rien dans le dépôt ne le prouve | M0 | livré (M0) (règles de refus) ; politique seule (bac à sable) |
+| D2 | Commande destructrice (suppression récursive, poussée forcée ou sur la branche principale, destruction de volumes Docker, `curl \| sh`) | Poste | T, D | Hooks bloquants (§17.5) | M0 | livré (M0) |
 | D3 | `--dangerously-skip-permissions` hors conteneur jetable | Poste | E | Interdit (§17.5) ; devcontainer recommandé (§15) | M0 | politique seule |
-| D4 | Serveur MCP de projet approuvé automatiquement | Poste | E | Non approuvé automatiquement ; n8n-mcp sans identifiants de production (§17.5) | M0 | M0, à confirmer |
-| D5 | Mode live activé par une édition de fichier | Config | E | Hook bloquant `dry_run` à `false` et variable live (§17.5) ; promotion par la seule procédure F1 (§0.3). Même limite du hook que pour A4 | M0 (hook), M7 (promotion) | M0, à confirmer |
+| D4 | Serveur MCP de projet approuvé automatiquement | Poste | E | Non approuvé automatiquement ; n8n-mcp sans identifiants de production (§17.5) | M0 | livré (M0) |
+| D5 | Mode live activé par une édition de fichier | Config | E | Hook bloquant `dry_run` à `false` et variable live (§17.5) ; promotion par la seule procédure F1 (§0.3). Même limite du hook que pour A4 | M0 (hook), M7 (promotion) | livré (M0) |
 
 ### 3.7 Plateforme : autres menaces STRIDE
 
@@ -120,9 +120,9 @@ Jalon = jalon où la parade est livrée, d'après la ligne du §14 qui livre le 
 | X7 | Panne de la plateforme non remarquée | Noyau | D | Battement toutes les 60 s vers une surveillance externe, alerte en 5 min (§13) | M4 | prévu |
 | X8 | Panne du Risk service ou du hook | Risk service | D | Entrée refusée (I5), sortie jamais bloquée (I4) ; S11, S12 | M3 | prévu |
 | X9 | Évasion de conteneur ou abus du socket Docker | Runner, worker | E | Socket proxy limité aux opérations de conteneurs ; gabarit durci (non-root, lecture seule, capacités retirées, `no-new-privileges`) (§13) | M2 | prévu |
-| X10 | Interception réseau | Caddy | I | TLS hors réseau Docker interne ; accès par VPN (§13, §15) | M0 | M0, à confirmer |
-| X12 | Conteneur du noyau compromis qui lit ou falsifie le bus et la base | Postgres, Redis | T, I, E | Réseau `data` interne, joignable par l'API, le Risk service et le worker seulement (§13) ; secrets par Docker secrets ; conteneurs non-root, en lecture seule, sans capacités. Les événements sont des indices, les relevés font foi (§7) | M0 (réseau, durcissement), M1 (événements) | M0, à confirmer |
-| X11 | Exposition publique du dashboard | Caddy | I | Rien n'écoute sur Internet ; exposer = décision consignée dans `accepted-risks.md` (§13) | M0 | M0, à confirmer |
+| X10 | Interception réseau | Caddy | I | TLS hors réseau Docker interne (livré) ; accès par VPN (§13, §15) : la liaison à l'interface du VPN se règle au déploiement, M0 ne lie que `127.0.0.1` | M0 | livré (M0), VPN au déploiement |
+| X12 | Conteneur du noyau compromis qui lit ou falsifie le bus et la base | Postgres, Redis | T, I, E | Réseau `data` interne, joignable par l'API, le Risk service et le worker seulement (§13) ; secrets par Docker secrets ; conteneurs non-root, en lecture seule, sans capacités. Les événements sont des indices, les relevés font foi (§7) | M0 (réseau, durcissement), M1 (événements) | livré (M0) |
+| X11 | Exposition publique du dashboard | Caddy | I | Rien n'écoute sur Internet ; exposer = décision consignée dans `accepted-risks.md` (§13) | M0 | livré (M0) |
 
 ## 4. Menaces sans parade prévue
 
@@ -141,6 +141,7 @@ Le SPEC ne prévoit pas de parade explicite pour :
 
 | Date | Jalon | Changement |
 | --- | --- | --- |
-| 2026-10-10 | M0 | Création. Toutes les parades sont `prévu`, sauf celles que M0 livre (dépôt, CI, hooks, Compose `core`), marquées `M0, à confirmer` jusqu'à la vérification de clôture. |
+| 2026-10-10 | M0 | Création. Toutes les parades sont `prévu`, sauf celles que M0 livre (dépôt, CI, hooks, Compose `core`), marquées `livré (M0)` jusqu'à la vérification de clôture. |
 | 2026-10-10 | M0 | Revue de sécurité indépendante : A5, C6 et D3 ramenés à `politique seule` ; limites du hook de mode live (A4, D5) ; C1 corrigé (l'audit `supply-chain` n'est pas en CI) ; ajout de C8, X12 et de la clé de l'autorité de Caddy. |
 | 2026-10-10 | M0 | Plugin `claude-mem@thedotmack` ajouté par l'opérateur aux plugins toujours actifs (C6) : manifeste et liste des hooks relus, scripts non relus ; skill `cloud-sync` soumis à l'accord de l'opérateur (§17.7). |
+| 2026-10-10 | M0 | Clôture : parades de M0 vérifiées et passées à `livré (M0)`. Caddy recompilé avec Go 1.26.9 et `x/net` 0.60.0 (ADR 0003), non-root et sans capacité. |
