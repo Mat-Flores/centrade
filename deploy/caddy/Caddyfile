@@ -1,0 +1,27 @@
+# TLS interne de Caddy en développement ; en production, le nom d'hôte du VPN
+# (CENTRADE_HOSTNAME) et l'adresse de liaison viennent de l'environnement (SPEC §13).
+{
+	admin localhost:2019
+	auto_https disable_redirects
+}
+
+https://{$CENTRADE_HOSTNAME:localhost}:8443 {
+	tls internal
+
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "no-referrer"
+		X-Frame-Options "DENY"
+		# Aucune origine tierce : tout est servi par la plateforme (SPEC §9).
+		Content-Security-Policy "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; object-src 'none'"
+		-Server
+	}
+
+	handle /api/* {
+		reverse_proxy api:8000
+	}
+	handle {
+		reverse_proxy web:8080
+	}
+}

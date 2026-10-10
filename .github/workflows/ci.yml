@@ -128,11 +128,11 @@ jobs:
           name: sbom-cyclonedx
           path: sbom.cdx.json
 
-      # Hypothèse de contexte : l'API se construit depuis la racine (pyproject.toml, uv.lock), le front depuis apps/web.
+      # Contexte de build : la racine du dépôt, comme dans deploy/compose/core.yml.
       - name: Construire les images
         run: |
           docker build -t centrade-api:ci -f apps/api/Dockerfile .
-          docker build -t centrade-web:ci apps/web
+          docker build -t centrade-web:ci -f apps/web/Dockerfile .
       - name: Trivy (image api)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -154,15 +154,15 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
-      # Hypothèse : Caddy écoute sur 127.0.0.1:8080 ; à ajuster selon deploy/compose/core.yml.
-      HEALTH_URL: http://127.0.0.1:8080/api/v1/system/health
+      HEALTH_URL: https://localhost:8443/api/v1/system/health
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - run: cp -n .env.example .env
       - run: make up
-      - run: curl --fail --silent --show-error --retry 10 --retry-delay 3 --retry-all-errors "$HEALTH_URL"
+      # --insecure : certificat de l'autorité interne de Caddy, propre à ce runner jetable.
+      - run: curl --insecure --fail --silent --show-error --retry 10 --retry-delay 3 --retry-all-errors "$HEALTH_URL"
       - name: Journaux Compose en cas d'échec
         if: failure()
         run: docker compose -f deploy/compose/core.yml --profile core logs --no-color --tail 100

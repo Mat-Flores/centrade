@@ -1,9 +1,21 @@
-.PHONY: help up down test lint
+.PHONY: help secrets up down test lint
 
 help: ## Liste les cibles
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/ :/'
 
-up: ## Démarre le profil core
+# Générés une seule fois, jamais affichés. Dossier 700 ; fichiers 644 car le conteneur
+# (uid 70 ou 999) doit les lire : le dossier protège contre les autres comptes de l'hôte.
+secrets: secrets/postgres_password secrets/redis.conf ## Génère les secrets Docker absents
+
+secrets/postgres_password:
+	@install -d -m 700 secrets
+	@umask 077 && head -c 32 /dev/urandom | base64 | tr -d '/+=\n' > $@ && chmod 644 $@
+
+secrets/redis.conf:
+	@install -d -m 700 secrets
+	@umask 077 && printf 'requirepass %s\n' "$$(head -c 32 /dev/urandom | base64 | tr -d '/+=\n')" > $@ && chmod 644 $@
+
+up: secrets ## Démarre le profil core
 	docker compose -f deploy/compose/core.yml --profile core up -d --wait
 
 down: ## Arrête le profil core (jamais -v)
