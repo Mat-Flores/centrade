@@ -14,8 +14,8 @@ async function expectNoSeriousViolation(page: Page) {
   const { violations } = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze();
-  const blocking = violations.filter((v) => v.impact === "serious" || v.impact === "critical");
-  expect(blocking, JSON.stringify(blocking.map((v) => v.id))).toEqual([]);
+  // Toute violation bloque, quelle que soit sa gravité.
+  expect(violations.map((v) => v.id)).toEqual([]);
 }
 
 for (const scheme of ["light", "dark"] as const) {
