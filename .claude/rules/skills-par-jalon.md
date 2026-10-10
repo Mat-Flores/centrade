@@ -10,7 +10,9 @@ Avant de commencer un jalon (SPEC.md §14), applique la procédure d'activation 
 
 ### Toujours actifs
 
-`ponytail@ponytail`, `agent-skills@addy-agent-skills`, `context7@claude-plugins-official`, `security-guidance@claude-plugins-official`, `differential-review@trailofbits`
+`ponytail@ponytail`, `agent-skills@addy-agent-skills`, `context7@claude-plugins-official`, `security-guidance@claude-plugins-official`, `differential-review@trailofbits`, `claude-mem@thedotmack`
+
+`claude-mem` (ajouté par l'opérateur le 10 octobre 2026) sert à la mémoire entre les sessions. Ses skills ne remplacent aucun skill du tableau des déclencheurs ci-dessous. Son skill `cloud-sync` ne s'utilise pas sans accord explicite de l'opérateur (SPEC §17.7).
 
 ### Actifs selon le jalon
 

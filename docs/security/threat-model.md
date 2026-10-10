@@ -93,7 +93,7 @@ Jalon = jalon où la parade est livrée, d'après la ligne du §14 qui livre le 
 | C3 | Secret ou faille introduite dans le code | Dépôt | I | gitleaks, semgrep, CodeQL en CI (§13) | M0 | M0, à confirmer |
 | C4 | Workflow GitHub Actions injectable | CI | T, E | zizmor et actionlint sans constat (§13) | M0 | M0, à confirmer |
 | C5 | Moteur modifié hors plateforme | Moteurs | T | Empreinte de déploiement (I10) ; dérive de configuration détectée en 60 s (S8) | M2 | prévu |
-| C6 | Plugin, skill ou MCP tiers malveillant ou capable d'ordres | Poste de dev | T, E | Relus avant installation, épinglés à une version, hooks téléchargeant des binaires désactivés (§17.5) ; interdits d'exécution d'ordres (§17.7) | M0 | politique seule |
+| C6 | Plugin, skill ou MCP tiers malveillant ou capable d'ordres | Poste de dev | T, E | Relus avant installation, épinglés à une version, hooks téléchargeant des binaires désactivés (§17.5) ; interdits d'exécution d'ordres (§17.7). `claude-mem` 13.35.0 (Apache-2.0, commit `fa8ab09`), ajouté par l'opérateur : ses hooks s'exécutent à chaque appel d'outil et en gardent une trace hors du dépôt ; ses scripts n'ont pas été relus en entier | M0 | politique seule |
 | C8 | Outil de CI exécuté à la volée (`uvx`, `npx`, image Docker) remplacé en amont | CI | T, E | Versions exactes ; images de la CI épinglées par digest ; jeton en lecture seule et aucun secret dans les workflows (§13). Les dépendances transitives de ces outils ne sont pas verrouillées par empreinte : voir section 4 | M0 | M0, à confirmer |
 | C7 | Faille résiduelle non vue par l'auteur du code | Dépôt | T, I | Revue de sécurité indépendante à chaque jalon (§13) ; revue complète finale et recherche de secrets dans l'historique (§14 M7) | M7 | prévu |
 
@@ -143,3 +143,4 @@ Le SPEC ne prévoit pas de parade explicite pour :
 | --- | --- | --- |
 | 2026-10-10 | M0 | Création. Toutes les parades sont `prévu`, sauf celles que M0 livre (dépôt, CI, hooks, Compose `core`), marquées `M0, à confirmer` jusqu'à la vérification de clôture. |
 | 2026-10-10 | M0 | Revue de sécurité indépendante : A5, C6 et D3 ramenés à `politique seule` ; limites du hook de mode live (A4, D5) ; C1 corrigé (l'audit `supply-chain` n'est pas en CI) ; ajout de C8, X12 et de la clé de l'autorité de Caddy. |
+| 2026-10-10 | M0 | Plugin `claude-mem@thedotmack` ajouté par l'opérateur aux plugins toujours actifs (C6) : manifeste et liste des hooks relus, scripts non relus ; skill `cloud-sync` soumis à l'accord de l'opérateur (§17.7). |
