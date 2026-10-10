@@ -16,7 +16,8 @@ package = false
 [tool.ruff]
 line-length = 100
 target-version = "py312"
-extend-exclude = ["docker"]
+# *.md : ruff reformaterait les blocs de code de SPEC.md, qu'on ne modifie pas.
+extend-exclude = ["docker", "*.md"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "S", "ASYNC", "RUF"]
