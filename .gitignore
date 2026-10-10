@@ -2,3 +2,15 @@
 docker/omniroute/.env
 .env
 .claude/settings.local.json
+
+# python / node / tests
+.venv/
+__pycache__/
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+node_modules/
+dist/
+playwright-report/
+test-results/
+secrets/
