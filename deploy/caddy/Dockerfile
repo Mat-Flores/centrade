@@ -19,6 +19,7 @@ COPY --from=caddy-build /caddy /usr/bin/caddy
 RUN adduser -S -D -H -u 10002 caddy && chown -R 10002 /data /config
 USER 10002
 
+# nosemgrep: centrade-image-tag-latest-dockerfile -- `base` est une étape de ce fichier, pas une image
 FROM base AS proxy
 EXPOSE 8443
 
@@ -35,6 +36,7 @@ RUN test "v$(tr -d '[:space:]' < .node-version)" = "$(node -v)" \
 COPY apps/web/ ./
 RUN pnpm build
 
+# nosemgrep: centrade-image-tag-latest-dockerfile -- `base` est une étape de ce fichier, pas une image
 FROM base AS web
 COPY <<'EOF2' /etc/caddy/Caddyfile
 {
