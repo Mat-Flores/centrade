@@ -1,3 +1,4 @@
 # secrets
 docker/omniroute/.env
 .env
+.claude/settings.local.json

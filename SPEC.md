@@ -16,7 +16,7 @@
 > - **§17 (nouveau)** : environnement de développement agentique (orchestration Opus/Sonnet/Haiku, subagents, skills, tokens, sécurité du poste de dev).
 > - Annexes : structure du dépôt étendue, exemples en décimaux (chaînes).
 >
-> Le fichier compagnon `SETUP-CLAUDE-CODE.md` contient les commandes d'installation, les fichiers `.claude/` et le prompt de démarrage.
+> L'environnement agentique est déjà en place dans `CLAUDE.md` et `.claude/` (agents, skills, rules, hooks). Pour lancer un jalon : « lance le jalon Mx » ou `/milestone Mx`.
 
 ## 0. Instructions pour l'agent de développement
 
@@ -63,7 +63,7 @@ Hors périmètre V1 : trading haute fréquence, multi-utilisateurs ou SaaS, appl
 | Kill switch | Arrêt d'urgence à trois niveaux : instance, compte, global |
 | Proposition | Action suggérée par un agent, soumise à validation |
 | **(v1.1)** Orchestrateur | Session Claude Code principale (Opus) qui planifie, délègue et vérifie |
-| **(v1.1)** Subagent | Agent spécialisé à contexte isolé et modèle dédié (§17.2) |
+| **(v1.1)** Subagent | Agent à contexte isolé, dont le modèle est choisi à la délégation (§17.2) |
 | **(v1.1)** Gate | Contrôle automatisé bloquant à la fin d'un jalon (tests, sécurité, qualité) |
 
 ## 3. Architecture
@@ -163,7 +163,7 @@ Versions : toujours un tag exact, jamais `latest`.
 | Observabilité | Prometheus, Grafana, Loki avec Grafana Alloy ou Promtail, exporters Postgres et Redis |
 | Qualité | ruff, mypy, pytest + testcontainers, ESLint, tsc, Playwright (E2E minimal), pre-commit, GitHub Actions. **(v1.1)** + Hypothesis (tests de propriétés), `axe` (accessibilité) dans les E2E |
 | **(v1.1)** Sécurité de la chaîne de build | gitleaks (pre-commit et CI), semgrep et CodeQL (CI), zizmor et actionlint (workflows GitHub), pip-audit, `pnpm audit`, Trivy, SBOM CycloneDX, actions GitHub épinglées par SHA, Dependabot |
-| **(v1.1)** Environnement agentique | Claude Code ≥ 2.1.293 ; alias de modèles `opus`, `sonnet`, `haiku` ; plugins et skills listés dans `SETUP-CLAUDE-CODE.md` ; hooks et sandbox (§17) |
+| **(v1.1)** Environnement agentique | Claude Code ≥ 2.1.293 ; alias de modèles `opus`, `sonnet`, `haiku` ; plugins et skills listés dans `.claude/rules/skills-par-jalon.md` ; hooks et sandbox (§17) |
 | Cible | Ubuntu 24.04 LTS, Docker Engine 24+, Compose v2 ; développement local sous Windows avec WSL2 |
 
 ## 6. Modèle de données
@@ -421,7 +421,7 @@ Dépôt Git prêt à cloner ; `README` (démarrage, architecture, hypothèses) ;
 
 ## 17. Environnement de développement agentique (Claude Code) — (v1.1)
 
-Cette section décrit comment le logiciel est construit, pas comment il fonctionne. Les commandes d'installation et les fichiers complets figurent dans `SETUP-CLAUDE-CODE.md`.
+Cette section décrit comment le logiciel est construit, pas comment il fonctionne. Les fichiers correspondants sont déjà en place dans `CLAUDE.md` et `.claude/` : l'agent les vérifie au jalon M0 et ne les réécrit pas.
 
 ### 17.1 Principes
 
@@ -431,30 +431,33 @@ Cette section décrit comment le logiciel est construit, pas comment il fonction
 4. **Défense en profondeur sur le poste de dev.** Bac à sable, règles de refus, hooks, aucun secret réel.
 5. **Peu de skills, bien choisis.** Chaque description de skill, d'agent ou d'outil MCP consomme du contexte à chaque tour ; on installe par jalon, on mesure, on élague.
 
-### 17.2 Orchestration des modèles
+### 17.2 Orchestration : skills d'abord, agents en dernier recours
 
-| Rôle | Modèle (alias) | Effort | Responsabilités |
-| --- | --- | --- | --- |
-| Orchestrateur (session principale) | `opus` | moyen à élevé | Lire le jalon, planifier, découper, déléguer, trancher les arbitrages, vérifier les critères d'acceptation, committer |
-| `Explore` (surcharge du subagent natif) et `docs-researcher` | `haiku` | bas | Recherche dans le code et la documentation, lecture de logs ; lecture seule ; retourne ≤ 300 mots avec références `fichier:ligne` |
-| `test-runner` | `haiku` | bas | Exécute tests, lint, typage, builds ; retourne uniquement les échecs et l'essentiel de l'erreur ; ne corrige jamais |
-| `backend-dev`, `frontend-dev` | `sonnet` | moyen | Implémentent les lots de travail définis par l'orchestrateur |
-| `ui-verifier` | `sonnet` | bas à moyen | Parcours Playwright, captures, accessibilité ; lecture seule sur le code |
-| `quant-reviewer` | `sonnet` | élevé | Revue d'hygiène de backtest et de logique de stratégie ; lecture seule |
-| `risk-engineer` | `opus` | élevé | Implémente le Risk service, le kill switch, la réconciliation, le SecretStore, l'authentification : code à fort rayon d'impact |
-| `security-reviewer` | `opus` | élevé | Revue de sécurité indépendante à chaque jalon ; lecture seule |
+**Règle.** Quand un skill installé couvre un besoin, c'est lui qui fait le travail : on ne crée pas d'agent de projet pour ça. Un agent de projet n'existe que si aucun skill ne couvre le besoin. Le tableau des déclencheurs de `.claude/rules/skills-par-jalon.md` dit quel skill invoquer à quel moment ; il est obligatoire.
 
-Règles : (a) ne pas fixer `CLAUDE_CODE_SUBAGENT_MODEL` globalement — les modèles sont déclarés dans le frontmatter de chaque agent, afin qu'un forçage involontaire ne renvoie pas le code critique vers un petit modèle ; (b) vérifier le modèle réellement utilisé avec `/tasks` pendant l'exécution ; (c) limites de délégation : profondeur d'imbrication 2, concurrence 5 ; (d) les « agent teams » expérimentaux restent désactivés (consommation de tokens multipliée) ; (e) `opusplan` est acceptable pour M0–M2 (plomberie), pas pour M3 ; (f) le modèle `fable` n'est utilisé qu'à la demande explicite de l'opérateur pour une tâche très longue (il peut consommer des crédits d'usage selon le forfait, et ses classifieurs de sécurité peuvent rediriger certaines requêtes de cybersécurité vers un autre modèle).
+| Rôle | Exécutant | Modèle (alias) | Effort | Responsabilités |
+| --- | --- | --- | --- | --- |
+| Orchestrateur | Session principale | `opus` | moyen à élevé | Lire le jalon, planifier, découper, déléguer, trancher, vérifier les critères d'acceptation, committer |
+| Recherche dans le code, lecture de logs | Agent de projet `Explore` (surcharge du subagent natif) | `haiku` | bas | Lecture seule ; retourne ≤ 300 mots avec références `fichier:ligne` |
+| Tests, lint, typage, builds | Agent de projet `test-runner` | `haiku` | bas | Retourne uniquement les échecs ; ne corrige jamais |
+| Lots courants (backend, frontend, n8n, CI) | Subagent natif `general-purpose`, qui invoque les skills nommés dans son brief | `sonnet` | moyen | Implémente un lot défini par l'orchestrateur |
+| Code à fort rayon d'impact (Risk service, kill switch, réconciliation, SecretStore, authentification) | Subagent natif `general-purpose`, avec les skills `risk-failclosed-testing`, `property-based-testing`, `agent-skills:doubt-driven-development` | `opus` | élevé | Implémente le code critique |
+| Revue de sécurité et revue de code indépendantes | Agents du plugin : `agent-skills:security-auditor`, `agent-skills:code-reviewer` | `opus` | élevé | Contexte neuf, lecture seule par consigne ; à chaque jalon |
+| Revue quantitative, vérification de l'interface | Subagent natif `general-purpose`, avec les skills de revue du tableau des déclencheurs | `sonnet` | moyen à élevé | Contexte neuf, lecture seule par consigne |
+
+`Explore` et `test-runner` sont les deux seuls agents de projet : aucun skill ne route la recherche et l'exécution des tests vers Haiku.
+
+Règles : (a) le modèle se choisit à chaque délégation (paramètre `model`, et frontmatter pour les deux agents de projet) ; ne pas fixer `CLAUDE_CODE_SUBAGENT_MODEL` globalement, afin qu'un forçage involontaire ne renvoie pas le code critique vers un petit modèle ; (b) vérifier le modèle réellement utilisé avec `/tasks` pendant l'exécution ; (c) limites de délégation : profondeur d'imbrication 2, concurrence 5 ; (d) les « agent teams » expérimentaux restent désactivés (consommation de tokens multipliée) ; (e) `opusplan` est acceptable pour M0–M2 (plomberie), pas pour M3 ; (f) le modèle `fable` n'est utilisé qu'à la demande explicite de l'opérateur pour une tâche très longue (il peut consommer des crédits d'usage selon le forfait, et ses classifieurs de sécurité peuvent rediriger certaines requêtes de cybersécurité vers un autre modèle) ; (g) chaque brief de délégation nomme les skills que le subagent doit invoquer.
 
 ### 17.3 Protocole de jalon (skill `/milestone`)
 
 1. **Cadrer** : lire la ligne du jalon (§14) et les sections concernées ; créer la liste de tâches à partir des critères d'acceptation.
-2. **Planifier** (mode plan si le jalon est non trivial) ; faire explorer l'état du dépôt par `Explore`.
-3. **Découper** en lots indépendants (≤ 3 en parallèle) ; affecter chaque lot à l'agent approprié (code critique → `risk-engineer`).
+2. **Planifier** avec `agent-skills:planning-and-task-breakdown` ; faire explorer l'état du dépôt par `Explore`.
+3. **Découper** en lots indépendants (≤ 3 en parallèle) ; chaque brief donne le modèle (§17.2) et les skills à invoquer.
 4. **Implémenter**, un commit par lot cohérent.
 5. **Gate qualité** : `test-runner` exécute `make lint test` ; boucle de correction de 3 itérations maximum, puis escalade à l'orchestrateur.
-6. **Revues indépendantes en parallèle** : `security-reviewer` (toujours), `quant-reviewer` (si logique de trading ou de backtest), `ui-verifier` (si interface).
-7. **Vérifier chaque critère d'acceptation avec une preuve** (sortie de commande, capture, test) et mettre à jour `docs/security/threat-model.md`.
+6. **Revues indépendantes en parallèle**, dans un contexte neuf : sécurité et code (toujours), quantitative (si logique de trading ou de backtest), interface (si écrans).
+7. **Vérifier chaque critère d'acceptation avec une preuve** (sortie de commande, capture, test), contrôler que chaque skill déclenché par le travail du jalon a bien été invoqué, et mettre à jour `docs/security/threat-model.md`.
 8. **Clore** : documentation, migrations, `docker compose up` de bout en bout, commit ; rapport de 15 lignes maximum ; `/clear` avant le jalon suivant.
 
 ### 17.4 Discipline de tokens
@@ -465,7 +468,7 @@ Règles : (a) ne pas fixer `CLAUDE_CODE_SUBAGENT_MODEL` globalement — les mod�
 - Préférer les CLI (`gh`, `docker`, `psql`) aux serveurs MCP ; désactiver les serveurs MCP inutilisés ; ne garder actifs que les plugins du jalon courant.
 - Effort au minimum suffisant : bas pour la recherche et les tests, moyen par défaut, élevé pour le risque et la sécurité.
 - Mesurer : `/context` (poids des skills, outils, MCP), `/usage` (coûts), `/skill-doctor` (skills inutilisés), `/doctor` (installation). Consigner le coût par jalon dans `docs/agentic/couts.md`.
-- Compression de sorties de commandes par un outil tiers : optionnelle, après mesure de la base, et uniquement si elle préserve intégralement les échecs de tests et les codes de sortie (voir `SETUP-CLAUDE-CODE.md`).
+- Compression de sorties de commandes par un outil tiers : optionnelle, après mesure de la base, et uniquement si elle préserve intégralement les échecs de tests et les codes de sortie.
 
 ### 17.5 Sécurité du poste de dev
 
@@ -479,11 +482,13 @@ Règles : (a) ne pas fixer `CLAUDE_CODE_SUBAGENT_MODEL` globalement — les mod�
 
 ### 17.6 Skills et plugins retenus (résumé)
 
+La liste installée et l'activation par jalon sont dans `.claude/rules/skills-par-jalon.md`, qui fait foi en cas d'écart avec le tableau ci-dessous.
+
 | Besoin | Retenu | Source |
 | --- | --- | --- |
 | Économie de tokens | Fonctions natives (§17.4), `claude-md-management`, `/doctor`, `/skill-doctor` ; compression de sorties optionnelle (RTK) | Anthropic ; open source |
 | Interface premium et épurée | `frontend-design`, **Impeccable** (`PRODUCT.md`, `DESIGN.md`, `craft`/`distill`/`polish`/`audit`, détecteur en CI), `web-design-guidelines`, `webapp-testing` | Anthropic ; Apache-2.0 ; Vercel |
-| Orchestration | Subagents (frontmatter `model`/`effort`), skill `/milestone`, surcharge `Explore` en Haiku | Natif Claude Code ; fichiers du projet |
+| Orchestration | Skills d'abord (`agent-skills`), skill `/milestone`, subagent natif `general-purpose` avec modèle par délégation, agents de projet `Explore` et `test-runner` en Haiku | Natif Claude Code ; plugin ; fichiers du projet |
 | Sécurité | `/security-review`, `claude-security`, `security-guidance`, Trail of Bits (`insecure-defaults`, `differential-review`, `static-analysis`, `supply-chain-risk-auditor`, `agentic-actions-auditor`, `property-based-testing`, `modern-python`) | Anthropic ; Trail of Bits (CC BY-SA 4.0) |
 | Trading | Skills de projet (`backtest-hygiene`, `freqtrade-adapter`, `risk-failclosed-testing`) + sélection de `claude-trading-skills` (`backtest-expert`, `edge-strategy-reviewer`, `strategy-pivot-designer`, `residual-edge-analyzer`) | Projet ; MIT |
 | Documentation à jour | Context7 ; `pg` (Postgres/TimescaleDB) ; `n8n-skills` (documentation seule) | Upstash ; Apache-2.0 ; MIT |

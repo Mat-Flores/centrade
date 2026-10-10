@@ -1,4 +1,43 @@
 {
+  "model": "opus",
+  "env": {
+    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "2",
+    "CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS": "5"
+  },
+  "enableAllProjectMcpServers": false,
+  "permissions": {
+    "allow": [
+      "Bash(make *)",
+      "Bash(uv run *)",
+      "Bash(pnpm *)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(docker compose ps*)",
+      "Bash(docker compose logs *)"
+    ],
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.local)",
+      "Read(./.env.production)",
+      "Read(./.env.live)",
+      "Read(./secrets/**)",
+      "Read(~/.ssh/**)",
+      "Read(~/.gnupg/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.config/gh/**)",
+      "Read(~/.docker/config.json)",
+      "Read(~/.npmrc)",
+      "Read(~/.pypirc)",
+      "Read(~/.git-credentials)",
+      "Edit(./.env)",
+      "Edit(./secrets/**)",
+      "Edit(~/.bashrc)",
+      "Edit(~/.zshrc)"
+    ]
+  },
   "hooks": {
     "PreToolUse": [
       {
@@ -20,37 +59,50 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-dangerous.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/guard-live-mode.sh",
+            "timeout": 10
+          }
+        ]
       }
     ]
   },
   "enabledPlugins": {
-    // General plugins
     "ponytail@ponytail": true,
     "agent-skills@addy-agent-skills": true,
+    "context7@claude-plugins-official": true,
+    "security-guidance@claude-plugins-official": true,
+    "differential-review@trailofbits": true,
 
-    // Design plugins
     "impeccable@impeccable": true,
+    "modern-python@trailofbits": true,
+    "agentic-actions-auditor@trailofbits": true,
+    "supply-chain-risk-auditor@trailofbits": true,
+    "insecure-defaults@trailofbits": true,
+
     "frontend-design@claude-plugins-official": false,
     "chrome-devtools-mcp@claude-plugins-official": false,
-
-    // Security plugins
-    "security-guidance@claude-plugins-official": true,
-    "claude-security@claude-plugins-official": false,
-    "insecure-defaults@trailofbits": true,
-    "differential-review@trailofbits": true,
     "sharp-edges@trailofbits": false,
-    "static-analysis@trailofbits": false,
-    "supply-chain-risk-auditor@trailofbits": true,
-    "agentic-actions-auditor@trailofbits": true,
     "property-based-testing@trailofbits": false,
-    "modern-python@trailofbits": true,
-    
-    // Trading plugins
-    "quantitative-trading@claude-code-workflows": false,
-
-    // Documentation plugins
-    "context7@claude-plugins-official": true,
     "pg@aiguide": false,
-    "n8n-mcp-skills@n8n-mcp-skills": false
+    "claude-security@claude-plugins-official": false,
+    "quantitative-trading@claude-code-workflows": false,
+    "n8n-mcp-skills@n8n-mcp-skills": false,
+    "static-analysis@trailofbits": false
   }
 }
