@@ -11,6 +11,7 @@ Linux, macOS ou Windows avec WSL2 ; Docker et Docker Compose ; `uv` ; Node 22+ e
 ## Démarrage
 
 ```
+uv run pre-commit install   # une fois : gitleaks et ruff avant chaque commit
 cp .env.example .env     # valeurs de développement, aucun secret réel
 make up                  # Compose core : Postgres/Timescale, Redis, API, web, Caddy
 make down                # arrêt, volumes conservés
