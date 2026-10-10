@@ -11,7 +11,11 @@ updates:
   - package-ecosystem: docker
     directories:
       - /apps/api
-      - /apps/web
+      - /deploy/caddy
+    schedule:
+      interval: weekly
+  - package-ecosystem: gomod # Caddy et ses dépendances (deploy/caddy/build)
+    directory: /deploy/caddy/build
     schedule:
       interval: weekly
   - package-ecosystem: docker-compose

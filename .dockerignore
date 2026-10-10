@@ -4,6 +4,7 @@
 !uv.lock
 !apps/api/centrade_api
 !apps/web
+!deploy/caddy/build
 **/__pycache__
 **/node_modules
 **/dist

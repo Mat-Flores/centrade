@@ -72,12 +72,10 @@ services:
     profiles: [core]
     build:
       context: ../..
-      dockerfile: apps/web/Dockerfile
+      dockerfile: deploy/caddy/Dockerfile
+      target: web
     image: centrade/web:dev
     pull_policy: build
-    # Le binaire caddy porte la capacité de fichier NET_BIND_SERVICE : hors de l'ensemble
-    # autorisé, son exécution échoue (« operation not permitted »).
-    cap_add: [NET_BIND_SERVICE]
     networks: [edge]
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
@@ -88,10 +86,12 @@ services:
   caddy:
     <<: *hardened
     profiles: [core]
-    image: caddy:2.11.7-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f
-    # Reste root : le volume de données de l'image appartient à root.
-    # NET_BIND_SERVICE seule : même raison que pour `web`.
-    cap_add: [NET_BIND_SERVICE]
+    build:
+      context: ../..
+      dockerfile: deploy/caddy/Dockerfile
+      target: proxy
+    image: centrade/caddy:dev
+    pull_policy: build
     environment:
       CENTRADE_HOSTNAME: ${CENTRADE_HOSTNAME:-localhost}
     ports:
@@ -99,7 +99,8 @@ services:
     volumes:
       - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy_data:/data
-    tmpfs: [/config]
+    tmpfs:
+      - /config:uid=10002,mode=0700
     networks: [edge]
     depends_on:
       api: {condition: service_healthy}

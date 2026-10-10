@@ -8,3 +8,4 @@ Format : titre `ADR-NNNN : …`, puis les sections Statut (Proposée, Acceptée,
 | --- | --- | --- |
 | 0001 | Ossature du jalon M0 | Acceptée |
 | 0002 | Dépendances du front à M0 | Acceptée |
+| 0003 | Caddy recompilé dans le dépôt | Acceptée |

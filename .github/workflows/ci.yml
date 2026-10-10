@@ -139,7 +139,8 @@ jobs:
       - name: Construire les images
         run: |
           docker build -t centrade-api:ci -f apps/api/Dockerfile .
-          docker build -t centrade-web:ci -f apps/web/Dockerfile .
+          docker build -t centrade-web:ci --target web -f deploy/caddy/Dockerfile .
+          docker build -t centrade-caddy:ci --target proxy -f deploy/caddy/Dockerfile .
       - name: Trivy (image api)
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
@@ -153,6 +154,14 @@ jobs:
         with:
           version: ${{ env.TRIVY_VERSION }}
           image-ref: centrade-web:ci
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+      - name: Trivy (image caddy)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          version: ${{ env.TRIVY_VERSION }}
+          image-ref: centrade-caddy:ci
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: "1"
