@@ -1,0 +1,47 @@
+[project]
+name = "centrade"
+version = "0.0.0"
+description = "Centrade — façade de gouvernance au-dessus d'un moteur de trading"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi>=0.143.0",
+    "pydantic>=2.14.0",
+    "structlog>=26.1.0",
+    "uvicorn>=0.54.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+# *.md : ruff reformaterait les blocs de code de SPEC.md, qu'on ne modifie pas.
+extend-exclude = ["docker", "*.md"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "S", "ASYNC", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101"]
+"tests/**" = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+mypy_path = "apps/api"
+files = ["apps/api/centrade_api", "apps/api/tests", "tests"]
+strict = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+testpaths = ["apps/api/tests", "tests"]
+pythonpath = ["apps/api"]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "mypy>=2.4.0",
+    "pre-commit>=4.6.2",
+    "pytest>=9.1.1",
+    "ruff>=0.17.0",
+]

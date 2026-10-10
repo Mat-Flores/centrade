@@ -842,6 +842,7 @@ La liste installée et l'activation par jalon sont dans `.claude/rules/skills-pa
 | Sécurité | `/security-review`, `claude-security`, `security-guidance`, Trail of Bits (`insecure-defaults`, `differential-review`, `sharp-edges`, `static-analysis`, `supply-chain-risk-auditor`, `agentic-actions-auditor`, `property-based-testing`, `modern-python`), agents `agent-skills:security-auditor` et `agent-skills:code-reviewer` | Anthropic ; Trail of Bits (CC BY-SA 4.0) ; plugin |
 | Trading | Skills de projet (`backtest-hygiene`, `freqtrade-adapter`, `risk-failclosed-testing`), `backtest-expert` et `edge-strategy-reviewer` (`claude-trading-skills`), plugin `quantitative-trading` | Projet ; MIT |
 | Documentation à jour | Context7 ; `pg` (Postgres/TimescaleDB) ; `n8n-mcp-skills` (documentation seule) | Upstash ; Apache-2.0 ; MIT |
+| Mémoire entre les sessions | `claude-mem` (toujours actif, ajouté par l'opérateur) | thedotmack ; Apache-2.0 |
 
 ### 17.7 Interdits
 

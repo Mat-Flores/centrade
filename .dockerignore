@@ -1,0 +1,11 @@
+# Liste blanche : seul ce dont les builds ont besoin entre dans le contexte.
+*
+!pyproject.toml
+!uv.lock
+!apps/api/centrade_api
+!apps/web
+!deploy/caddy/build
+**/__pycache__
+**/node_modules
+**/dist
+**/.env*

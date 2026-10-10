@@ -1,0 +1,13 @@
+services:
+  a:
+    # ruleid: centrade-image-tag-latest-compose
+    image: redis:latest
+  b:
+    # ruleid: centrade-image-tag-latest-compose
+    image: redis
+  c:
+    # ok: centrade-image-tag-latest-compose
+    image: redis:7.4.1
+  d:
+    # ok: centrade-image-tag-latest-compose
+    image: ${API_IMAGE}

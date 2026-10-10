@@ -88,6 +88,7 @@
     "context7@claude-plugins-official": true,
     "security-guidance@claude-plugins-official": true,
     "differential-review@trailofbits": true,
+    "claude-mem@thedotmack": true,
 
     "impeccable@impeccable": true,
     "modern-python@trailofbits": true,

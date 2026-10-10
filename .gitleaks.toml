@@ -1,0 +1,4 @@
+# Étend la configuration par défaut de gitleaks. Aucune exclusion à M0.
+# Toute exclusion future doit être justifiée par un commentaire (allowlist ciblée, jamais globale).
+[extend]
+useDefault = true
