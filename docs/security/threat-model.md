@@ -145,4 +145,4 @@ Le SPEC ne prévoit pas de parade explicite pour :
 | 2026-10-10 | M0 | Revue de sécurité indépendante : A5, C6 et D3 ramenés à `politique seule` ; limites du hook de mode live (A4, D5) ; C1 corrigé (l'audit `supply-chain` n'est pas en CI) ; ajout de C8, X12 et de la clé de l'autorité de Caddy. |
 | 2026-10-10 | M0 | Plugin `claude-mem@thedotmack` ajouté par l'opérateur aux plugins toujours actifs (C6) : manifeste et liste des hooks relus, scripts non relus ; skill `cloud-sync` soumis à l'accord de l'opérateur (§17.7). |
 | 2026-10-10 | M0 | Clôture : parades de M0 vérifiées et passées à `livré (M0)`. Caddy recompilé avec Go 1.26.9 et `x/net` 0.60.0 (ADR 0003), non-root et sans capacité. |
-| 2026-10-10 | M1 (préparation) | K2 : masquage des secrets dans les logs avancé de M2 à M1, journaux d'uvicorn compris. `.claude/` retiré du dépôt public (A5). |
+| 2026-10-10 | M1 (préparation) | K2 : masquage des secrets dans les logs avancé de M2 à M1, journaux d'uvicorn compris. |
