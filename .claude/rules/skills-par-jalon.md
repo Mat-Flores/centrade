@@ -19,7 +19,7 @@ Avant de commencer un jalon (SPEC.md §14), applique la procédure d'activation 
 | Jalon | Plugins à `true` (en plus des « Toujours actifs ») |
 | --- | --- |
 | M0 | `impeccable@impeccable`, `modern-python@trailofbits`, `agentic-actions-auditor@trailofbits`, `supply-chain-risk-auditor@trailofbits`, `insecure-defaults@trailofbits` |
-| M1 | `impeccable@impeccable`, `frontend-design@claude-plugins-official`, `chrome-devtools-mcp@claude-plugins-official`, `sharp-edges@trailofbits`, `property-based-testing@trailofbits`, `pg@aiguide` |
+| M1 | `impeccable@impeccable`, `frontend-design@claude-plugins-official`, `chrome-devtools-mcp@claude-plugins-official`, `sharp-edges@trailofbits`, `property-based-testing@trailofbits`, `pg@aiguide`, `insecure-defaults@trailofbits`, `supply-chain-risk-auditor@trailofbits` |
 | M2 | `impeccable@impeccable`, `frontend-design@claude-plugins-official`, `chrome-devtools-mcp@claude-plugins-official`, `insecure-defaults@trailofbits`, `sharp-edges@trailofbits` |
 | M3 | `property-based-testing@trailofbits`, `claude-security@claude-plugins-official`, `quantitative-trading@claude-code-workflows`, `impeccable@impeccable`, `frontend-design@claude-plugins-official`, `chrome-devtools-mcp@claude-plugins-official` |
 | M4 | `n8n-mcp-skills@n8n-mcp-skills`, `insecure-defaults@trailofbits`, `impeccable@impeccable`, `frontend-design@claude-plugins-official`, `chrome-devtools-mcp@claude-plugins-official` |
@@ -74,6 +74,16 @@ Les skills installés hors plugin (`shadcn`, `web-design-guidelines`, `backtest-
 | Tu écris un test d'invariant (`test_iNN_…`) ou un scénario de référence (S1 à S14) | `agent-skills:test-driven-development` ; pour I4 à I7, `risk-failclosed-testing` |
 | Tu crées ou modifies un écran qui montre un état de moteur | règles de vérité de l'affichage du SPEC §9, avec `agent-skills:frontend-ui-engineering` |
 | Tu clos le jalon | `agent-skills:shipping-and-launch` |
+
+### Quand `insecure-defaults:audit` ne peut pas tourner
+
+Le pipeline de ce skill exige l'outil `Workflow`, absent de certaines sessions (extension VS Code, mode non interactif). Dans ce cas, ne prétends pas l'avoir lancé :
+
+1. Lance `make insecure-sweep` (ou `make insecure-sweep SCOPE="<chemins>"`) : il balaie le code avec les motifs du plugin et liste des candidats.
+2. L'agent `agent-skills:security-auditor` juge chaque candidat contre la fiche `references/<catégorie>.md` du plugin (règles « Report when » et « Skip when »).
+3. Dans le rapport de vérification du jalon, note « repli manuel » pour ce déclencheur.
+
+Si l'opérateur dispose d'une session qui a l'outil `Workflow`, il lance lui-même `/insecure-defaults:audit <chemin>` : c'est préférable au repli.
 
 ### Accent par jalon
 

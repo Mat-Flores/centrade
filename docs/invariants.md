@@ -98,7 +98,7 @@ Convention : un invariant `In` a son module `tests/invariants/test_iNN_<slug>.py
 - Énoncé : une clé saisie n'est jamais relue, affichée ni journalisée ; transmise seulement au moteur de l'instance live affectée (§1.2, F6, §13 journalisation).
 - Jalon : M2
 - Module : `tests/invariants/test_i12_secrets_sens_unique.py`
-- Tests prévus : `test_i12_api_ne_renvoie_jamais_la_valeur_d_un_secret`, `test_i12_logs_masquent_les_valeurs_sentinelles`, `test_i12_cle_transmise_par_fichier_memoire_jamais_par_env`, `test_i12_cle_limitee_a_l_instance_live_affectee`
+- Tests prévus : `test_i12_api_ne_renvoie_jamais_la_valeur_d_un_secret`, `test_i12_logs_masquent_les_valeurs_sentinelles` (livré dès M1 avec l'authentification, SPEC §14), `test_i12_cle_transmise_par_fichier_memoire_jamais_par_env`, `test_i12_cle_limitee_a_l_instance_live_affectee`
 - Scénarios : aucun rattaché au §14
 - État : prévu
 

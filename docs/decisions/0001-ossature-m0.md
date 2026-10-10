@@ -7,7 +7,7 @@ Acceptée
 2026-10-10
 
 ## Contexte
-M0 livre un dépôt qui démarre, une CI, une page de login et les documents de sécurité (SPEC §14). L'authentification, la base applicative et le bus sont des travaux de M1. Les décisions viennent de `tasks/plan.md`.
+M0 livre un dépôt qui démarre, une CI, une page de login et les documents de sécurité (SPEC §14). L'authentification, la base applicative et le bus sont des travaux de M1. Les décisions viennent de `tasks/m0/plan.md`.
 
 ## Décision
 

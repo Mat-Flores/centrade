@@ -55,7 +55,7 @@ Jalon = jalon où la parade est livrée, d'après la ligne du §14 qui livre le 
 | ID | Menace | Composant | STRIDE | Parade prévue (SPEC) | Jalon | État |
 | --- | --- | --- | --- | --- | --- | --- |
 | K1 | Relecture d'une clé via l'API ou l'interface | SecretStore, API | I | Saisie en écriture seule, jamais relue (F6, I12) ; test que l'API ne renvoie jamais la valeur (§14 M2) | M2 | prévu |
-| K2 | Clé dans les logs | Journalisation | I | Processeur structlog de masquage, test à valeurs sentinelles (§13) | M2 (§14) ; l'authentification de M1 manipule déjà mots de passe, TOTP et sessions : avancer le masquage à M1 est à décider par l'opérateur | prévu |
+| K2 | Clé dans les logs | Journalisation | I | Processeur structlog de masquage, test à valeurs sentinelles (§13) | M1 (avancé de M2 par l'opérateur le 2026-10-10) | prévu |
 | K3 | Clé dans une image, un fichier Compose, une variable d'environnement ou un volume persistant | Runner, moteurs | I | Fichier en lecture seule monté en mémoire, supprimé à l'arrêt (F6, §13) | M2 | prévu |
 | K4 | Secrets de la plateforme dans l'environnement ou le dépôt | Compose, dépôt | I | Docker secrets (§13) ; gitleaks en pre-commit et en CI ; `.env.example` sans valeur (§0.5) | M0 | livré (M0) |
 | K5 | Sauvegarde volée donnant accès aux clés | Sauvegardes | I | Sauvegardes chiffrées ; clé maître et `N8N_ENCRYPTION_KEY` sauvegardées à part, hors serveur (§13) | M7 (déduit) | prévu |
@@ -145,3 +145,4 @@ Le SPEC ne prévoit pas de parade explicite pour :
 | 2026-10-10 | M0 | Revue de sécurité indépendante : A5, C6 et D3 ramenés à `politique seule` ; limites du hook de mode live (A4, D5) ; C1 corrigé (l'audit `supply-chain` n'est pas en CI) ; ajout de C8, X12 et de la clé de l'autorité de Caddy. |
 | 2026-10-10 | M0 | Plugin `claude-mem@thedotmack` ajouté par l'opérateur aux plugins toujours actifs (C6) : manifeste et liste des hooks relus, scripts non relus ; skill `cloud-sync` soumis à l'accord de l'opérateur (§17.7). |
 | 2026-10-10 | M0 | Clôture : parades de M0 vérifiées et passées à `livré (M0)`. Caddy recompilé avec Go 1.26.9 et `x/net` 0.60.0 (ADR 0003), non-root et sans capacité. |
+| 2026-10-10 | M1 (préparation) | K2 : masquage des secrets dans les logs avancé de M2 à M1, journaux d'uvicorn compris. `.claude/` retiré du dépôt public (A5). |

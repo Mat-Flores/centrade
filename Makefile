@@ -1,4 +1,4 @@
-.PHONY: help secrets up down test lint
+.PHONY: help secrets up down test lint insecure-sweep
 
 help: ## Liste les cibles
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/ :/'
@@ -27,6 +27,9 @@ down: ## Arrête le profil core (jamais -v)
 test: ## Tests Python et front
 	uv run pytest
 	pnpm -C apps/web test
+
+insecure-sweep: ## Candidats de valeurs par défaut non sûres (repli de insecure-defaults:audit)
+	uv run python scripts/insecure_defaults_sweep.py $(or $(SCOPE),apps deploy scripts Makefile .env.example .github)
 
 lint: ## ruff, mypy, ESLint, tsc
 	uv run ruff check .
