@@ -13,7 +13,9 @@ type State = { status: "idle" } | { status: "pending" } | { status: "done"; resu
 
 export function App() {
   const [state, setState] = useState<State>({ status: "idle" });
-  const passwordRef = useRef<HTMLInputElement>(null);
+  // La référence est sur le formulaire : les composants shadcn ne transmettent pas `ref` en React 18.
+  const formRef = useRef<HTMLFormElement>(null);
+  const passwordInput = () => formRef.current?.elements.namedItem("password") as HTMLInputElement | null;
   const pending = state.status === "pending";
   const failure = state.status === "done" && !state.result.ok ? state.result : null;
   const accepted = state.status === "done" && state.result.ok;
@@ -21,7 +23,7 @@ export function App() {
 
   // Les champs sont réactivés après l'envoi : le focus revient alors au mot de passe.
   useEffect(() => {
-    if (failure) passwordRef.current?.focus();
+    if (failure) passwordInput()?.focus();
   }, [failure]);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -33,7 +35,8 @@ export function App() {
       password: String(data.get("password") ?? ""),
     };
     // Le mot de passe ne survit pas à l'envoi : le champ est vidé aussitôt.
-    if (passwordRef.current) passwordRef.current.value = "";
+    const password = passwordInput();
+    if (password) password.value = "";
     setState({ status: "pending" });
     const result = await submitLogin(credentials);
     setState({ status: "done", result });
@@ -55,7 +58,7 @@ export function App() {
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">{fr.login.access}</p>
 
-          <form onSubmit={onSubmit} className="mt-6 flex flex-col gap-5" aria-describedby={failure ? messageId : undefined}>
+          <form ref={formRef} onSubmit={onSubmit} className="mt-6 flex flex-col gap-5" aria-describedby={failure ? messageId : undefined}>
             <FieldGroup className="gap-4">
               <Field>
                 <FieldLabel htmlFor="username">{fr.login.username}</FieldLabel>
@@ -78,7 +81,6 @@ export function App() {
                   id="password"
                   name="password"
                   type="password"
-                  ref={passwordRef}
                   autoComplete="current-password"
                   required
                   disabled={pending}
