@@ -17,7 +17,7 @@
 - [x] Lot A — socle Python, `apps/api`, Makefile, `.env.example`
 - [x] Lot D — CI, Dependabot, pre-commit (gitleaks, ruff), semgrep
 - [x] Lot E — README, threat-model, accepted-risks, invariants.md, docs/agentic
-- [ ] `PRODUCT.md` — opérateur : `/impeccable init`
+- [x] `PRODUCT.md` — opérateur : `/impeccable init`
 - [ ] Lot B — `apps/web` : jetons, login, gates frontend
 - [x] Lot C — Compose `core`, Dockerfiles, Caddy
 - [ ] `DESIGN.md` — opérateur : `/impeccable document`
