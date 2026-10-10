@@ -5,7 +5,7 @@
 # plutôt que repris de l'image officielle : on corrige une CVE de Go ou d'une dépendance
 # sans attendre une publication de Caddy (ADR 0003). Le binaire n'a aucune capacité de
 # fichier : il tourne sans root et sans aucune capacité.
-FROM golang:1.26.9-alpine3.23@sha256:6750308561953d451210ed1a8086d36c8c8bdcbf672d38d9d0d424b8a7a0216c AS caddy-build
+FROM golang:1.27.0-alpine3.23@sha256:3747dcba41c8b0db3211fda4db61638b980e17ac5bb3c94460a975a9cfe19395 AS caddy-build
 ENV CGO_ENABLED=0 GOTOOLCHAIN=local GOFLAGS=-mod=readonly
 WORKDIR /src
 COPY deploy/caddy/build/go.mod deploy/caddy/build/go.sum ./
