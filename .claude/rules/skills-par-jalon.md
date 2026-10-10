@@ -57,7 +57,7 @@ Les skills installés hors plugin (`shadcn`, `web-design-guidelines`, `backtest-
 | Tu conçois une route, un contrat ou un schéma d'événement | `agent-skills:api-and-interface-design` |
 | Tu ajoutes une dépendance | `supply-chain-risk-auditor`, puis ADR avec `agent-skills:documentation-and-adrs` |
 | Le code touche entrées utilisateur, auth, sessions, secrets ou intégration externe | `agent-skills:security-and-hardening`, `insecure-defaults` |
-| Le code touche risque, kill switch, réconciliation ou SecretStore | `risk-failclosed-testing`, `property-based-testing`, `agent-skills:doubt-driven-development` |
+| Le code touche risque, kill switch, réconciliation, watchdog, commandes ou SecretStore | `risk-failclosed-testing`, `property-based-testing`, `agent-skills:doubt-driven-development` |
 | Tu touches `packages/adapters/freqtrade/` ou `strategies/` | `freqtrade-adapter` |
 | Tu crées ou restyles un écran | `impeccable`, `frontend-design`, `shadcn`, `agent-skills:frontend-ui-engineering` |
 | Tu crées un graphique, une jauge ou une tuile de chiffres | `dataviz` |
@@ -69,6 +69,8 @@ Les skills installés hors plugin (`shadcn`, `web-design-guidelines`, `backtest-
 | Tu écris du code qui appelle l'API Claude ou un serveur MCP | `claude-api` |
 | Un test échoue ou un build casse | `agent-skills:debugging-and-error-recovery` |
 | Les lots du jalon sont finis (revue, contexte neuf) | agents `agent-skills:security-auditor` et `agent-skills:code-reviewer`, avec `differential-review` et `/security-review` dans leur brief |
+| Tu écris un test d'invariant (`test_iNN_…`) ou un scénario de référence (S1 à S14) | `agent-skills:test-driven-development` ; pour I4 à I7, `risk-failclosed-testing` |
+| Tu crées ou modifies un écran qui montre un état de moteur | règles de vérité de l'affichage du SPEC §9, avec `agent-skills:frontend-ui-engineering` |
 | Tu clos le jalon | `agent-skills:shipping-and-launch` |
 
 ### Accent par jalon
@@ -77,14 +79,14 @@ Ce tableau dit sur quoi porter l'effort à chaque jalon ; les déclencheurs ci-d
 
 | Jalon | Skills à utiliser | Pour quoi |
 | --- | --- | --- |
-| M0 | `impeccable` (l'opérateur lance `/impeccable init` → `PRODUCT.md`, puis `/impeccable document` → `DESIGN.md`), `shadcn`, `modern-python`, `agentic-actions-auditor`, `supply-chain-risk-auditor`, `insecure-defaults`, `agent-skills:ci-cd-and-automation` | Jetons de design, socle uv/ruff, workflows GitHub, dépendances, valeurs par défaut de Compose ; rédiger le modèle de menaces |
-| M1 | `frontend-design`, `impeccable`, `shadcn`, `web-design-guidelines`, `dataviz`, `agent-skills:browser-testing-with-devtools`, `sharp-edges`, `property-based-testing`, `pg` | Cockpit et captures de référence ; auth, TOTP, RBAC ; idempotence des événements ; hypertables |
-| M2 | `context7` (Freqtrade, `freqtrade-client`, SDK Docker), `insecure-defaults`, `sharp-edges`, `agent-skills:api-and-interface-design`, skill de projet `freqtrade-adapter` | SecretStore, runner Docker, adaptateur ; écrans Stratégies et Ordres avec les skills de design de M1 |
-| M3 | `property-based-testing`, `agent-skills:doubt-driven-development`, `claude-security`, `quantitative-trading`, skill de projet `risk-failclosed-testing` | Invariants du §10, tests de chaos, scan approfondi ; code critique délégué sur Opus (SPEC §17.2) ; écran Risque avec les skills de design de M1 |
-| M4 | `n8n-mcp-skills` (documentation seule, aucun identifiant n8n), `agent-skills:observability-and-instrumentation`, `insecure-defaults` | WF-01, WF-06, WF-07, `make n8n-lint`, métriques et traces ; écran Flow avec les skills de design de M1 |
+| M0 | `impeccable` (l'opérateur lance `/impeccable init` → `PRODUCT.md`, puis `/impeccable document` → `DESIGN.md`), `shadcn`, `modern-python`, `agentic-actions-auditor`, `supply-chain-risk-auditor`, `insecure-defaults`, `agent-skills:ci-cd-and-automation` | Jetons de design, socle uv/ruff, workflows GitHub, dépendances, valeurs par défaut de Compose ; rédiger le modèle de menaces ; initialiser `docs/invariants.md` |
+| M1 | `frontend-design`, `impeccable`, `shadcn`, `web-design-guidelines`, `dataviz`, `agent-skills:browser-testing-with-devtools`, `sharp-edges`, `property-based-testing`, `pg` | Cockpit et captures de référence ; auth, TOTP, RBAC ; idempotence des événements ; hypertables ; états voulu et observé, cycle des commandes, modes de panne du FakeEngine, règles de vérité de l'affichage (I1, I8, I14) |
+| M2 | `context7` (Freqtrade, `freqtrade-client`, SDK Docker), `insecure-defaults`, `sharp-edges`, `agent-skills:api-and-interface-design`, skill de projet `freqtrade-adapter` | SecretStore, runner Docker, adaptateur ; écrans Stratégies et Ordres avec les skills de design de M1 ; configuration générée et relue, empreinte, démarrage en sorties seules, gabarit de conteneur, adoption (I2, I3, I9, I10, I12) ; revérifier l'annexe C du SPEC sur le tag épinglé |
+| M3 | `property-based-testing`, `agent-skills:doubt-driven-development`, `claude-security`, `quantitative-trading`, skill de projet `risk-failclosed-testing` | Invariants du §10, tests de chaos, scan approfondi ; code critique délégué sur Opus (SPEC §17.2) ; écran Risque avec les skills de design de M1 ; protection des positions, réconciliation étendue, script de secours (I4, I5, I6, I7) |
+| M4 | `n8n-mcp-skills` (documentation seule, aucun identifiant n8n), `agent-skills:observability-and-instrumentation`, `insecure-defaults` | WF-01, WF-06, WF-07, `make n8n-lint`, métriques et traces ; écran Flow avec les skills de design de M1 ; surveillance externe, panneau « Garanties » (I13) |
 | M5 | `n8n-mcp-skills`, `claude-api`, `sharp-edges` | WF-02 à WF-05, serveur MCP, corpus d'injection, évals, prompt caching ; écrans Agents (lecture) et Journal et rapports avec les skills de design de M1 |
 | M6 | `backtest-expert`, `edge-strategy-reviewer`, `quantitative-trading`, skill de projet `backtest-hygiene`, `dataviz` | Rapport de fiabilité F8, revue quantitative en contexte neuf, courbes d'equity ; écrans Agents et Backtests avec les skills de design de M1 |
-| M7 | `claude-security`, `static-analysis`, `supply-chain-risk-auditor`, `differential-review`, `agent-skills:shipping-and-launch`, `impeccable` (audit, polish) | Revue de sécurité finale, durcissement, runbooks, finition de l'interface |
+| M7 | `claude-security`, `static-analysis`, `supply-chain-risk-auditor`, `differential-review`, `agent-skills:shipping-and-launch`, `impeccable` (audit, polish) | Revue de sécurité finale, durcissement, runbooks, finition de l'interface ; liste blanche des sorties réseau des moteurs, répétition en bac à sable (I11, S14) |
 
 ## Interdits
 
