@@ -4,7 +4,7 @@
 
 > **Journal des changements v1.0 → v1.1** — Les ajouts et modifications sont repérés par **(v1.1)**.
 > - §0 : règles d'environnement agentique (aucune clé live en dev, pas d'outils d'exécution d'ordres, budget de tokens).
-> - §1 : nouveau principe (7) et exclusions précisées.
+> - §1 : nouveaux principes (6) et (7), exclusions précisées.
 > - §4 : F2 (idempotence, décimaux), F8 (hygiène de backtest), F1 (la checklist de promotion consomme les gates de backtest).
 > - §5 : outillage qualité/sécurité ajouté (gitleaks, semgrep, zizmor, Hypothesis…).
 > - §6 : types monétaires, champs de fiabilité des backtests.
@@ -15,6 +15,11 @@
 > - §14 : critères d'acceptation durcis et protocole de jalon.
 > - **§17 (nouveau)** : environnement de développement agentique (orchestration Opus/Sonnet/Haiku, subagents, skills, tokens, sécurité du poste de dev).
 > - Annexes : structure du dépôt étendue, exemples en décimaux (chaînes).
+>
+> **Mise en cohérence du 10 octobre 2026** (sans changement fonctionnel) :
+> - §0.9, §14 (M0), §17 : `CLAUDE.md` et `.claude/` sont fournis par l'opérateur ; orchestration « skills d'abord » ; §17.6 aligné sur les plugins réellement installés.
+> - §6 : entités `agents` et `alerts`, exigées par les écrans du §9. §8 : la liste des routes est déclarée non exhaustive. §11 : événements de plateforme distingués des événements de moteur.
+> - §14 : chaque écran du §9 est rattaché à un jalon. §13 : `pnpm audit`. Annexe A : la racine est le dépôt lui-même.
 >
 > L'environnement agentique est déjà en place dans `CLAUDE.md` et `.claude/` (agents, skills, rules, hooks). Pour lancer un jalon : « lance le jalon Mx » ou `/milestone Mx`.
 
@@ -30,7 +35,7 @@ Tu es chargé de produire ce logiciel à partir de ce document.
 6. Ne livre aucune stratégie censée être rentable : uniquement l'infrastructure et une stratégie d'exemple triviale (croisement de moyennes mobiles) pour démontrer le flux.
 7. Si une information manque, applique l'hypothèse du §15, note-la dans le README et continue. Ne pose une question que si elle bloque réellement.
 8. À chaque jalon : tests, migrations, documentation, `docker compose up` fonctionnel, commit propre.
-9. **(v1.1)** Lis `CLAUDE.md` et respecte `.claude/` (agents, skills, rules, hooks). Ne modifie ni `.claude/settings.json` ni les hooks sans demande explicite de l'opérateur.
+9. **(v1.1)** Lis `CLAUDE.md` et respecte `.claude/` (agents, skills, rules, hooks). Ces fichiers sont fournis par l'opérateur : vérifie-les, ne les recrée pas. Ne modifie ni `.claude/settings.json` ni les hooks sans demande explicite de l'opérateur ; seule exception, les valeurs `true`/`false` de `enabledPlugins`, selon la procédure de `.claude/rules/skills-par-jalon.md`.
 10. **(v1.1)** L'environnement de développement ne contient **jamais** de clé API live ni de fonds réels : paper, dry-run et testnet uniquement. Les clés live sont saisies par l'opérateur dans l'application en production, jamais dans une session de développement.
 11. **(v1.1)** N'installe, n'active ni n'appelle aucun skill, plugin ou serveur MCP capable de passer des ordres ou de déplacer des fonds sur un exchange (§17.7).
 12. **(v1.1)** Respecte la discipline de tokens du §17.4 : déléguer les tâches volumineuses à des subagents, `/clear` entre les jalons, sorties d'outils concises.
@@ -183,9 +188,11 @@ Règles : horodatages UTC, identifiants UUID v7, migrations Alembic, `updated_at
 | risk\_limits | portée (global, compte, instance), clé, valeur, auteur, date d'effet |
 | risk\_decisions | ts, instance, demande d'ordre, décision, raisons, latence en ms |
 | kill\_switch | portée, état, raison, auteur, date |
+| agents | rôle (lecture seule, superviseur), modèle, activation, mode (`shadow`, `actif`), outils autorisés, plafond de coût journalier |
 | proposals | agent, genre, payload, justification, effet sur le risque (`reduces`, `increases`, `neutral`), statut, expiration, décideur |
 | agent\_tool\_calls | run, outil, arguments, référence du résultat, tokens |
 | backtests | spécification, statut, résultat normalisé, **(v1.1)** hypothèses de coûts, fenêtres walk-forward, drapeaux de fiabilité (`unreliable`, `insufficient_sample`, `lookahead_suspected`, `parameter_fragile`) |
+| alerts | règle, gravité, cible (instance, compte, global), statut (`open`, `acknowledged`, `resolved`), `correlation_id`, horodatages |
 | notifications\_outbox | type, payload, statut, tentatives, prochaine tentative |
 | audit\_log | ts, acteur, action, cible, empreinte avant/après, IP ; append-only (UPDATE et DELETE interdits par droits et trigger) |
 
@@ -218,6 +225,8 @@ class EngineAdapter(Protocol):
 ## 8. API du plan de contrôle
 
 Préfixe `/api/v1`, OpenAPI générée, erreurs RFC 7807, pagination par curseur, `Idempotency-Key` sur les commandes, limitation de débit, CORS strict.
+
+Le tableau liste les routes principales, pas toutes : chaque écran du §9 peut exiger des routes supplémentaires (par exemple annulation d'un ordre, liste des backtests, agents, alertes, utilisateurs, canaux de notification). Elles suivent les mêmes conventions, et toute commande qui touche un ordre ou une position passe par le Risk service.
 
 | Domaine | Routes principales |
 | --- | --- |
@@ -320,7 +329,7 @@ Toutes les 60 secondes, comparer positions et soldes entre le moteur, l'exchange
 
 ### Sens des échanges
 
-- Plateforme → n8n : webhooks signés HMAC (`alert.raised`, `risk.rejected`, `instance.error`, `proposal.created`, `report.due`). Chaque workflow vérifie la signature et déduplique sur `X-Event-Id`.
+- Plateforme → n8n : webhooks signés HMAC (`alert.raised`, `risk.rejected`, `instance.error`, `proposal.created`, `report.due`). Chaque workflow vérifie la signature et déduplique sur `X-Event-Id`. Ces noms sont des événements de plateforme, distincts des événements canoniques de moteur du §7 : `instance.error`, par exemple, est émis par la plateforme quand elle reçoit `engine.error` ou qu'une instance passe en erreur.
 - n8n → plateforme : API REST avec jeton de service à scopes, et `Idempotency-Key` sur les écritures.
 
 ### Workflows livrés
@@ -371,7 +380,7 @@ Règles :
 
 - TLS partout hors réseau Docker interne ; réseaux Docker séparés (frontend, backend, moteurs, données) ; conteneurs non-root, système de fichiers en lecture seule quand c'est possible, capacités minimales.
 - Secrets fournis par Docker secrets, masqués dans les logs, jamais exposés en variables d'environnement visibles.
-- Dépendances épinglées, analyse en CI (pip-audit, npm audit, Trivy).
+- Dépendances épinglées, analyse en CI (pip-audit, `pnpm audit`, Trivy).
 - En-têtes de sécurité, protection CSRF, validation stricte des entrées, journalisation des échecs d'authentification, verrouillage progressif.
 - **(v1.1) Modèle de menaces** : `docs/security/threat-model.md` créé au jalon M0 (STRIDE : actifs, frontières de confiance, abus par un agent IA, exfiltration de clés, rejeu de webhooks, injection de prompt, compromission de la chaîne d'approvisionnement) et mis à jour à chaque jalon.
 - **(v1.1) Gates de sécurité en CI** : gitleaks sans fuite, semgrep et CodeQL sans constat élevé non traité, zizmor et actionlint sans constat sur les workflows, audit de dépendances (`supply-chain` : versions, mainteneurs, scripts d'installation), image Docker scannée, SBOM publié en artefact. Les constats acceptés sont consignés avec justification et date d'expiration dans `docs/security/accepted-risks.md`.
@@ -394,13 +403,13 @@ Règles :
 
 | Jalon | Contenu | Critères d'acceptation |
 | --- | --- | --- |
-| M0 | Dépôt, Compose `core` (Postgres/Timescale, Redis, API, front, Caddy), CI. **(v1.1)** `CLAUDE.md`, `.claude/`, modèle de menaces, hooks pre-commit (gitleaks, ruff), `PRODUCT.md` et `DESIGN.md` | `docker compose up` démarre ; CI verte ; page de login. **(v1.1)** `/doctor` sans alerte ; gitleaks vert ; threat-model rédigé ; jetons de design en place |
+| M0 | Dépôt, Compose `core` (Postgres/Timescale, Redis, API, front, Caddy), CI. **(v1.1)** vérification de `CLAUDE.md` et `.claude/` (fournis par l'opérateur), modèle de menaces, hooks pre-commit (gitleaks, ruff), `PRODUCT.md` et `DESIGN.md` | `docker compose up` démarre ; CI verte ; page de login. **(v1.1)** `/doctor` sans alerte ; gitleaks vert ; threat-model rédigé ; jetons de design en place |
 | M1 | Auth, RBAC, 2FA, contrat moteur v1, FakeEngine, événements, bus, Cockpit | Instances simulées visibles en temps réel ; audit alimenté. **(v1.1)** Tests de propriétés sur l'idempotence des événements ; captures d'écran de référence du Cockpit (clair/sombre) |
-| M2 | Registre, SecretStore, comptes et clés, runner Docker, FreqtradeAdapter (dry-run), écrans Stratégies et Ordres | Une instance Freqtrade en dry-run démarre, s'arrête et remonte ses trades. **(v1.1)** Test de masquage des secrets dans les logs ; test que la valeur d'un secret n'est jamais renvoyée par l'API ; revue de sécurité du SecretStore |
+| M2 | Registre, SecretStore, comptes et clés, runner Docker, FreqtradeAdapter (dry-run), écrans Stratégies, Ordres et positions, Comptes et clés | Une instance Freqtrade en dry-run démarre, s'arrête et remonte ses trades. **(v1.1)** Test de masquage des secrets dans les logs ; test que la valeur d'un secret n'est jamais renvoyée par l'API ; revue de sécurité du SecretStore |
 | M3 | Risk service, hook Freqtrade, kill switch, réconciliation, écran Risque | Ordre refusé quand une limite saute ; kill switch testé ; panne du Risk service = refus. **(v1.1)** Tests de propriétés du §10 verts ; tests de chaos verts ; couverture de branches ≥ 90 % sur `apps/risk/` ; scan de sécurité approfondi (`claude-security`) sans constat élevé |
-| M4 | Observabilité, écran Flow, traces, n8n déployé, WF-01, WF-06, WF-07 | Une alerte arrive sur Telegram ; n8n arrêté puis relancé : l'outbox est rejouée. **(v1.1)** `make n8n-lint` vert |
-| M5 | n8n complet (WF-02 à WF-05), serveur MCP, agents en lecture seule | Rapport quotidien reçu ; l'agent répond via les outils en lecture seule. **(v1.1)** Corpus d'injection vert ; évals de référence en place ; vérification que `place_order` & co. sont absents du serveur MCP (test) |
-| M6 | Agent superviseur, propositions, backtests, signaux comparés | Proposition créée, approuvée et exécutée avec journal complet. **(v1.1)** Rapport de fiabilité de backtest (F8) calculé et affiché ; une proposition qui augmente le risque est impossible à approuver hors dashboard 2FA (test) |
+| M4 | Observabilité, écrans Flow et Paramètres, traces, n8n déployé, WF-01, WF-06, WF-07 | Une alerte arrive sur Telegram ; n8n arrêté puis relancé : l'outbox est rejouée. **(v1.1)** `make n8n-lint` vert |
+| M5 | n8n complet (WF-02 à WF-05), serveur MCP, agents en lecture seule, écrans Agents (lecture) et Journal et rapports | Rapport quotidien reçu ; l'agent répond via les outils en lecture seule. **(v1.1)** Corpus d'injection vert ; évals de référence en place ; vérification que `place_order` & co. sont absents du serveur MCP (test) |
+| M6 | Agent superviseur, propositions, backtests, signaux comparés, écran Signaux et backtests, file de propositions de l'écran Agents | Proposition créée, approuvée et exécutée avec journal complet. **(v1.1)** Rapport de fiabilité de backtest (F8) calculé et affiché ; une proposition qui augmente le risque est impossible à approuver hors dashboard 2FA (test) |
 | M7 | Durcissement, promotion live (checklist), restauration testée, runbooks | Restauration depuis sauvegarde validée ; la checklist de promotion bloque correctement. **(v1.1)** Revue de sécurité complète finale ; `docs/security/accepted-risks.md` à jour ; aucun secret détecté dans l'historique Git ; essai à blanc de promotion refusé quand un drapeau de fiabilité est levé |
 
 ## 15. Hypothèses par défaut
@@ -451,6 +460,7 @@ Règles : (a) le modèle se choisit à chaque délégation (paramètre `model`, 
 
 ### 17.3 Protocole de jalon (skill `/milestone`)
 
+0. **Préparer** : lire ce document en entier ; appliquer la procédure d'activation des plugins de `.claude/rules/skills-par-jalon.md` ; vérifier les outils du poste ; créer la branche `jalon/mX`.
 1. **Cadrer** : lire la ligne du jalon (§14) et les sections concernées ; créer la liste de tâches à partir des critères d'acceptation.
 2. **Planifier** avec `agent-skills:planning-and-task-breakdown` ; faire explorer l'état du dépôt par `Explore`.
 3. **Découper** en lots indépendants (≤ 3 en parallèle) ; chaque brief donne le modèle (§17.2) et les skills à invoquer.
@@ -458,7 +468,7 @@ Règles : (a) le modèle se choisit à chaque délégation (paramètre `model`, 
 5. **Gate qualité** : `test-runner` exécute `make lint test` ; boucle de correction de 3 itérations maximum, puis escalade à l'orchestrateur.
 6. **Revues indépendantes en parallèle**, dans un contexte neuf : sécurité et code (toujours), quantitative (si logique de trading ou de backtest), interface (si écrans).
 7. **Vérifier chaque critère d'acceptation avec une preuve** (sortie de commande, capture, test), contrôler que chaque skill déclenché par le travail du jalon a bien été invoqué, et mettre à jour `docs/security/threat-model.md`.
-8. **Clore** : documentation, migrations, `docker compose up` de bout en bout, commit ; rapport de 15 lignes maximum ; `/clear` avant le jalon suivant.
+8. **Clore** : documentation, migrations, `docker compose up` de bout en bout, commit ; rapport de 15 lignes maximum ; l'opérateur lance `/graphify` (à partir de M1) puis `/clear` avant le jalon suivant.
 
 ### 17.4 Discipline de tokens
 
@@ -486,12 +496,12 @@ La liste installée et l'activation par jalon sont dans `.claude/rules/skills-pa
 
 | Besoin | Retenu | Source |
 | --- | --- | --- |
-| Économie de tokens | Fonctions natives (§17.4), `claude-md-management`, `/doctor`, `/skill-doctor` ; compression de sorties optionnelle (RTK) | Anthropic ; open source |
-| Interface premium et épurée | `frontend-design`, **Impeccable** (`PRODUCT.md`, `DESIGN.md`, `craft`/`distill`/`polish`/`audit`, détecteur en CI), `web-design-guidelines`, `webapp-testing` | Anthropic ; Apache-2.0 ; Vercel |
+| Économie de tokens | Fonctions natives (§17.4), bascule des plugins par jalon, `/doctor`, `/skill-doctor`, graphify (graphe du code) | Anthropic ; open source |
+| Interface premium et épurée | `frontend-design`, **Impeccable** (`PRODUCT.md`, `DESIGN.md`, détecteur en CI), skill `shadcn`, `web-design-guidelines`, `dataviz`, `chrome-devtools-mcp` avec `agent-skills:browser-testing-with-devtools` | Anthropic ; Apache-2.0 ; shadcn ; Vercel |
 | Orchestration | Skills d'abord (`agent-skills`), skill `/milestone`, subagent natif `general-purpose` avec modèle par délégation, agents de projet `Explore` et `test-runner` en Haiku | Natif Claude Code ; plugin ; fichiers du projet |
-| Sécurité | `/security-review`, `claude-security`, `security-guidance`, Trail of Bits (`insecure-defaults`, `differential-review`, `static-analysis`, `supply-chain-risk-auditor`, `agentic-actions-auditor`, `property-based-testing`, `modern-python`) | Anthropic ; Trail of Bits (CC BY-SA 4.0) |
-| Trading | Skills de projet (`backtest-hygiene`, `freqtrade-adapter`, `risk-failclosed-testing`) + sélection de `claude-trading-skills` (`backtest-expert`, `edge-strategy-reviewer`, `strategy-pivot-designer`, `residual-edge-analyzer`) | Projet ; MIT |
-| Documentation à jour | Context7 ; `pg` (Postgres/TimescaleDB) ; `n8n-skills` (documentation seule) | Upstash ; Apache-2.0 ; MIT |
+| Sécurité | `/security-review`, `claude-security`, `security-guidance`, Trail of Bits (`insecure-defaults`, `differential-review`, `sharp-edges`, `static-analysis`, `supply-chain-risk-auditor`, `agentic-actions-auditor`, `property-based-testing`, `modern-python`), agents `agent-skills:security-auditor` et `agent-skills:code-reviewer` | Anthropic ; Trail of Bits (CC BY-SA 4.0) ; plugin |
+| Trading | Skills de projet (`backtest-hygiene`, `freqtrade-adapter`, `risk-failclosed-testing`), `backtest-expert` et `edge-strategy-reviewer` (`claude-trading-skills`), plugin `quantitative-trading` | Projet ; MIT |
+| Documentation à jour | Context7 ; `pg` (Postgres/TimescaleDB) ; `n8n-mcp-skills` (documentation seule) | Upstash ; Apache-2.0 ; MIT |
 
 ### 17.7 Interdits
 
@@ -500,7 +510,7 @@ Aucun skill, plugin ou serveur MCP d'exécution d'ordres, de retrait ou de gesti
 ## Annexe A — Structure du dépôt
 
 ```
-trading-platform/
+centrade/                    # racine du dépôt
 ├── CLAUDE.md                # (v1.1) ≤ 200 lignes
 ├── PRODUCT.md  DESIGN.md    # (v1.1) vérité produit et système de design
 ├── .claude/                 # (v1.1) settings.json, agents/, skills/, rules/, hooks/

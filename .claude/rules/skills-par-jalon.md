@@ -21,7 +21,7 @@ Avant de commencer un jalon (SPEC.md §14), applique la procédure d'activation 
 | M2 | `impeccable@impeccable`, `frontend-design@claude-plugins-official`, `chrome-devtools-mcp@claude-plugins-official`, `insecure-defaults@trailofbits`, `sharp-edges@trailofbits` |
 | M3 | `property-based-testing@trailofbits`, `claude-security@claude-plugins-official`, `quantitative-trading@claude-code-workflows`, `impeccable@impeccable`, `frontend-design@claude-plugins-official`, `chrome-devtools-mcp@claude-plugins-official` |
 | M4 | `n8n-mcp-skills@n8n-mcp-skills`, `insecure-defaults@trailofbits`, `impeccable@impeccable`, `frontend-design@claude-plugins-official`, `chrome-devtools-mcp@claude-plugins-official` |
-| M5 | `n8n-mcp-skills@n8n-mcp-skills`, `sharp-edges@trailofbits` |
+| M5 | `n8n-mcp-skills@n8n-mcp-skills`, `sharp-edges@trailofbits`, `impeccable@impeccable`, `frontend-design@claude-plugins-official`, `chrome-devtools-mcp@claude-plugins-official` |
 | M6 | `quantitative-trading@claude-code-workflows`, `impeccable@impeccable`, `frontend-design@claude-plugins-official`, `chrome-devtools-mcp@claude-plugins-official` |
 | M7 | `claude-security@claude-plugins-official`, `static-analysis@trailofbits`, `supply-chain-risk-auditor@trailofbits`, `impeccable@impeccable` |
 
@@ -82,7 +82,7 @@ Ce tableau dit sur quoi porter l'effort à chaque jalon ; les déclencheurs ci-d
 | M2 | `context7` (Freqtrade, `freqtrade-client`, SDK Docker), `insecure-defaults`, `sharp-edges`, `agent-skills:api-and-interface-design`, skill de projet `freqtrade-adapter` | SecretStore, runner Docker, adaptateur ; écrans Stratégies et Ordres avec les skills de design de M1 |
 | M3 | `property-based-testing`, `agent-skills:doubt-driven-development`, `claude-security`, `quantitative-trading`, skill de projet `risk-failclosed-testing` | Invariants du §10, tests de chaos, scan approfondi ; code critique délégué sur Opus (SPEC §17.2) ; écran Risque avec les skills de design de M1 |
 | M4 | `n8n-mcp-skills` (documentation seule, aucun identifiant n8n), `agent-skills:observability-and-instrumentation`, `insecure-defaults` | WF-01, WF-06, WF-07, `make n8n-lint`, métriques et traces ; écran Flow avec les skills de design de M1 |
-| M5 | `n8n-mcp-skills`, `claude-api`, `sharp-edges` | WF-02 à WF-05, serveur MCP, corpus d'injection, évals, prompt caching |
+| M5 | `n8n-mcp-skills`, `claude-api`, `sharp-edges` | WF-02 à WF-05, serveur MCP, corpus d'injection, évals, prompt caching ; écrans Agents (lecture) et Journal et rapports avec les skills de design de M1 |
 | M6 | `backtest-expert`, `edge-strategy-reviewer`, `quantitative-trading`, skill de projet `backtest-hygiene`, `dataviz` | Rapport de fiabilité F8, revue quantitative en contexte neuf, courbes d'equity ; écrans Agents et Backtests avec les skills de design de M1 |
 | M7 | `claude-security`, `static-analysis`, `supply-chain-risk-auditor`, `differential-review`, `agent-skills:shipping-and-launch`, `impeccable` (audit, polish) | Revue de sécurité finale, durcissement, runbooks, finition de l'interface |
 
