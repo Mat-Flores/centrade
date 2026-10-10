@@ -15,11 +15,14 @@ secrets/redis.conf:
 	@install -d -m 700 secrets
 	@umask 077 && printf 'requirepass %s\n' "$$(head -c 32 /dev/urandom | base64 | tr -d '/+=\n')" > $@ && chmod 644 $@
 
-up: secrets ## Démarre le profil core
-	docker compose -f deploy/compose/core.yml --profile core up -d --wait
+# Compose cherche `.env` à côté du fichier Compose, pas à la racine : on le lui désigne.
+COMPOSE = docker compose $(if $(wildcard .env),--env-file .env) -f deploy/compose/core.yml --profile core
+
+up: secrets ## Démarre le profil core (reconstruit les images)
+	$(COMPOSE) up -d --wait --build
 
 down: ## Arrête le profil core (jamais -v)
-	docker compose -f deploy/compose/core.yml --profile core down
+	$(COMPOSE) down
 
 test: ## Tests Python et front
 	uv run pytest

@@ -6,7 +6,7 @@
 - [ ] C2 CI verte — preuve : `gh run view` (push de `jalon/m0` à autoriser par l'opérateur)
 - [ ] C3 Page de login — preuve : test Playwright + capture
 - [ ] C4 `/doctor` sans alerte — à confirmer par l'opérateur
-- [ ] C5 gitleaks vert — preuve : `uv run pre-commit run gitleaks --all-files`
+- [ ] C5 gitleaks vert — preuve : `gitleaks git` sur tout l'historique, par l'image épinglée de la CI (le hook pre-commit ne regarde que ce qui est indexé)
 - [ ] C6 Modèle de menaces rédigé — preuve : `docs/security/threat-model.md`, relu par l'auditeur de sécurité
 - [ ] C7 Jetons de design en place — preuve : fichier de jetons, `npx impeccable detect apps/web/src` sans constat primaire
 - [ ] C8 Chaque invariant a ses tests prévus et son jalon — preuve : `docs/invariants.md` + `tests/invariants/test_registre.py`

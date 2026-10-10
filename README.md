@@ -19,7 +19,7 @@ make lint
 make test
 ```
 
-Caddy n'écoute que sur `127.0.0.1`. Le contrat exact des cibles est dans `docs/decisions/0001-ossature-m0.md`.
+L'interface est sur `https://localhost:8443` (certificat de l'autorité interne de Caddy : le navigateur avertit tant qu'elle n'est pas approuvée). Caddy n'écoute que sur `127.0.0.1` ; l'adresse, le port et le nom d'hôte se règlent dans `.env`, à la racine. Le contrat exact des cibles est dans `docs/decisions/0001-ossature-m0.md`.
 
 ## Architecture en bref
 

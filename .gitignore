@@ -1,6 +1,8 @@
 # secrets
 docker/omniroute/.env
 .env
+.env.*
+!.env.example
 .claude/settings.local.json
 
 # python / node / tests

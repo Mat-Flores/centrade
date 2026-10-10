@@ -39,6 +39,7 @@ def test_registre_couvre_i1_a_i14() -> None:
 def test_registre_couvre_s1_a_s14() -> None:
     assert sorted(JALON_SCENARIOS) == list(range(1, 15))
     for n, jalon in JALON_SCENARIOS.items():
-        row = re.search(rf"^\|\s*S{n}\s*\|\s*(M\d)\s*\|", DOC, re.M)
-        assert row, f"S{n} absent du tableau des scénarios"
+        row = re.search(rf"^\|\s*S{n}\s*\|\s*(M\d)\s*\|\s*`([^`]*)`", DOC, re.M)
+        assert row, f"S{n} absent du tableau des scénarios, ou sans fichier prévu"
         assert row.group(1) == jalon, f"S{n} : jalon {row.group(1)} au lieu de {jalon}"
+        assert row.group(2).startswith(f"tests/scenarios/test_s{n:02d}_"), f"S{n} : fichier prévu"

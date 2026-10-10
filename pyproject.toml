@@ -29,7 +29,7 @@ select = ["E", "F", "I", "UP", "B", "S", "ASYNC", "RUF"]
 [tool.mypy]
 python_version = "3.12"
 mypy_path = "apps/api"
-files = ["apps/api/centrade_api", "apps/api/tests"]
+files = ["apps/api/centrade_api", "apps/api/tests", "tests"]
 strict = true
 plugins = ["pydantic.mypy"]
 

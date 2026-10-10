@@ -3,6 +3,7 @@
 Source : https://fastapi.tiangolo.com/tutorial/handling-errors/
 """
 
+from collections.abc import Mapping
 from http import HTTPStatus
 from typing import Any
 
@@ -12,21 +13,35 @@ from fastapi.responses import JSONResponse
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 
-def _problem(request: Request, status: int, **extra: Any) -> JSONResponse:
+def _problem(
+    request: Request, status: int, headers: Mapping[str, str] | None = None, **extra: Any
+) -> JSONResponse:
+    try:
+        title = HTTPStatus(status).phrase
+    except ValueError:  # statut hors registre (499…)
+        title = "Error"
     body = {
         "type": "about:blank",
-        "title": HTTPStatus(status).phrase,
+        "title": title,
         "status": status,
         "instance": request.url.path,
         **extra,
     }
-    return JSONResponse(body, status_code=status, media_type="application/problem+json")
+    return JSONResponse(
+        body, status_code=status, headers=headers, media_type="application/problem+json"
+    )
 
 
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(StarletteHTTPException)
     async def _http(request: Request, exc: StarletteHTTPException) -> JSONResponse:
-        return _problem(request, exc.status_code, detail=exc.detail)
+        # Les en-têtes portent `Allow`, `WWW-Authenticate`, `Retry-After`.
+        return _problem(request, exc.status_code, exc.headers, detail=exc.detail)
+
+    @app.exception_handler(Exception)
+    async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
+        # Aucun détail : le message d'une exception peut contenir un secret.
+        return _problem(request, 500)
 
     @app.exception_handler(RequestValidationError)
     async def _validation(request: Request, exc: RequestValidationError) -> JSONResponse:

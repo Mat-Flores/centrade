@@ -55,6 +55,9 @@ services:
       context: ../..
       dockerfile: apps/api/Dockerfile
     image: centrade/api:dev
+    pull_policy: build # jamais tirée d'un registre : le nom est résoluble sur Docker Hub
+    environment:
+      CENTRADE_LOG_LEVEL: ${CENTRADE_LOG_LEVEL:-INFO}
     tmpfs: [/tmp]
     networks: [edge, data]
     healthcheck:
@@ -71,6 +74,7 @@ services:
       context: ../..
       dockerfile: apps/web/Dockerfile
     image: centrade/web:dev
+    pull_policy: build
     # Le binaire caddy porte la capacité de fichier NET_BIND_SERVICE : hors de l'ensemble
     # autorisé, son exécution échoue (« operation not permitted »).
     cap_add: [NET_BIND_SERVICE]

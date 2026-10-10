@@ -21,6 +21,7 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
+          version: "0.13.0" # même version que apps/api/Dockerfile
           enable-cache: true
       - run: uv sync --frozen
       - run: uv run ruff check .
@@ -73,13 +74,16 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
       - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.13.0"
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           package_json_file: apps/web/package.json
 
       - name: gitleaks (historique et arbre)
         run: >
-          docker run --rm -v "$PWD:/repo" ghcr.io/gitleaks/gitleaks:v8.30.1
+          docker run --rm -v "$PWD:/repo:ro"
+          ghcr.io/gitleaks/gitleaks:v8.30.1@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
           git /repo --config /repo/.gitleaks.toml --redact --no-banner
 
       - name: semgrep (tests des règles du projet)
@@ -96,7 +100,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: uvx zizmor==1.30.1 .github/workflows/
       - name: actionlint
-        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.12 -color
+        run: >
+          docker run --rm -v "$PWD:/repo:ro" -w /repo
+          rhysd/actionlint:1.7.12@sha256:b1934ee5f1c509618f2508e6eb47ee0d3520686341fec936f3b79331f9315667
+          -color
 
       - name: pip-audit
         run: |
@@ -154,15 +161,19 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
-      HEALTH_URL: https://localhost:8443/api/v1/system/health
+      # Port différent du défaut (8443) : prouve que le `.env` racine est bien lu.
+      BASE_URL: https://localhost:9443
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: cp -n .env.example .env
+      - run: sed 's/^CENTRADE_HTTPS_PORT=.*/CENTRADE_HTTPS_PORT=9443/' .env.example > .env
       - run: make up
       # --insecure : certificat de l'autorité interne de Caddy, propre à ce runner jetable.
-      - run: curl --insecure --fail --silent --show-error --retry 10 --retry-delay 3 --retry-all-errors "$HEALTH_URL"
+      - name: Santé de l'API et page d'accueil derrière Caddy
+        run: |
+          curl --insecure --fail --silent --show-error --retry 10 --retry-delay 3 --retry-all-errors "$BASE_URL/api/v1/system/health"
+          curl --insecure --fail --silent --show-error --output /dev/null "$BASE_URL/"
       - name: Journaux Compose en cas d'échec
         if: failure()
         run: docker compose -f deploy/compose/core.yml --profile core logs --no-color --tail 100
