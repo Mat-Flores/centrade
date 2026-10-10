@@ -24,7 +24,33 @@
     ]
   },
   "enabledPlugins": {
+    // General plugins
     "ponytail@ponytail": true,
-    "agent-skills@addy-agent-skills": true
+    "agent-skills@addy-agent-skills": true,
+
+    // Design plugins
+    "impeccable@impeccable": true,
+    "frontend-design@claude-plugins-official": true,
+    "chrome-devtools-mcp@claude-plugins-official": true,
+
+    // Security plugins
+    "security-guidance@claude-plugins-official": true,
+    "claude-security@claude-plugins-official": true,
+    "insecure-defaults@trailofbits": true,
+    "differential-review@trailofbits": true,
+    "sharp-edges@trailofbits": true,
+    "static-analysis@trailofbits": true,
+    "supply-chain-risk-auditor@trailofbits": true,
+    "agentic-actions-auditor@trailofbits": true,
+    "property-based-testing@trailofbits": true,
+    "modern-python@trailofbits": true,
+    
+    // Trading plugins
+    "quantitative-trading@claude-code-workflows": true,
+
+    // Documentation plugins
+    "context7@claude-plugins-official": true,
+    "pg@aiguide": true,
+    "n8n-mcp-skills@n8n-mcp-skills": true
   }
 }
