@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import ForeignKey, LargeBinary, Text
+from sqlalchemy import BigInteger, ForeignKey, LargeBinary, Text
 from sqlalchemy.dialects.postgresql import ARRAY
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -17,6 +17,7 @@ class User(Base):
     password_hash: Mapped[str]  # argon2id
     totp_secret_enc: Mapped[bytes | None] = mapped_column(LargeBinary)  # AES-256-GCM
     totp_nonce: Mapped[bytes | None] = mapped_column(LargeBinary)
+    totp_last_step: Mapped[int | None] = mapped_column(BigInteger)  # anti-rejeu
     recovery_code_hashes: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default="{}")
     failed_attempts: Mapped[int] = mapped_column(server_default="0")
     locked_until: Mapped[datetime | None]
@@ -34,3 +35,4 @@ class Session(Base):
     created_at: Mapped[datetime] = now_col()
     last_activity_at: Mapped[datetime] = now_col()
     expires_at: Mapped[datetime]
+    totp_verified_at: Mapped[datetime | None]  # ré-authentification des actions dangereuses

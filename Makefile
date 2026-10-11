@@ -1,11 +1,11 @@
-.PHONY: help secrets up down test lint insecure-sweep
+.PHONY: help secrets bootstrap-admin up down test lint insecure-sweep
 
 help: ## Liste les cibles
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/ :/'
 
 # Générés une seule fois, jamais affichés. Dossier 700 ; fichiers 644 car le conteneur
 # (uid 70 ou 999) doit les lire : le dossier protège contre les autres comptes de l'hôte.
-secrets: secrets/postgres_password secrets/redis.conf ## Génère les secrets Docker absents
+secrets: secrets/postgres_password secrets/redis.conf secrets/master_key ## Génère les secrets Docker absents
 
 secrets/postgres_password:
 	@install -d -m 700 secrets
@@ -15,6 +15,12 @@ secrets/redis.conf:
 	@install -d -m 700 secrets
 	@umask 077 && printf 'requirepass %s\n' "$$(head -c 32 /dev/urandom | base64 | tr -d '/+=\n')" > $@ && chmod 644 $@
 
+# Clé maître AES-256 (TOTP, puis SecretStore) : 32 octets aléatoires en base64. Cible de fichier :
+# make ne la régénère jamais si elle existe. La perdre rend les secrets chiffrés illisibles.
+secrets/master_key:
+	@install -d -m 700 secrets
+	@umask 077 && head -c 32 /dev/urandom | base64 > $@ && chmod 644 $@
+
 # Compose cherche `.env` à côté du fichier Compose, pas à la racine : on le lui désigne.
 COMPOSE = docker compose $(if $(wildcard .env),--env-file .env) -f deploy/compose/core.yml --profile core
 
@@ -23,6 +29,11 @@ up: secrets ## Démarre le profil core (reconstruit les images)
 
 down: ## Arrête le profil core (jamais -v)
 	$(COMPOSE) down
+
+# Sur l'hôte, pile démarrée. Mot de passe saisi sans écho ; URI TOTP et codes de récupération
+# affichés une seule fois. Refuse s'il existe déjà un administrateur (SPEC §13).
+bootstrap-admin: ## Crée le premier administrateur
+	$(COMPOSE) exec api python -m centrade_api.auth.bootstrap
 
 test: ## Tests Python et front
 	uv run pytest

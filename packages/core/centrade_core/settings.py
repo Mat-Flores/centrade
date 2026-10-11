@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     db_user: str = "centrade"
     db_name: str = "centrade"
     redis_url: str = Field(description="redis://hôte:port/db, sans mot de passe")
+    worker_interval_s: float = 1.0
+    engine_silent_after_s: float = 30.0  # moteur muet au-delà : état observé `unknown`
+    worker_heartbeat_ttl_s: int = 15
+    # Seule origine admise pour les requêtes qui changent un état (CSRF). Défaut : celui de Caddy.
+    public_origin: str = Field(default="https://localhost:8443", pattern=r"^https://[^/\s]+$")
     # Chemins de Docker secrets (/run/secrets/…), jamais les valeurs.
     postgres_password_file: Path
     master_key_file: Path
