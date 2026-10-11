@@ -12,7 +12,7 @@
 - [x] C8 S9 vert — `tests/scenarios/test_s09_evenements_degrades.py` ; preuve : `tests/scenarios/test_s09_evenements_degrades.py`
 - [x] C9 S10 vert — `tests/scenarios/test_s10_commande_sans_reponse.py` ; preuve : `tests/scenarios/test_s10_commande_sans_reponse.py`
 - [x] C10 Masquage des secrets dans les logs — `test_i12_logs_masquent_les_valeurs_sentinelles` ; preuve : `tests/invariants/test_i12_secrets_sens_unique.py`
-- [ ] C11 Gates du §0.8 : `make lint test` vert, migrations, `docker compose up` sain, CI verte (push à autoriser)
+- [x] C11 Gates du §0.8 : `make lint test` vert, migrations, `docker compose up` sain, CI verte — confirmée par l'opérateur le 2026-10-11 (branche poussée par lui, résultat non relu par l'orchestrateur)
 
 ## Lots
 
