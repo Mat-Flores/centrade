@@ -126,9 +126,18 @@
     @apply bg-background font-sans text-foreground antialiased;
     font-variant-numeric: tabular-nums;
   }
+  /* La barre persistante est collante : un élément focalisé ne doit pas passer dessous. */
+  html {
+    scroll-padding-top: 8rem;
+  }
   button,
   input {
     touch-action: manipulation;
+  }
+  /* Données estompées (mode dégradé) : le texte courant s'éclaircit sans passer sous le contraste AA ;
+     le texte secondaire garde son jeton. Jamais d'opacité, qui ferait chuter le contraste de tout. */
+  [data-dimmed="true"] {
+    color: color-mix(in oklch, var(--foreground) 74%, var(--background));
   }
   ::selection {
     background: color-mix(in oklch, var(--primary) 30%, transparent);

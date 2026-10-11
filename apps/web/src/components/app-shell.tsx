@@ -5,7 +5,6 @@ import type { ReactNode } from "react";
 import { PersistentBar, type PersistentBarProps } from "@/components/persistent-bar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
-import { Empty, EmptyDescription, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Spinner } from "@/components/ui/spinner";
 import { fr } from "@/i18n/fr";
 import { endSession, logout, type Me } from "@/lib/session";
@@ -49,6 +48,12 @@ export function AppShell({ me, theme, onToggleTheme, bar, children }: AppShellPr
 
   return (
     <div className="flex min-h-dvh flex-col">
+      <a
+        href="#contenu"
+        className="sr-only focus-visible:not-sr-only focus-visible:absolute focus-visible:top-2 focus-visible:left-2 focus-visible:z-50 focus-visible:rounded-lg focus-visible:border focus-visible:bg-card focus-visible:px-4 focus-visible:py-3 focus-visible:text-base"
+      >
+        {fr.nav.skip}
+      </a>
       <PersistentBar
         {...NOT_OBSERVED}
         {...bar}
@@ -98,7 +103,7 @@ export function AppShell({ me, theme, onToggleTheme, bar, children }: AppShellPr
           </ul>
         </nav>
 
-        <main className="flex flex-1 flex-col gap-6 p-4 sm:p-6">
+        <main id="contenu" tabIndex={-1} className="flex flex-1 flex-col gap-6 p-4 outline-none sm:p-6">
           <h1 className="text-2xl font-semibold tracking-tight">{fr.cockpit.title}</h1>
           {signOut.isError && (
             <Alert role="alert">
@@ -107,14 +112,7 @@ export function AppShell({ me, theme, onToggleTheme, bar, children }: AppShellPr
               <AlertDescription>{fr.bar.logoutFailed}</AlertDescription>
             </Alert>
           )}
-          {children ?? (
-            <Empty className="min-h-64 border">
-              <EmptyHeader>
-                <EmptyTitle className="text-base">{fr.cockpit.emptyTitle}</EmptyTitle>
-                <EmptyDescription>{fr.cockpit.emptyBody}</EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          )}
+          {children}
         </main>
       </div>
       <footer className="border-t px-4 py-3 text-sm text-muted-foreground sm:px-6">{fr.footer}</footer>

@@ -1,4 +1,4 @@
-.PHONY: help secrets bootstrap-admin up down test lint insecure-sweep
+.PHONY: help secrets bootstrap-admin up down test lint insecure-sweep e2e-live
 
 help: ## Liste les cibles
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/ :/'
@@ -53,3 +53,17 @@ lint: ## ruff, mypy, ESLint, tsc
 	uv run mypy
 	pnpm -C apps/web lint
 	pnpm -C apps/web typecheck
+
+# E2E du Cockpit sur une vraie pile jetable : Postgres et Redis en conteneurs sans volume (testcontainers),
+# API et worker en processus locaux avec le FakeEngine, administrateur aux identifiants aléatoires (dossier
+# temporaire hors dépôt, effacé par le script). Ne touche ni à `make up` ni à la base de développement.
+e2e-live: ## E2E sur pile jetable avec le FakeEngine (Docker requis)
+	pnpm -C apps/web build
+	@set -e; dir=$$(mktemp -d -t centrade-e2e-XXXXXX); \
+	PYTHONPATH="$(CURDIR)/apps/api:$(CURDIR)/apps/worker:$(CURDIR)/packages/core:$(CURDIR)/packages/adapters/fake" \
+	  uv run python scripts/e2e_stack.py --dir $$dir & pid=$$!; \
+	trap 'kill $$pid 2>/dev/null; wait $$pid 2>/dev/null || true' EXIT; \
+	for i in $$(seq 1 300); do [ -f $$dir/ready.json ] && break; kill -0 $$pid 2>/dev/null || { echo "pile e2e arrêtée"; exit 1; }; sleep 1; done; \
+	[ -f $$dir/ready.json ] || { echo "pile e2e non prête"; exit 1; }; \
+	api=$$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))['api_url'])" $$dir/ready.json); \
+	E2E_LIVE=1 E2E_API_URL=$$api E2E_CREDS_FILE=$$dir/creds.json pnpm -C apps/web e2e:live

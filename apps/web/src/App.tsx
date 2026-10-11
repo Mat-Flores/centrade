@@ -1,13 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { CircleAlertIcon } from "lucide-react";
 
-import { AppShell } from "@/components/app-shell";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { fr } from "@/i18n/fr";
 import { meQuery } from "@/lib/session";
 import { useTheme } from "@/lib/theme";
+import { CockpitPage } from "@/screens/cockpit/cockpit-page";
 import { LoginScreen } from "@/screens/login-screen";
 
 /** Garde de route : la coquille n'existe que si `/auth/me` confirme une session ; sinon, le login. */
@@ -40,5 +40,5 @@ export function App() {
     );
   }
   if (me.data === null) return <LoginScreen />;
-  return <AppShell me={me.data} theme={theme} onToggleTheme={toggle} />;
+  return <CockpitPage me={me.data} theme={theme} onToggleTheme={toggle} />;
 }

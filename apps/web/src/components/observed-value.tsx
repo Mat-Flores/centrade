@@ -15,6 +15,8 @@ export interface ObservedValueProps {
   /** Seuil de fraîcheur en millisecondes (5 000 pour un flux, 30 000 pour un moteur). */
   staleAfterMs: number;
   className?: string;
+  /** Chasse fixe pour un nombre ou un identifiant ; désactivée quand `value` est un badge. */
+  mono?: boolean;
 }
 
 /**
@@ -23,7 +25,7 @@ export interface ObservedValueProps {
  * « inconnu » si elle est absente ou sans horodatage. La dernière valeur connue n'est jamais
  * présentée comme actuelle.
  */
-export function ObservedValue({ value, observedAt, serverTime, staleAfterMs, className }: ObservedValueProps) {
+export function ObservedValue({ value, observedAt, serverTime, staleAfterMs, className, mono = true }: ObservedValueProps) {
   const missing = value == null || value === "" || value === "unknown";
   const f = missing ? ({ state: "unknown" } as const) : freshness({ observedAt, serverTime, staleAfterMs });
 
@@ -42,7 +44,7 @@ export function ObservedValue({ value, observedAt, serverTime, staleAfterMs, cla
   return (
     <Hint text={hint}>
       <span data-state={f.state} tabIndex={0} className={cn("inline-flex items-baseline gap-2 rounded-sm", className)}>
-        <span className={cn("font-mono", f.state === "stale" && "opacity-70")}>{value}</span>
+        <span className={cn(mono && "font-mono", f.state === "stale" && "text-[color-mix(in_oklch,var(--foreground)_70%,var(--background))]")}>{value}</span>
         {f.state === "stale" && (
           <span className="text-xs text-muted-foreground">{fr.observed.staleSince(formatAge(f.staleForMs))}</span>
         )}

@@ -47,6 +47,7 @@ export const fr = {
   },
   nav: {
     label: "Écrans",
+    skip: "Aller au contenu",
     comingSoon: "à venir",
     items: {
       cockpit: "Cockpit",
@@ -63,8 +64,140 @@ export const fr = {
   },
   cockpit: {
     title: "Cockpit",
-    emptyTitle: "Aucune instance à afficher",
-    emptyBody: "Les instances et leur état observé apparaîtront ici dès que le Cockpit sera branché sur l'API.",
+    instances: "Instances",
+    simulated: "simulé",
+    simulatedHint: "Instance paper : aucun ordre réel, chiffres simulés.",
+    modeUnknown: "mode inconnu",
+    modeMismatch: "MODE INCOHÉRENT",
+    modeMismatchDetail: (wanted: string, observed: string) => `voulu ${wanted}, observé ${observed}`,
+    observedState: "État observé",
+    wantedState: "État voulu",
+    wantedLabels: { running: "en marche", exits_only: "sorties seules", stopped: "arrêté" },
+    states: {
+      starting: "démarrage",
+      exits_only: "sorties seules",
+      running: "en marche",
+      halted: "boucle arrêtée",
+      stopped: "arrêté",
+      error: "erreur",
+    },
+    summary: {
+      label: "Instances par état observé",
+      total: (n: number) => `${n} ${n > 1 ? "instances" : "instance"}`,
+      stale: "périmé",
+      unknown: "inconnu",
+    },
+    loading: "Chargement des instances…",
+    loadError: {
+      title: "Instances indisponibles",
+      body: "L'API n'a pas renvoyé la liste des instances. Vérifier que l'API est démarrée et la connexion VPN, puis réessayer.",
+      retry: "Réessayer",
+    },
+    empty: {
+      title: "Aucune instance",
+      body: "Une instance simulée tourne sur le FakeEngine, sans ordre réel. Créer la première pour voir son état observé en temps réel.",
+      bodyViewer: "Aucune instance n'existe encore. Un opérateur peut en créer une.",
+    },
+    create: {
+      open: "Créer une instance simulée",
+      name: "Nom de l'instance",
+      help: "Lettres, chiffres, point, tiret et souligné ; 64 caractères au plus. L'instance est simulée (paper) et démarre en sorties seules.",
+      submit: "Créer l'instance",
+      pending: "Création en cours…",
+      cancel: "Annuler",
+      invalid: "Nom invalide : commencer par une lettre ou un chiffre, puis lettres, chiffres, « . », « - » ou « _ ».",
+      errorTitle: "Création impossible",
+      conflict: "Une instance porte déjà ce nom. Choisir un autre nom.",
+      error: "L'API a refusé la création. Vérifier le nom et que l'API est démarrée, puis réessayer.",
+    },
+    actions: {
+      label: (name: string) => `Actions sur ${name}`,
+      pause_entries: "Bloquer les entrées",
+      resume_entries: "Rouvrir les entrées",
+      flatten: "Tout fermer",
+      stop: "Arrêter",
+      start: "Démarrer",
+    },
+    reasons: {
+      degraded: "Mode dégradé : seules les actions qui réduisent le risque restent possibles.",
+      unknown: "L'état observé est inconnu.",
+      stale: "L'état observé est périmé.",
+      alreadyOpen: "Les entrées sont déjà ouvertes.",
+      alreadyStarted: "L'instance est déjà démarrée.",
+      modeMismatch: "Le mode observé diffère du mode voulu.",
+      notExitsOnly: (state: string) => `État observé « ${state} » : reprise impossible.`,
+      unavailable: (action: string, why: string) => `${action} indisponible : ${why}`,
+    },
+    confirm: {
+      cancel: "Annuler",
+      pending: "Envoi en cours…",
+      title: (action: string, name: string) => `${action} : ${name}`,
+      observedNow: (state: string, age: string) => `État observé à cet instant : ${state} (${age}).`,
+      observedStale: (state: string, since: string) =>
+        `État observé périmé depuis ${since} (dernier relevé : ${state}). L'effet réel peut différer de ce qui est annoncé.`,
+      observedUnknown: "État observé inconnu : la conséquence réelle ne peut pas être annoncée.",
+      errorTitle: "Commande refusée",
+      errorFallback: "L'API n'a pas accepté la commande. Réessayer ; si cela persiste, vérifier que l'API est démarrée.",
+      consequences: {
+        pause_entries:
+          "Plus aucune nouvelle entrée ne sera ouverte ; les positions ouvertes et leurs sorties restent gérées. Réduit le risque, sans délai.",
+        resume_entries:
+          "Les entrées seront rouvertes : le moteur pourra ouvrir de nouvelles positions. Augmente le risque ; refusé si l'état observé est inconnu ou périmé.",
+        flatten:
+          "Toutes les positions de l'instance seront fermées. Le nombre de positions ouvertes n'est pas encore relevé : la commande vise toutes les positions. Réduit le risque, sans délai.",
+        stop: "L'instance cesse d'ouvrir des entrées puis s'arrête. Pour fermer d'abord les positions, utiliser « Tout fermer ».",
+        start: "L'instance démarre toujours en sorties seules ; les entrées ne s'ouvrent qu'avec « Rouvrir les entrées », après vérification.",
+      },
+    },
+    command: {
+      types: {
+        deploy: "Déploiement",
+        start: "Démarrage",
+        stop: "Arrêt",
+        pause_entries: "Blocage des entrées",
+        resume_entries: "Réouverture des entrées",
+        flatten: "Fermeture de tout",
+      } as Record<string, string>,
+      status: {
+        requested: "demandée, pas encore transmise au moteur",
+        dispatched: "transmise au moteur, pas encore reçue",
+        acknowledged: "reçue par le moteur, effet pas encore observé",
+        verified: "faite, effet observé dans le moteur",
+        failed: "en échec",
+        timed_out: "délai dépassé : effet non observé",
+        superseded: "remplacée par une commande plus urgente",
+      },
+      noReason: "Aucune raison fournie par le moteur.",
+      reason: "Raison",
+      seen: "Marquer comme vu",
+      problemTitle: "Commande à vérifier",
+    },
+    alerts: {
+      title: "Alertes ouvertes",
+      none: "Aucune alerte ouverte.",
+      loading: "Chargement des alertes…",
+      error: "Alertes indisponibles. Vérifier que l'API est démarrée, puis recharger la page.",
+      severity: { info: "info", warning: "avertissement", critical: "critique" } as Record<string, string>,
+      target: { instance: "instance", account: "compte", global: "global" } as Record<string, string>,
+      columns: { severity: "Gravité", target: "Cible", message: "Message", age: "Âge" },
+    },
+    health: {
+      title: "Santé des services",
+      names: { database: "Base de données", bus: "Bus", worker: "Worker" } as Record<string, string>,
+      ok: "en service",
+      down: "hors service",
+      unknown: "inconnu",
+      observedAt: (when: string) => `relevé ${when}`,
+      error: "Santé introuvable : l'API ne répond pas.",
+      loading: "Relevé de la santé…",
+    },
+    degraded: {
+      title: "Mode dégradé",
+      stream: "Le flux temps réel est coupé : les données affichées peuvent être périmées.",
+      health: "Un service du noyau est en panne.",
+      healthUnknown: "La santé des services est introuvable.",
+      rule: "Seules les actions qui réduisent le risque restent actives.",
+    },
   },
   observed: {
     unknown: "inconnu",
@@ -80,7 +213,7 @@ export function loginErrorMessage(failure: LoginFailure, step: "password" | "tot
   switch (failure.cause) {
     case "refused":
       return step === "password"
-        ? "Identifiant ou mot de passe refusé. Vérifier la saisie, puis réessayer."
+        ? "Identifiant ou mot de passe refusé, ou compte temporairement verrouillé. Vérifier la saisie, puis réessayer ; après des échecs répétés, patienter avant un nouvel essai."
         : "Code refusé, ou connexion expirée. Vérifier le code, puis réessayer ; au besoin, revenir au mot de passe.";
     case "locked":
       return "Compte verrouillé après des échecs répétés. Patienter avant de réessayer ; au besoin, demander à un administrateur de le déverrouiller.";

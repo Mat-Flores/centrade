@@ -36,6 +36,8 @@ export function setUnauthorizedHandler(handler: (() => void) | null): void {
 export interface ApiRequest {
   method?: "GET" | "POST";
   body?: unknown;
+  /** En-têtes en plus des défauts (ex. `Idempotency-Key` d'une commande). */
+  headers?: Record<string, string>;
   signal?: AbortSignal;
   /** Les appels d'authentification lisent eux-mêmes le 401 (identifiants refusés) : pas de retour au login. */
   authCall?: boolean;
@@ -56,7 +58,7 @@ async function readProblem(response: Response): Promise<Problem | null> {
 export async function apiFetch<S extends z.ZodType>(
   path: string,
   schema: S,
-  { method = "GET", body, signal, authCall = false, fetchImpl = fetch }: ApiRequest = {},
+  { method = "GET", body, headers, signal, authCall = false, fetchImpl = fetch }: ApiRequest = {},
 ): Promise<z.infer<S>> {
   let response: Response;
   try {
@@ -65,6 +67,7 @@ export async function apiFetch<S extends z.ZodType>(
       headers: {
         accept: "application/json, application/problem+json",
         ...(body === undefined ? {} : { "content-type": "application/json" }),
+        ...headers,
       },
       body: body === undefined ? undefined : JSON.stringify(body),
       credentials: "same-origin",

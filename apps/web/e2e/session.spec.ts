@@ -16,7 +16,7 @@ test("mot de passe, puis code, puis coquille", async ({ page }) => {
 
   const code = page.getByLabel("Code", { exact: true });
   await expect(code).toBeFocused();
-  await expect(code).toHaveAttribute("inputmode", "numeric");
+  await expect(code).toHaveAttribute("inputmode", "text");
   await expect(code).toHaveAttribute("autocomplete", "one-time-code");
   await code.fill("123456");
   await page.getByRole("button", { name: "Valider le code" }).click();

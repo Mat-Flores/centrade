@@ -12,6 +12,8 @@ const badgeVariants = cva(
         default: "border-border bg-card text-card-foreground",
         // Réservé au mode LIVE (jeton --live).
         live: "bg-live text-live-foreground",
+        // Danger (MODE INCOHÉRENT) : rouge réservé aux états dangereux, contour et texte.
+        danger: "border-live bg-background text-live",
         // État non observé : contour pointillé, jamais une valeur.
         unknown: "border-dashed border-input text-muted-foreground",
       },

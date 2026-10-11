@@ -90,9 +90,9 @@ export function LoginScreen() {
                     id="code"
                     name="code"
                     type="text"
-                    inputMode="numeric"
+                    inputMode="text"
                     autoComplete="one-time-code"
-                    autoCapitalize="none"
+                    autoCapitalize="characters"
                     spellCheck={false}
                     required
                     disabled={pending}

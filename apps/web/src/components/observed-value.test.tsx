@@ -21,7 +21,7 @@ describe("ObservedValue", () => {
   it("estompe une valeur périmée et la marque « périmé depuis … »", () => {
     const html = render({ observedAt: "2026-10-10T18:31:20Z" }); // 45 s, seuil 5 s : périmée depuis 40 s
     expect(html).toContain('data-state="stale"');
-    expect(html).toContain("opacity-70");
+    expect(html).toContain("color-mix");
     expect(html).toContain("périmé depuis 40 s");
   });
 
