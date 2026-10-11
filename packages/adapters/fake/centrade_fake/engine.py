@@ -157,6 +157,9 @@ class FakeEngine:
         errors = tuple(f"paramètre inconnu : {k}" for k in sorted(set(params) - known))
         return ValidationResult(ok=not errors, errors=errors)
 
+    def check_source(self, manifest: Manifest, source: str) -> ValidationResult:
+        return ValidationResult(ok=True)  # le faux moteur n'exécute aucun code
+
     def render_config(self, spec: InstanceSpec) -> EngineConfig:
         m = spec.manifest
         return EngineConfig(

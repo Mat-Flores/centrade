@@ -33,9 +33,15 @@ class CommandRejected(Exception):
     """Commande impossible dans l'état actuel (ex. reprendre les entrées d'une instance arrêtée)."""
 
 
-class EngineAdapter(Protocol):
-    def capabilities(self) -> Capabilities: ...
+class StaticChecks(Protocol):
+    """Contrôles purs (ni réseau ni Docker) : le registre les exécute à l'écriture d'une version."""
+
     def validate(self, manifest: Manifest, params: dict[str, Any]) -> ValidationResult: ...
+    def check_source(self, manifest: Manifest, source: str) -> ValidationResult: ...
+
+
+class EngineAdapter(StaticChecks, Protocol):
+    def capabilities(self) -> Capabilities: ...
     def render_config(self, spec: InstanceSpec) -> EngineConfig: ...  # pure
     async def deploy(self, spec: InstanceSpec) -> InstanceRef: ...  # sorties seules
     async def start(self, ref: InstanceRef) -> None: ...  # relance, sorties seules

@@ -146,7 +146,7 @@ async def _version(s: AsyncSession) -> Any:
     )
     await s.execute(
         text("INSERT INTO strategy_versions (id, strategy_id, version, manifest, code_hash, "
-             "author, exits) VALUES (:v, :s, 1, '{}', 'h', 'op', '{}')"),
+             "author, exits, code) VALUES (:v, :s, 1, '{}', 'h', 'op', '{}', 'c')"),
         {"v": vid, "s": sid},
     )  # fmt: skip
     return sid, vid
@@ -160,6 +160,7 @@ async def test_strategy_versions_immuable_sauf_statut(
     updates = (
         "UPDATE strategy_versions SET manifest = '{\"b\": 2}' WHERE id = :i",
         "UPDATE strategy_versions SET code_hash = 'x' WHERE id = :i",
+        "UPDATE strategy_versions SET code = 'x' WHERE id = :i",
         'UPDATE strategy_versions SET exits = \'{"stoploss": "-0.5"}\' WHERE id = :i',
     )
     for sql in updates:
@@ -181,7 +182,8 @@ async def test_strategy_versions_unicite_strategie_numero(
         with pytest.raises(IntegrityError):
             await s.execute(
                 text("INSERT INTO strategy_versions (id, strategy_id, version, manifest, "
-                     "code_hash, author, exits) VALUES (:v, :s, 1, '{}', 'h', 'op', '{}')"),
+                     "code_hash, author, exits, code) "
+                     "VALUES (:v, :s, 1, '{}', 'h', 'op', '{}', 'c')"),
                 {"v": uuid7(), "s": sid},
             )  # fmt: skip
 

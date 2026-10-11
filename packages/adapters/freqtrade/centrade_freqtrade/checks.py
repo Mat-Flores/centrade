@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import ast
 from decimal import Decimal
+from pathlib import Path
 from typing import Any
 
 from centrade_core.engine.types import Manifest, ValidationResult
@@ -21,6 +22,29 @@ PLATFORM_HOOKS = frozenset(
         "leverage",
     }
 )
+
+
+def _base_names() -> frozenset[str]:
+    """Noms définis par ControlPlaneStrategy, lus dans son source (pas d'import : Freqtrade
+    n'est pas installé côté plateforme) : méthodes, attributs de classe, `self.x = …`."""
+    tree = ast.parse(Path(__file__).with_name("control_plane.py").read_text(encoding="utf-8"))
+    cls = next(
+        n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "ControlPlaneStrategy"
+    )
+    names: set[str] = set()
+    for node in ast.walk(cls):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node in cls.body:
+            names.add(node.name)
+        elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
+            for t in node.targets if isinstance(node, ast.Assign) else [node.target]:
+                if isinstance(t, ast.Name) and node in cls.body:
+                    names.add(t.id)
+                elif isinstance(t, ast.Attribute):
+                    names.add(t.attr)
+    return frozenset(names)
+
+
+ENGINE = "freqtrade"
 BASE_MODULE = "control_plane"
 BASE_CLASS = "ControlPlaneStrategy"
 
@@ -36,10 +60,17 @@ FORBIDDEN_MODULES = frozenset(
     }
 )  # fmt: skip
 FORBIDDEN_NAMES = frozenset(
-    {"__import__", "eval", "exec", "compile", "setattr", "delattr", "globals", "locals",
-     "vars", "breakpoint", "__builtins__"}
+    {"__import__", "eval", "exec", "compile", "setattr", "delattr", "getattr", "type", "vars",
+     "globals", "locals", "breakpoint", "__builtins__"}
 )  # fmt: skip
-FORBIDDEN_ATTRS = frozenset({"__subclasses__", "__globals__", "__builtins__", "__import__"})
+FORBIDDEN_ATTRS = frozenset(
+    {"__subclasses__", "__globals__", "__builtins__", "__import__", "__dict__", "__class__",
+     "__bases__", "__base__", "__mro__", "__setattr__", "__delattr__", "__getattribute__"}
+)  # fmt: skip
+# Noms qu'une stratégie ne peut ni définir ni affecter : tout ce que la base définit (dérivé de
+# son source) plus les hooks de la plateforme.
+PROTECTED_NAMES = _base_names() | PLATFORM_HOOKS
+_CONFIG_MUTATORS = frozenset({"update", "pop", "popitem", "setdefault", "clear"})
 
 
 def _forbidden(module: str) -> bool:
@@ -69,19 +100,35 @@ def check_strategy_source(source: str, class_name: str) -> list[str]:
             errors.append(f"ligne {line} : usage interdit : {node.id}")
         elif isinstance(node, ast.Attribute) and node.attr in FORBIDDEN_ATTRS:
             errors.append(f"ligne {line} : usage interdit : {node.attr}")
-        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and (
-            node.name in PLATFORM_HOOKS
-        ):
-            errors.append(f"ligne {line} : redéfinition du hook de la plateforme {node.name}")
-        elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
-            targets = node.targets if isinstance(node, ast.Assign) else [node.target]
+        elif isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            if node.name in PROTECTED_NAMES:
+                errors.append(
+                    f"ligne {line} : redéfinition d'un nom de la plateforme : {node.name}"
+                )
+        elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign, ast.Delete)):
+            if isinstance(node, ast.Assign):
+                targets = node.targets
+            elif isinstance(node, ast.Delete):
+                targets = node.targets
+            else:
+                targets = [node.target]
             for t in targets:
                 for sub in ast.walk(t):
                     name = sub.id if isinstance(sub, ast.Name) else getattr(sub, "attr", "")
-                    if name in PLATFORM_HOOKS:
+                    if name in PROTECTED_NAMES:
                         errors.append(
-                            f"ligne {line} : redéfinition du hook de la plateforme {name}"
+                            f"ligne {line} : redéfinition d'un nom de la plateforme : {name}"
                         )
+                    elif name == "config":  # le mode d'une instance n'est pas celui de la stratégie
+                        errors.append(f"ligne {line} : modification de la configuration interdite")
+        elif (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in _CONFIG_MUTATORS
+            and isinstance(node.func.value, ast.Attribute)
+            and node.func.value.attr == "config"
+        ):
+            errors.append(f"ligne {line} : modification de la configuration interdite")
 
     errors += _check_inheritance(tree, class_name)
     return errors
@@ -167,7 +214,7 @@ def validate(manifest: Manifest, params: dict[str, Any]) -> ValidationResult:
     """Manifest Freqtrade (spot seul, stop-loss obligatoire) et paramètres du `params_schema`.
     La clé `pairs` est fournie par la plateforme (config.render_config) : elle est ignorée ici."""
     errors: list[str] = []
-    if manifest.engine != "freqtrade":
+    if manifest.engine != ENGINE:
         errors.append("engine doit valoir freqtrade")
     if manifest.trading_mode != "spot":
         errors.append("trading_mode : seul spot est admis en V1")
@@ -190,3 +237,10 @@ def validate(manifest: Manifest, params: dict[str, Any]) -> ValidationResult:
         errors.append("sizing.stake_amount : doit être positif")
     errors += _check_params(manifest.params_schema, params)
     return ValidationResult(ok=not errors, errors=tuple(errors))
+
+
+def check_source(manifest: Manifest, source: str) -> ValidationResult:
+    """Contrôle AST du code ; la classe porte le nom du fichier d'entrée (voir `validate`)."""
+    stem = manifest.entrypoint.rsplit("/", 1)[-1].removesuffix(".py")
+    errors = tuple(check_strategy_source(source, stem))
+    return ValidationResult(ok=not errors, errors=errors)

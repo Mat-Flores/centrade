@@ -16,14 +16,25 @@ logger = logging.getLogger(__name__)
 
 
 class ControlPlaneStrategy(IStrategy):
-    INTERFACE_VERSION = 3
     can_short = False  # spot seulement (V1)
+    _boot_dry_run = False  # refus tant que __init__ n'a pas lu le mode
+
+    def __init__(self, config: dict[str, Any], *args: Any, **kwargs: Any) -> None:
+        super().__init__(config, *args, **kwargs)
+        # Mode lu une fois, à la construction : la stratégie ne le change pas après coup.
+        self._boot_dry_run = config.get("dry_run") is True
+
+    def __init_subclass__(cls, **kwargs: Any) -> None:
+        super().__init_subclass__(**kwargs)
+        clash = sorted(set(vars(cls)) & PROTECTED)
+        if clash:  # TypeError : non attrapée par le chargeur de Freqtrade, le moteur ne démarre pas
+            raise TypeError(f"{cls.__name__} redéfinit des noms de la plateforme : {clash}")
 
     def _entry_allowed(self, **order: Any) -> bool:
         """Point d'extension M3 : remplacer par POST /api/v1/risk/check (jeton lié à l'instance,
         request_id déterministe, délai 500 ms). Toute réponse autre qu'un `accept` valide et non
         expiré doit retourner False. À M2 il n'y a pas de Risk service : dry-run seulement."""
-        return self.config.get("dry_run") is True
+        return self._boot_dry_run is True and self.config.get("dry_run") is True
 
     def confirm_trade_entry(
         self,
@@ -58,3 +69,14 @@ class ControlPlaneStrategy(IStrategy):
 
     def leverage(self, *args: Any, **kwargs: Any) -> float:
         return 1.0
+
+
+# Noms qu'une sous-classe ne peut pas redéfinir : tout ce que la base définit (hors bruit de
+# Python et d'ABC), plus deux hooks que le moteur refuse avec adjust_order_price. checks.py
+# dérive la même liste de ce fichier ; un test vérifie qu'elles ne divergent pas.
+PROTECTED = frozenset(
+    n
+    for n in vars(ControlPlaneStrategy)
+    if not n.startswith("_abc_")
+    and not (n.startswith("__") and n.endswith("__") and n not in ("__init__", "__init_subclass__"))
+) | {"adjust_entry_price", "adjust_exit_price"}

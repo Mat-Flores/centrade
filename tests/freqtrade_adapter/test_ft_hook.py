@@ -4,6 +4,7 @@ minimale d'IStrategy est injectée dans sys.modules."""
 import importlib
 import sys
 import types
+from abc import ABC
 from collections.abc import Iterator
 from datetime import UTC, datetime
 from typing import Any
@@ -11,7 +12,7 @@ from typing import Any
 import pytest
 
 
-class FakeIStrategy:
+class FakeIStrategy(ABC):  # noqa: B024  # ABC comme le vrai IStrategy : ajoute `_abc_impl` aux sous-classes
     def __init__(self, config: dict[str, Any]) -> None:
         self.config = config
 
@@ -70,3 +71,40 @@ def test_sortie_jamais_bloquee_et_chemins_d_entree_fermes(strategy_cls: Any) -> 
     assert s.adjust_trade_position(trade=None) is None
     assert s.adjust_order_price(current_order_rate=5.0, proposed_rate=9.0, is_entry=False) == 5.0
     assert s.leverage(pair="BTC/USDT", proposed_leverage=3.0) == 1.0
+
+
+def test_mode_capture_a_la_construction(strategy_cls: Any) -> None:
+    cfg = {"dry_run": False}
+    s = strategy_cls(cfg)
+    cfg["dry_run"] = True  # modifié après coup : sans effet
+    assert enter(s) is False
+    cfg2 = {"dry_run": True}
+    s2 = strategy_cls(cfg2)
+    cfg2["dry_run"] = False
+    assert enter(s2) is False
+
+
+def test_sous_classe_qui_redefinit_un_nom_protege_est_refusee(strategy_cls: Any) -> None:
+    for name in ("_entry_allowed", "confirm_trade_entry", "leverage", "adjust_exit_price",
+                 "_boot_dry_run", "__init__"):  # fmt: skip
+        with pytest.raises(TypeError, match=name):
+            type("S", (strategy_cls,), {name: lambda *a, **k: True})
+
+
+def test_attributs_exiges_par_freqtrade_restent_redefinissables(strategy_cls: Any) -> None:
+    sub = type(
+        "S",
+        (strategy_cls,),
+        {"timeframe": "5m", "stoploss": -0.1, "minimal_roi": {"0": 1},
+         "populate_indicators": lambda self, df, md: df},
+    )  # fmt: skip
+    assert sub({"dry_run": True}).timeframe == "5m"
+
+
+def test_noms_proteges_statique_et_execution_concordent(strategy_cls: Any) -> None:
+    import sys
+
+    from centrade_freqtrade.checks import PROTECTED_NAMES
+
+    runtime = sys.modules[strategy_cls.__module__].PROTECTED
+    assert runtime == PROTECTED_NAMES

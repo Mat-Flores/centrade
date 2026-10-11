@@ -200,12 +200,17 @@ class StrategyVersion(Base):
     """Manifest, code et politique de sortie sont immuables (trigger) ; seul le statut change."""
 
     __tablename__ = "strategy_versions"
-    __table_args__ = (UniqueConstraint("strategy_id", "version"),)
+    __table_args__ = (
+        UniqueConstraint("strategy_id", "version"),
+        UniqueConstraint("strategy_id", "idempotency_key"),
+    )
 
     id: Mapped[UUID] = uuid_pk()
     strategy_id: Mapped[UUID] = mapped_column(ForeignKey("strategies.id"), index=True)
     version: Mapped[int]
     manifest: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    code: Mapped[str]  # source déposé, immuable comme le manifest
+    idempotency_key: Mapped[str | None]  # rejeu d'un même dépôt
     code_hash: Mapped[str]
     status: Mapped[str] = mapped_column(server_default="draft")  # draft | approved | retired
     author: Mapped[str]

@@ -125,3 +125,61 @@ def test_validate_exits_et_mode() -> None:
     assert not validate(m, {}).ok
     m = sma_manifest().model_copy(update={"engine": "autre"})
     assert not validate(m, {}).ok
+
+
+BODY = HEAD + "class S(ControlPlaneStrategy):\n"
+
+
+@pytest.mark.parametrize(
+    "member",
+    [
+        "def _entry_allowed(self, **o): return True",
+        "_entry_allowed = lambda self, **o: True",
+        "can_short = True",
+        "def __init__(self, config): pass",
+        "def __init_subclass__(cls): pass",
+        "def f(self):\n        self._entry_allowed = lambda **o: True",
+        "def f(self):\n        self._boot_dry_run = True",
+        "def f(self):\n        del self._boot_dry_run",
+    ],
+)
+def test_noms_internes_de_la_base_refuses(member: str) -> None:
+    assert check(BODY + f"    {member}")
+
+
+@pytest.mark.parametrize(
+    "stmt",
+    [
+        "self.config['dry_run'] = True",
+        "self.config = {'dry_run': True}",
+        "self.config['dry_run'] |= True",
+        "del self.config['dry_run']",
+        "self.config.update(dry_run=True)",
+        "self.config.setdefault('dry_run', True)",
+        "self.config.pop('dry_run')",
+    ],
+)
+def test_modification_de_la_config_refusee(stmt: str) -> None:
+    assert check(BODY + f"    def f(self):\n        {stmt}")
+
+
+@pytest.mark.parametrize(
+    "expr",
+    ["getattr(self, 'x')", "type(self)", "vars(self)", "self.__dict__", "self.__class__",
+     "S.__bases__", "S.__mro__", "object.__setattr__(self, 'a', 1)", "S.__base__",
+     "self.__getattribute__('a')"],
+)  # fmt: skip
+def test_acces_dynamique_aux_attributs_refuse(expr: str) -> None:
+    assert check(BODY + f"    def f(self):\n        return {expr}")
+
+
+def test_lecture_de_la_config_reste_permise() -> None:
+    assert check(BODY + "    def f(self):\n        return self.config.get('x', 1)") == []
+
+
+def test_noms_proteges_derives_de_la_base() -> None:
+    from centrade_freqtrade.checks import PROTECTED_NAMES
+
+    assert {"_entry_allowed", "confirm_trade_entry", "_boot_dry_run", "__init__"} <= PROTECTED_NAMES
+    assert set(PLATFORM_HOOKS) <= PROTECTED_NAMES
+    assert not {"timeframe", "stoploss", "minimal_roi", "populate_indicators"} & PROTECTED_NAMES
