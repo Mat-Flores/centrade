@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from types import TracebackType
 from typing import Any
 
 from centrade_core.bus import EVENTS_STREAM, Bus
 from centrade_core.db import make_engine, make_session_factory
-from centrade_core.engine.types import Exits, InstanceRef, InstanceSpec, Manifest, Sizing
+from centrade_core.engine.types import InstanceRef
 from centrade_core.events import CanonicalEvent
 from centrade_core.ids import uuid7
 from centrade_fake.engine import FakeEngine
@@ -19,25 +18,6 @@ from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from centrade_worker.worker import Worker, WorkerConfig
-
-
-def make_spec() -> InstanceSpec:
-    manifest = Manifest(
-        name="demo",
-        engine="fake",
-        version=1,
-        entrypoint="demo.py",
-        asset_classes=("crypto",),
-        trading_mode="spot",
-        timeframes=("5m",),
-        modes=("backtest", "paper", "live"),
-        sizing=Sizing(stake_amount=Decimal("50"), max_open_positions=3),
-        exits=Exits(stoploss=Decimal("-0.05"), stop_on_venue=True),
-    )
-    return InstanceSpec(
-        instance_id=uuid7(), engine="fake", mode="paper", account_id="acc", manifest=manifest
-    )
-
 
 T0 = datetime(2026, 10, 10, 12, 0, tzinfo=UTC)
 
@@ -92,6 +72,7 @@ class World:
             bus=Bus(self.redis, "worker", consumer),
             clock=self.clock,
             config=WorkerConfig(),
+            simulated=frozenset({"fake"}),
         )
 
     async def new_instance(self, seed: int | None = None) -> InstanceRef:
@@ -101,9 +82,7 @@ class World:
                 clock=self.clock, seed=seed, new_id=uuid7, allow_failure_injection=True
             )
             self.worker = self.make_worker(self._consumer)
-        spec = make_spec()
-        ref = await self.fake.deploy(spec)
-        await self.fake.resume_entries(ref)
+        instance_id = uuid7()
         engine_id = uuid7()
         async with self.sessions.begin() as s:
             await s.execute(
@@ -117,8 +96,11 @@ class World:
                     "INSERT INTO instances (id, engine_id, name, mode, desired_state) "
                     "VALUES (:i, :e, :n, 'paper', 'running')"
                 ),
-                {"i": ref.instance_id, "e": engine_id, "n": str(ref.instance_id)},
+                {"i": instance_id, "e": engine_id, "n": str(instance_id)},
             )
+        # Même chemin qu'une commande `deploy` : empreinte enregistrée, puis entrées ouvertes.
+        ref = await self.fake.deploy(await self.worker.guard.deployment(instance_id))
+        await self.fake.resume_entries(ref)
         self.worker.register(ref)
         return ref
 

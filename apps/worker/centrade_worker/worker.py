@@ -1,10 +1,14 @@
 """Worker : porte les adaptateurs, publie leurs événements, les ingère, tient les projections.
 
 Un tour (`run_once`) : envoi des commandes -> événements (bus, ingestion) -> relevé de chaque
-instance (état + instantané) -> vérification des commandes -> battement. Chaque étape est isolée :
+instance (état + instantané) -> vérification de F9 (démarrage observé, puis cadence) ->
+vérification des commandes -> battement. Chaque étape est isolée :
 une panne (bus, base, un moteur) n'empêche ni l'envoi d'une commande ni le relevé des autres
 instances (I4). Aucun sommeil ici : `run` dort entre deux tours, les tests appellent `run_once`
 avec une horloge injectée.
+
+Indépendance (I9) : au démarrage, les conteneurs en marche sont rattachés sans être redémarrés
+et sans qu'aucune commande parte vers un moteur ; à l'arrêt, le worker ne touche à rien.
 """
 
 from __future__ import annotations
@@ -13,9 +17,10 @@ import asyncio
 import contextlib
 import signal
 from collections.abc import Awaitable, Callable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from functools import partial
+from typing import Protocol
 from uuid import UUID
 
 import structlog
@@ -27,15 +32,23 @@ from centrade_core.ids import uuid7
 from centrade_core.models.trading import Engine, Instance
 from pydantic import ValidationError
 from redis.asyncio import Redis
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from centrade_worker.commands import Commands, Observation, spec_for
+from centrade_worker.commands import Commands, Observation
+from centrade_worker.guard import Guard, raise_alert
 from centrade_worker.ingest import ingest
 from centrade_worker.projection import apply_observation, mark_unknown
+from centrade_worker.runner import RunnerContainer
 
 log = structlog.get_logger("worker")
+
+
+class Containers(Protocol):
+    """Ce que le worker demande au runner : lister ce qui tourne. Rien d'autre (I9)."""
+
+    async def adopt(self) -> list[RunnerContainer]: ...
 
 
 @dataclass(frozen=True)
@@ -49,6 +62,11 @@ class WorkerConfig:
     refresh_notify_s: float = 10.0
     # Fraîcheur exigée du relevé fait juste avant d'envoyer ce qui augmente le risque (I5).
     stale_after_s: float = 30.0
+    # Cadence de la vérification de F9 hors démarrage (§13 : dérive et écart de mode détectés
+    # en 60 s ; la moitié laisse la marge d'un tour et d'une relecture).
+    verify_every_s: float = 30.0
+    # Échéance de la pause envoyée d'office après un écart (réglage `deadline_pause_entries_s`).
+    pause_deadline_s: float = 10.0
 
 
 class Worker:
@@ -61,6 +79,8 @@ class Worker:
         bus: Bus,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
         config: WorkerConfig = WorkerConfig(),  # noqa: B008 - dataclass figée
+        runner: Containers | None = None,
+        simulated: frozenset[str] = frozenset(),
     ) -> None:
         self._adapters = adapters
         self._sessions = sessions
@@ -68,18 +88,35 @@ class Worker:
         self._bus = bus
         self._clock = clock
         self._cfg = config
+        self._runner = runner
+        # Moteurs tenus en mémoire par ce processus : seuls redéployés au démarrage.
+        self._simulated = simulated
         self._refs: dict[UUID, InstanceRef] = {}
         self._anomalies: dict[UUID, str] = {}
         self._notes: list[tuple[str, UUID]] = []  # changements validés, notifiés en fin de tour
         self._last_sig: dict[UUID, tuple[tuple[object, ...], datetime]] = {}
-        self._commands = Commands(
+
+        def note(kind: str, ident: UUID) -> None:
+            self._notes.append((kind, ident))
+
+        self.guard = Guard(
             sessions=sessions,
             adapters=adapters,
             clock=clock,
             call_timeout_s=config.engine_silent_after_s,
             stale_after_s=config.stale_after_s,
+            every_s=config.verify_every_s,
+            pause_deadline_s=config.pause_deadline_s,
+            note=note,
+        )
+        self._commands = Commands(
+            sessions=sessions,
+            adapters=adapters,
+            clock=clock,
+            call_timeout_s=config.engine_silent_after_s,
+            guard=self.guard,
             register=self.register,
-            note=lambda kind, ident: self._notes.append((kind, ident)),
+            note=note,
         )
 
     def register(self, ref: InstanceRef) -> None:
@@ -89,7 +126,9 @@ class Worker:
         self._refs[ref.instance_id] = ref
 
     async def load_instances(self) -> None:
-        """Au démarrage : recharge les instances de la base et les enregistre."""
+        """Au démarrage : suit les instances de la base et rattache les conteneurs en marche.
+        Aucun appel à un moteur, sauf pour les moteurs simulés, qui ne survivent pas au
+        processus et sont redéployés en sorties seules."""
         async with self._sessions() as s:
             rows = (
                 await s.execute(
@@ -98,10 +137,84 @@ class Worker:
             ).all()
         for inst, kind in rows:
             try:
-                # Le FakeEngine ne survit pas au processus : redéployé, en sorties seules.
-                self.register(await self._adapters[kind].deploy(spec_for(inst, kind)))
+                ref = InstanceRef(engine=kind, instance_id=inst.id)
+                if kind in self._simulated:
+                    spec = (await self.guard.target(inst.id)).spec
+                    ref = await self._adapters[kind].deploy(spec)
+                self.register(ref)
             except Exception:
                 log.exception("instance_non_rechargee", instance_id=str(inst.id))
+        if self._runner is not None:
+            await self._adopt([inst for inst, _ in rows])
+
+    async def _adopt(self, instances: list[Instance]) -> None:
+        """Étiquettes Docker contre la base (F9, §10 point 7). Lecture seule côté Docker : un
+        conteneur n'est ni démarré, ni arrêté, ni supprimé ici, orphelin compris."""
+        assert self._runner is not None  # noqa: S101
+        try:
+            running = {c.instance_id: c for c in await self._runner.adopt()}
+        except EngineUnreachable:
+            log.warning("adoption_impossible")  # Docker injoignable : rien n'est conclu
+            return
+        known = {i.id: i for i in instances}
+        alerts: list[UUID | None] = []
+        async with self._sessions.begin() as s:
+            for iid, c in running.items():  # la ligne d'instance d'abord, l'audit ensuite
+                if iid in known and known[iid].container_ref != c.container_id:
+                    await s.execute(
+                        update(Instance)
+                        .where(Instance.id == iid)
+                        .values(container_ref=c.container_id)
+                    )
+            for iid, c in running.items():
+                inst = known.get(iid)
+                if inst is None:
+                    alerts.append(
+                        await raise_alert(
+                            s,
+                            rule="orphan_container",
+                            severity="warning",
+                            message=f"Conteneur orphelin {c.container_id[:12]} : étiqueté pour "
+                            f"l'instance {iid}, inconnue de la base. Laissé tel quel.",
+                            target_id=iid,
+                            target_kind="global",
+                        )
+                    )
+                elif c.fingerprint != (inst.deployment_fingerprint or ""):
+                    alerts.append(
+                        await raise_alert(
+                            s,
+                            rule="fingerprint_mismatch",
+                            severity="warning",
+                            message="L'empreinte portée par le conteneur n'est pas celle "
+                            "enregistrée au déploiement (I10).",
+                            target_id=iid,
+                            invariant="I10",
+                        )
+                    )
+            for inst in instances:
+                if (
+                    inst.container_ref is not None
+                    and inst.desired_state != "stopped"
+                    and inst.id not in running
+                ):
+                    alerts.append(
+                        await raise_alert(
+                            s,
+                            rule="container_missing",
+                            severity="critical",
+                            message="Le conteneur de l'instance ne tourne plus alors qu'elle "
+                            "n'est pas voulue arrêtée.",
+                            target_id=inst.id,
+                        )
+                    )
+        self._notes.extend(("alert", a) for a in alerts if a is not None)
+        log.info(
+            "adoption",
+            running=len(running),
+            attached=len(running.keys() & known.keys()),
+            alerts=sum(a is not None for a in alerts),
+        )
 
     async def run_once(self) -> None:
         tour = log.bind(correlation_id=str(uuid7()))
@@ -120,6 +233,11 @@ class Worker:
             if obs is not None:
                 observed[ref.instance_id] = obs
 
+        async def verify_f9(ref: InstanceRef) -> None:
+            obs = observed[ref.instance_id]
+            if await self.guard.check(ref, obs.status) == ():
+                observed[ref.instance_id] = replace(obs, conform=True)
+
         try:
             # Les commandes d'abord : ni le bus ni un lot d'événements ne retardent une pause.
             # Seul ce qui augmente le risque peut périmer avant de partir.
@@ -129,6 +247,13 @@ class Worker:
             await step("ingestion", lambda: self._consume(tour))
             for iid, ref in list(self._refs.items()):
                 await step("releve", partial(observe, ref), instance_id=str(iid))
+            for iid in list(observed):
+                await step(
+                    "verification_f9", partial(verify_f9, self._refs[iid]), instance_id=str(iid)
+                )
+            if self.guard.pause_requested:  # la pause d'office part dans le même tour
+                self.guard.pause_requested = False
+                await step("envoi_des_pauses", self._commands.dispatch)
             await step("verification", lambda: self._commands.verify(observed))
             await step("expiration", self._commands.expire_all)
             if errors:

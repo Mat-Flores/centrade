@@ -26,6 +26,7 @@ from centrade_api.instances import router as instances_router
 from centrade_api.logging import configure_logging
 from centrade_api.strategies import router as strategies_router
 from centrade_api.stream import router as stream_router
+from centrade_api.trading import router as trading_router
 
 configure_logging()
 log = structlog.get_logger()
@@ -128,6 +129,7 @@ def create_app() -> FastAPI:
     app.include_router(feeds_router)
     app.include_router(stream_router)
     app.include_router(strategies_router)
+    app.include_router(trading_router)
 
     @app.get("/api/v1/system/health")
     async def health(

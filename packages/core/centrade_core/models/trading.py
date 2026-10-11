@@ -43,6 +43,8 @@ class Instance(Base):
     account_id: Mapped[UUID | None] = mapped_column(ForeignKey("accounts.id"), index=True)
     limits: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default="{}")
     container_ref: Mapped[str | None]
+    # Identifiants de l'API native du moteur (usage `engine_api`), renouvelés à chaque déploiement.
+    engine_secret_ref: Mapped[UUID | None] = mapped_column(ForeignKey("secrets.id"))
     deployment_fingerprint: Mapped[str | None]  # I10
     config_hash: Mapped[str | None]  # hash de la configuration générée
     effective_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # relue (F9)

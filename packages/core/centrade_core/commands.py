@@ -19,7 +19,16 @@ from centrade_core.models.trading import Command
 Status = Literal[
     "requested", "dispatched", "acknowledged", "verified", "failed", "timed_out", "superseded"
 ]
-CommandType = Literal["deploy", "start", "stop", "pause_entries", "resume_entries", "flatten"]
+CommandType = Literal[
+    "deploy",
+    "start",
+    "stop",
+    "pause_entries",
+    "resume_entries",
+    "flatten",
+    "close_position",
+    "cancel_entry_order",
+]
 
 # Seules transitions permises. Un état absent des clés est terminal.
 NEXT: Final[dict[str, frozenset[str]]] = {
@@ -40,7 +49,7 @@ STEP_COLUMN: Final[dict[str, str]] = {
 # Ce qui réduit le risque passe devant (F9) ; ce qui l'augmente peut être remplacé.
 PRIORITY: Final = frozenset({"pause_entries", "flatten"})
 # Réduit le risque : jamais expirée avant l'envoi, l'échéance court à compter de l'envoi (I4).
-RISK_REDUCING: Final = PRIORITY | {"stop"}
+RISK_REDUCING: Final = PRIORITY | {"stop", "close_position", "cancel_entry_order"}
 RISK_INCREASING: Final = frozenset({"resume_entries", "start"})
 # États observés depuis lesquels une commande qui augmente le risque a un sens, et son libellé.
 _READY: Final[dict[str, tuple[tuple[str, ...], str]]] = {
@@ -54,6 +63,8 @@ DESIRED_AFTER: Final[dict[str, str | None]] = {  # None : l'état voulu ne chang
     "pause_entries": "exits_only",
     "resume_entries": "running",
     "flatten": None,
+    "close_position": None,
+    "cancel_entry_order": None,
 }
 
 

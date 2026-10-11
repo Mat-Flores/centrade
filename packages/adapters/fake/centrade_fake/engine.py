@@ -22,6 +22,7 @@ from centrade_core.engine.types import (
     BacktestSpec,
     Balance,
     Capabilities,
+    Drift,
     EffectiveConfig,
     EngineConfig,
     InstanceRef,
@@ -171,7 +172,8 @@ class FakeEngine:
                 "stoploss": str(m.exits.stoploss),
                 "stop_on_venue": str(m.exits.stop_on_venue).lower(),
                 "command_interface": "disabled",
-            }
+            },
+            mode_keys=frozenset({"mode", "account_id"}),
         )
 
     async def deploy(self, spec: InstanceSpec) -> InstanceRef:
@@ -239,7 +241,22 @@ class FakeEngine:
         values = dict(inst.config)
         if Failure.DRIFT in inst.failures:
             values["max_open_positions"] = "999"
-        return EffectiveConfig(values=values, observed_at=self._observed_at(inst))
+        dep = inst.spec.deployment  # le simulateur « tourne » ce qu'on lui a déployé
+        return EffectiveConfig(
+            values=values,
+            observed_at=self._observed_at(inst),
+            fingerprint=None if dep is None else dep.fingerprint,
+            engine_version=None if dep is None else dep.engine_version,
+        )
+
+    def config_drift(
+        self, generated: EngineConfig, effective: EffectiveConfig
+    ) -> tuple[Drift, ...]:
+        return tuple(
+            Drift(key=k, expected=generated.values.get(k), observed=v)
+            for k, v in sorted(effective.values.items())
+            if generated.values.get(k) != v
+        )
 
     async def snapshot(self, ref: InstanceRef) -> Snapshot:
         inst = self._live(ref)

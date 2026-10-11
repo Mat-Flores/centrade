@@ -12,12 +12,12 @@ import base64
 import binascii
 import json
 from datetime import datetime, timedelta
-from typing import Any, Literal, cast
+from typing import Any, Literal, Self, cast
 from uuid import UUID
 
 from centrade_core.models.trading import Alert, Command, Event, Instance
 from fastapi import HTTPException
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
 ObservedState = Literal[
     "starting", "exits_only", "running", "halted", "stopped", "error", "unknown"
@@ -133,6 +133,15 @@ class InstanceCreate(BaseModel):
     )
     mode: Literal["paper"] = "paper"  # le passage en live suit la procédure de promotion (F1)
     params: dict[str, Any] = Field(default_factory=dict, max_length=32)  # transmis à l'adaptateur
+    # Création depuis le registre : les deux ensemble, ou aucun (création simulée de M1).
+    strategy_version_id: UUID | None = None
+    account_id: UUID | None = None
+
+    @model_validator(mode="after")
+    def _registry_pair(self) -> Self:
+        if (self.strategy_version_id is None) != (self.account_id is None):
+            raise ValueError("strategy_version_id et account_id vont ensemble")
+        return self
 
     @field_validator("params")
     @classmethod
@@ -141,6 +150,43 @@ class InstanceCreate(BaseModel):
         if len(json.dumps(value)) > MAX_PARAMS_CHARS:
             raise ValueError("paramètres trop volumineux")
         return value
+
+
+class StrategyRef(BaseModel):
+    version_id: UUID
+    strategy_id: UUID
+    name: str
+    version: int
+    status: str
+    code_hash: str
+    exits: dict[str, Any]  # politique de sortie de la version (F10)
+
+
+class AccountRef(BaseModel):
+    """Jamais de référence de secret (I12)."""
+
+    id: UUID
+    venue: str
+    type: str
+    environment: str
+    label: str
+    currency: str
+
+
+class DriftItem(BaseModel):
+    key: str
+    expected: Any
+    observed: Any
+
+
+class InstanceDetail(InstanceOut):
+    strategy: StrategyRef | None  # None : instance sans version de registre (création simulée)
+    account: AccountRef | None
+    deployment_fingerprint: str | None  # calculé par la plateforme (I10)
+    config_hash: str | None
+    # Relues dans le moteur : value None = jamais observé, donc « inconnu » (I1).
+    effective_config: Observed[dict[str, Any] | None]
+    drift: Observed[list[DriftItem] | None]  # liste vide : aucune dérive constatée
 
 
 class CommandAccepted(BaseModel):

@@ -1,6 +1,6 @@
 import { useMutation } from "@tanstack/react-query";
 import { CircleAlertIcon, LayoutDashboardIcon, LogOutIcon, MoonIcon, SunIcon } from "lucide-react";
-import type { ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 
 import { PersistentBar, type PersistentBarProps } from "@/components/persistent-bar";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { fr } from "@/i18n/fr";
 import { endSession, logout, type Me } from "@/lib/session";
+import { hasNavigated, navigate, SCREEN_PATHS, screenAt, usePathname, type RoutedScreen } from "@/lib/router";
 import type { Theme } from "@/lib/theme";
 import { cn } from "@/lib/utils";
 
@@ -23,7 +24,19 @@ const SCREENS = [
   "journal",
   "settings",
 ] as const;
-const ACTIVE = "cockpit";
+const isRouted = (id: (typeof SCREENS)[number]): id is RoutedScreen => id in SCREEN_PATHS;
+
+const NAV_ITEM = cn(
+  "flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-base whitespace-nowrap transition-colors",
+  "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none",
+);
+
+/** Clic simple : navigation sans rechargement. Ctrl, Cmd, Maj ou clic milieu gardent le comportement du lien. */
+function onLinkClick(event: React.MouseEvent<HTMLAnchorElement>, path: string) {
+  if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  event.preventDefault();
+  navigate(path);
+}
 
 // Aucun relevé n'est branché dans ce lot : tout est « inconnu », jamais supposé.
 const NOT_OBSERVED: Pick<PersistentBarProps, "mode" | "connections" | "alertCount"> = {
@@ -45,6 +58,16 @@ export interface AppShellProps {
 export function AppShell({ me, theme, onToggleTheme, bar, children }: AppShellProps) {
   const signOut = useMutation({ mutationFn: logout, onSuccess: endSession });
   const ThemeIcon = theme === "dark" ? SunIcon : MoonIcon;
+  const pathname = usePathname();
+  const active = screenAt(pathname);
+  const title = active ? fr.nav.items[active] : fr.routes.notFoundTitle;
+  const main = useRef<HTMLElement>(null);
+
+  // Changement d'écran : titre de l'onglet à jour et focus sur le contenu (le lecteur d'écran annonce le titre).
+  useEffect(() => {
+    document.title = `${title} · ${fr.productName}`;
+    if (hasNavigated()) main.current?.focus();
+  }, [pathname, title]);
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -84,27 +107,29 @@ export function AppShell({ me, theme, onToggleTheme, bar, children }: AppShellPr
           <ul className="flex gap-1 overflow-x-auto p-2 md:flex-col md:overflow-visible md:p-3">
             {SCREENS.map((id) => (
               <li key={id} className="shrink-0">
-                <button
-                  type="button"
-                  disabled={id !== ACTIVE}
-                  aria-current={id === ACTIVE ? "page" : undefined}
-                  className={cn(
-                    "flex min-h-11 w-full items-center gap-2 rounded-lg px-3 text-left text-base whitespace-nowrap transition-colors",
-                    "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-none",
-                    id === ACTIVE ? "bg-muted font-semibold" : "text-muted-foreground disabled:cursor-not-allowed",
-                  )}
-                >
-                  {id === ACTIVE && <LayoutDashboardIcon className="size-4 shrink-0" aria-hidden="true" />}
-                  <span>{fr.nav.items[id]}</span>
-                  {id !== ACTIVE && <span className="ml-auto text-xs">{fr.nav.comingSoon}</span>}
-                </button>
+                {isRouted(id) ? (
+                  <a
+                    href={SCREEN_PATHS[id]}
+                    aria-current={id === active ? "page" : undefined}
+                    onClick={(event) => onLinkClick(event, SCREEN_PATHS[id])}
+                    className={cn(NAV_ITEM, id === active ? "bg-muted font-semibold" : "hover:bg-muted")}
+                  >
+                    {id === "cockpit" && <LayoutDashboardIcon className="size-4 shrink-0" aria-hidden="true" />}
+                    <span>{fr.nav.items[id]}</span>
+                  </a>
+                ) : (
+                  <button type="button" disabled className={cn(NAV_ITEM, "text-muted-foreground disabled:cursor-not-allowed")}>
+                    <span>{fr.nav.items[id]}</span>
+                    <span className="ml-auto text-xs">{fr.nav.comingSoon}</span>
+                  </button>
+                )}
               </li>
             ))}
           </ul>
         </nav>
 
-        <main id="contenu" tabIndex={-1} className="flex flex-1 flex-col gap-6 p-4 outline-none sm:p-6">
-          <h1 className="text-2xl font-semibold tracking-tight">{fr.cockpit.title}</h1>
+        <main ref={main} id="contenu" tabIndex={-1} className="flex min-w-0 flex-1 flex-col gap-6 p-4 outline-none sm:p-6">
+          <h1 className="text-2xl font-semibold tracking-tight">{title}</h1>
           {signOut.isError && (
             <Alert role="alert">
               <CircleAlertIcon />

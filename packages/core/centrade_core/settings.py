@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     deadline_stop_s: float = 60.0
     deadline_start_s: float = 60.0
     deadline_deploy_s: float = 60.0
+    deadline_close_position_s: float = 60.0
+    deadline_cancel_entry_order_s: float = 30.0
     # Injection de pannes dans un moteur simulé par les paramètres d'une instance : jamais hors
     # des tests et de la pile e2e jetable.
     engine_failure_injection: bool = False

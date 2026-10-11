@@ -106,8 +106,13 @@ async def test_i14_toute_action_ecrit_une_ligne_d_audit_avec_auteur(stack: Stack
         ("POST", "/api/v1/accounts/{account_id}/test"),
         ("POST", "/api/v1/accounts/{account_id}/rotate"),
     }
-    assert changing >= registre | comptes
-    assert changing - registre - comptes == {("POST", "/api/v1/instances")} | {
+    # Fermeture et annulation d'entrée : auditées dans tests/scenarios/test_instances_trading.py.
+    trading = {
+        ("POST", "/api/v1/positions/{position_id}/close"),
+        ("DELETE", "/api/v1/orders/{order_id}"),
+    }
+    assert changing >= registre | comptes | trading
+    assert changing - registre - comptes - trading == {("POST", "/api/v1/instances")} | {
         ("POST", f"/api/v1/instances/{{instance_id}}/{a}") for a in actions
     }
 

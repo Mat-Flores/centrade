@@ -8,8 +8,9 @@ que lorsque l'effet est observé (I8). Aucune route ne crée d'ordre (SPEC §8).
 from __future__ import annotations
 
 import hashlib
+import json
 from datetime import datetime, timedelta
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 from uuid import UUID
 
 import structlog
@@ -23,8 +24,16 @@ from centrade_core.commands import (
     Status,
     risk_increase_refusal,
 )
+from centrade_core.engine.types import Manifest
 from centrade_core.ids import uuid7
-from centrade_core.models.trading import Command, Engine, Instance
+from centrade_core.models.trading import (
+    Account,
+    Command,
+    Engine,
+    Instance,
+    Strategy,
+    StrategyVersion,
+)
 from centrade_core.settings import Settings, get_settings
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from redis.asyncio import Redis
@@ -35,13 +44,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from centrade_api.auth import Principal, require_role
 from centrade_api.deps import client_ip, get_db, get_redis, utcnow
 from centrade_api.schemas import (
+    AccountRef,
     CommandAccepted,
     CommandOut,
+    DriftItem,
     InstanceCreate,
+    InstanceDetail,
     InstanceOut,
     Page,
+    StrategyRef,
     decode_cursor,
     encode_cursor,
+    observe,
 )
 
 log = structlog.get_logger()
@@ -53,10 +67,9 @@ Db = Annotated[AsyncSession, Depends(get_db)]
 Now = Annotated[datetime, Depends(utcnow)]
 Cfg = Annotated[Settings, Depends(get_settings)]
 Bus = Annotated[Redis | None, Depends(get_redis)]
-IdempotencyKey = Annotated[
-    str,
-    Header(alias="Idempotency-Key", min_length=8, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$"),
-]
+_KEY = Header(alias="Idempotency-Key", min_length=8, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")
+IdempotencyKey = Annotated[str, _KEY]
+OptionalKey = Annotated[str | None, _KEY]  # création : la clé est facultative (compatibilité M1)
 Limit = Annotated[int, Query(ge=1, le=200)]  # hors bornes ou non entier : 422
 ActionType = Literal["start", "stop", "pause_entries", "resume_entries", "flatten"]
 
@@ -120,20 +133,73 @@ async def list_instances(
     return Page(items=await instances_out(db, page, now, cfg), next_cursor=nxt, server_time=now)
 
 
+def _drift(raw: Any) -> list[DriftItem]:
+    """`instances.drift` : {clé: {expected, observed}}, ou déjà une liste de {key, ...}."""
+    if not raw:
+        return []
+    if isinstance(raw, dict):
+        return [
+            DriftItem(key=k, expected=v.get("expected"), observed=v.get("observed"))
+            for k, v in sorted(raw.items())
+        ]
+    return [DriftItem.model_validate(x) for x in raw]
+
+
 @router.get("/instances/{instance_id}")
-async def get_instance(instance_id: UUID, _: Viewer, db: Db, now: Now, cfg: Cfg) -> InstanceOut:
+async def get_instance(instance_id: UUID, _: Viewer, db: Db, now: Now, cfg: Cfg) -> InstanceDetail:
     out = await instance_out(db, instance_id, now, cfg)
-    if out is None:
+    inst = await db.get(Instance, instance_id)
+    if out is None or inst is None:
         raise HTTPException(404, "Instance inconnue.")
-    return out
+    strategy = account = None
+    if inst.strategy_version_id is not None:
+        row = (
+            await db.execute(
+                select(StrategyVersion, Strategy.name)
+                .join(Strategy, Strategy.id == StrategyVersion.strategy_id)
+                .where(StrategyVersion.id == inst.strategy_version_id)
+            )
+        ).one()
+        v = row[0]
+        strategy = StrategyRef(
+            version_id=v.id,
+            strategy_id=v.strategy_id,
+            name=row[1],
+            version=v.version,
+            status=v.status,
+            code_hash=v.code_hash,
+            exits=v.exits,
+        )
+    if inst.account_id is not None:
+        acc = await db.get(Account, inst.account_id)
+        if acc is not None:
+            account = AccountRef.model_validate(acc, from_attributes=True)
+    at, stale = inst.effective_config_at, cfg.observed_stale_after_s
+    seen = at is not None and inst.effective_config is not None
+    return InstanceDetail(
+        **out.model_dump(),
+        strategy=strategy,
+        account=account,
+        deployment_fingerprint=inst.deployment_fingerprint,
+        config_hash=inst.config_hash,
+        effective_config=observe(inst.effective_config if seen else None, at, now, stale),
+        drift=observe(_drift(inst.drift) if seen else None, at, now, stale),
+    )
 
 
-def _request_hash(instance_id: UUID, command_type: str) -> str:
-    return hashlib.sha256(f"{instance_id}:{command_type}".encode()).hexdigest()
+def _request_hash(instance_id: UUID, command_type: str, args: dict[str, Any] | None = None) -> str:
+    tail = "" if not args else ":" + json.dumps(args, sort_keys=True)
+    return hashlib.sha256(f"{instance_id}:{command_type}{tail}".encode()).hexdigest()
 
 
 def _new_command(
-    inst: Instance, type_: str, user: Principal, key: str, now: datetime, cfg: Settings
+    inst: Instance,
+    type_: str,
+    user: Principal,
+    key: str,
+    now: datetime,
+    cfg: Settings,
+    args: dict[str, Any] | None = None,
 ) -> Command:
     return Command(
         id=uuid7(),
@@ -141,7 +207,8 @@ def _new_command(
         type=type_,
         actor=user.actor,
         idempotency_key=key,
-        request_hash=_request_hash(inst.id, type_),
+        args=args,
+        request_hash=_request_hash(inst.id, type_, args),
         status="requested",
         correlation_id=uuid7(),
         requested_at=now,
@@ -175,6 +242,7 @@ async def request_command(
     key: str,
     now: datetime,
     cfg: Settings,
+    args: dict[str, Any] | None = None,
 ) -> tuple[Command, bool]:
     """Enregistre la commande (jamais d'appel au moteur). Rend (commande, rejeu)."""
     # Verrou de ligne : les demandes d'une même instance sont sérialisées.
@@ -184,7 +252,7 @@ async def request_command(
     # SPEC §13 : `operator` n'augmente le risque qu'en paper ; tout autre mode exige `admin`.
     if type_ in RISK_INCREASING and inst.mode != "paper" and user.role != "admin":
         raise HTTPException(403, "Droits insuffisants pour cette action hors mode paper.")
-    replay = await _replay(db, user, key, _request_hash(instance_id, type_))
+    replay = await _replay(db, user, key, _request_hash(instance_id, type_, args))
     if replay is not None:
         return replay, True
     # I5 : refus au moindre doute. Le worker rejoue la même règle juste avant l'envoi.
@@ -200,7 +268,7 @@ async def request_command(
     if reason is not None:
         raise HTTPException(409, reason)
 
-    cmd = _new_command(inst, type_, user, key, now, cfg)
+    cmd = _new_command(inst, type_, user, key, now, cfg, args)
     db.add(cmd)
     superseded: list[UUID] = []
     if type_ in PRIORITY:  # passe devant : remplace ce qui augmenterait le risque
@@ -225,7 +293,7 @@ async def request_command(
         await db.flush()
     except IntegrityError:  # même clé, demande concurrente d'une autre instance
         await db.rollback()
-        again = await _replay(db, user, key, _request_hash(instance_id, type_))
+        again = await _replay(db, user, key, _request_hash(instance_id, type_, args))
         if again is None:
             raise
         return again, True
@@ -245,7 +313,11 @@ async def request_command(
         action=f"command.{type_}",
         target=f"instance:{inst.id}",
         before={"desired_state": before},
-        after={"desired_state": inst.desired_state, "command_id": str(cmd.id)},
+        after={
+            "desired_state": inst.desired_state,
+            "command_id": str(cmd.id),
+            **({"args": args} if args else {}),
+        },
         ip=ip,
     )
     await db.commit()
@@ -253,6 +325,37 @@ async def request_command(
         redis, ("command", cmd.id), ("instance", inst.id), *(("command", s) for s in superseded)
     )
     return cmd, False
+
+
+async def _from_registry(
+    db: AsyncSession, body: InstanceCreate
+) -> tuple[Engine, StrategyVersion, Account]:
+    """Version, compte et moteur d'une création depuis le registre ; refus au moindre doute."""
+    from centrade_api.strategies import CHECKS  # import tardif : strategies importe ce module
+
+    version = await db.get(StrategyVersion, body.strategy_version_id)
+    account = await db.get(Account, body.account_id)
+    if version is None or account is None:
+        raise HTTPException(422, "Version de stratégie ou compte inconnu.")
+    if version.status == "retired":
+        raise HTTPException(409, "Cette version de stratégie est retirée.")
+    if account.type != "paper":  # le live passe par la promotion (F1), jamais par ici (I3)
+        raise HTTPException(409, "Seul un compte paper peut recevoir une instance créée ici.")
+    manifest = Manifest.model_validate(version.manifest)
+    if "paper" not in manifest.modes:
+        raise HTTPException(422, "Cette version ne déclare pas le mode paper.")
+    if body.engine is not None and body.engine != manifest.engine:
+        raise HTTPException(422, "Le moteur demandé n'est pas celui de la version.")
+    checks = CHECKS.get(manifest.engine)
+    engine = await db.scalar(
+        select(Engine).where(Engine.kind == manifest.engine).order_by(Engine.created_at).limit(1)
+    )
+    if checks is None or engine is None:
+        raise HTTPException(422, "Type de moteur inconnu.")
+    result = checks.validate(manifest, body.params)
+    if not result.ok:
+        raise HTTPException(422, "Paramètres refusés : " + " ; ".join(result.errors))
+    return engine, version, account
 
 
 @router.post("/instances", status_code=201)
@@ -265,18 +368,43 @@ async def create_instance(
     now: Now,
     cfg: Cfg,
     redis: Bus,
+    idempotency_key: OptionalKey = None,
 ) -> InstanceOut:
-    kind = body.engine
-    if kind is None:  # le serveur ne choisit que s'il n'y a rien à choisir
-        kinds = (await db.scalars(select(Engine.kind).distinct().limit(2))).all()
-        if len(kinds) != 1:
-            raise HTTPException(422, "Moteur à préciser : aucun ou plusieurs sont enregistrés.")
-        kind = kinds[0]
-    engine = await db.scalar(
-        select(Engine).where(Engine.kind == kind).order_by(Engine.created_at, Engine.id).limit(1)
-    )
-    if engine is None:
-        raise HTTPException(422, "Type de moteur inconnu.")
+    body_hash = hashlib.sha256(body.model_dump_json().encode()).hexdigest()
+
+    async def replayed() -> InstanceOut | None:
+        if idempotency_key is None:
+            return None
+        prior = await _replay(db, user, idempotency_key, body_hash)
+        out = None if prior is None else await instance_out(db, prior.instance_id, now, cfg)
+        if out is not None:
+            response.status_code = 200
+            response.headers["Idempotency-Replayed"] = "true"
+            response.headers["Location"] = f"/api/v1/instances/{out.id}"
+        return out
+
+    if (again := await replayed()) is not None:
+        return again
+    version = account = None
+    if body.strategy_version_id is not None:
+        engine, version, account = await _from_registry(db, body)
+        kind = engine.kind
+    else:
+        wanted = body.engine
+        if wanted is None:  # le serveur ne choisit que s'il n'y a rien à choisir
+            kinds = (await db.scalars(select(Engine.kind).distinct().limit(2))).all()
+            if len(kinds) != 1:
+                raise HTTPException(422, "Moteur à préciser : aucun ou plusieurs sont enregistrés.")
+            wanted = kinds[0]
+        found = await db.scalar(
+            select(Engine)
+            .where(Engine.kind == wanted)
+            .order_by(Engine.created_at, Engine.id)
+            .limit(1)
+        )
+        if found is None:
+            raise HTTPException(422, "Type de moteur inconnu.")
+        engine, kind = found, wanted
     inst = Instance(
         id=uuid7(),
         engine_id=engine.id,
@@ -285,6 +413,8 @@ async def create_instance(
         desired_state="exits_only",  # une instance créée démarre en sorties seules (F9)
         observed_state="unknown",
         params=body.params,
+        strategy_version_id=version.id if version else None,
+        account_id=account.id if account else None,
         created_at=now,
         updated_at=now,
     )
@@ -293,16 +423,34 @@ async def create_instance(
         await db.flush()
     except IntegrityError:
         raise HTTPException(409, "Une instance porte déjà ce nom.") from None
-    cmd = _new_command(inst, "deploy", user, f"deploy:{inst.id}", now, cfg)
+    cmd = _new_command(inst, "deploy", user, idempotency_key or f"deploy:{inst.id}", now, cfg)
+    cmd.request_hash = body_hash
     db.add(cmd)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:  # même clé, demande concurrente
+        await db.rollback()
+        if (again := await replayed()) is not None:
+            return again
+        raise
     ip = client_ip(request)
     await write_audit(
         db,
         actor=user.actor,
         action="instance.create",
         target=f"instance:{inst.id}",
-        after={"name": inst.name, "engine": kind, "mode": inst.mode, "params": inst.params},
+        after={
+            "name": inst.name,
+            "engine": kind,
+            "mode": inst.mode,
+            "params": inst.params,
+            # création depuis le registre seulement : l'empreinte de M1 reste inchangée
+            **(
+                {"strategy_version_id": str(version.id), "account_id": str(account.id)}
+                if version and account
+                else {}
+            ),
+        },
         ip=ip,
     )
     await write_audit(

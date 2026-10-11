@@ -34,7 +34,7 @@ export function setUnauthorizedHandler(handler: (() => void) | null): void {
 }
 
 export interface ApiRequest {
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "PUT";
   body?: unknown;
   /** En-têtes en plus des défauts (ex. `Idempotency-Key` d'une commande). */
   headers?: Record<string, string>;
