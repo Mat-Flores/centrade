@@ -13,13 +13,20 @@ Linux, macOS ou Windows avec WSL2 ; Docker et Docker Compose ; `uv` ; Node 22+ e
 ```
 uv run pre-commit install   # une fois : gitleaks et ruff avant chaque commit
 cp .env.example .env     # valeurs de développement, aucun secret réel
-make up                  # Compose core : Postgres/Timescale, Redis, API, web, Caddy
+make secrets             # génère les secrets Docker absents
+make up                  # Compose core : Postgres/Timescale, Redis, API, worker, web, Caddy
+make bootstrap-admin     # premier administrateur ; terminal interactif, aucun identifiant par défaut
 make down                # arrêt, volumes conservés
-make lint
-make test
+make lint test
+pnpm e2e                 # dans apps/web : E2E du Cockpit
+make e2e-live            # pile jetable avec le moteur simulé ; local seulement, pas en CI
 ```
 
-L'interface est sur `https://localhost:8443` (certificat de l'autorité interne de Caddy : le navigateur avertit tant qu'elle n'est pas approuvée). Caddy n'écoute que sur `127.0.0.1` ; l'adresse, le port et le nom d'hôte se règlent dans `.env`, à la racine. Le contrat exact des cibles est dans `docs/decisions/0001-ossature-m0.md`.
+**Avertissement.** La sortie de `make bootstrap-admin` contient l'URI TOTP et les codes de récupération. Note-les hors ligne et ne les laisse dans aucun journal (le pilote de journaux Docker garde la sortie du conteneur).
+
+**Installation venant de M0.** Fais `make down` puis `make up` : le réseau `edge` passe en `172.31.250.0/24`, qui doit être libre sur l'hôte.
+
+L'interface est sur `https://localhost:8443` (le certificat interne est émis pour `localhost`, pas pour `127.0.0.1` ; certificat de l'autorité interne de Caddy : le navigateur avertit tant qu'elle n'est pas approuvée). Caddy n'écoute que sur `127.0.0.1` ; l'adresse, le port et le nom d'hôte se règlent dans `.env`, à la racine. Le contrat exact des cibles est dans `docs/decisions/0001-ossature-m0.md`.
 
 ## Architecture en bref
 
@@ -27,11 +34,21 @@ Dashboard web et API du plan de contrôle derrière Caddy ; PostgreSQL/Timescale
 
 ## État d'avancement
 
-**M0 (ossature).** Dépôt, Compose `core`, CI, page de login, jetons de design, documents de sécurité. **Pas d'authentification avant M1** : la page de login n'ouvre aucun accès. Aucun invariant ni scénario n'est encore testé ; ils sont planifiés dans `docs/invariants.md`.
+**M0 (ossature).** Dépôt, Compose `core`, CI, page de login, jetons de design, documents de sécurité.
+
+**M1 livré.** Authentification et 2FA, contrat moteur, moteur simulé et ses modes de panne, bus, commandes suivies jusqu'à l'effet, Cockpit en temps réel. Testés : I1, I8, I14, S9, S10 (I4, I5 et I12 en partie) ; le reste est planifié dans `docs/invariants.md`.
 
 ## Hypothèses du SPEC §15 appliquées
 
 Crypto via Freqtrade, spot uniquement, paper ou testnet par défaut ; un seul opérateur ; VPS Linux (4 vCPU, 8 Go minimum) ; interface en français, fuseau America/Toronto ; rien exposé à Internet, accès par VPN ; jour de risque 00:00 UTC, nombres `fr-CA`.
+
+**Hypothèses de M1.**
+- Le worker existe dès M1 et porte le moteur simulé en mémoire : une instance simulée est redéployée en sorties seules à chaque démarrage du worker.
+- Le secret TOTP est chiffré par AES-256-GCM avec la clé maître ; l'interface SecretStore complète arrive à M2.
+- Le kill switch est visible mais désactivé jusqu'à M3.
+- Le Cockpit n'affiche ni PnL, ni exposition, ni drawdown, ni rejets de risque, ni panneau « Garanties » tant que leurs sources n'existent pas (M2 à M4).
+- Pas de routeur côté front tant qu'un seul écran est actif.
+- Écarts acceptés : `docs/decisions/0006-ecarts-m1.md`.
 
 ## Où trouver le reste
 

@@ -17,15 +17,19 @@ def test_health_reports_liveness_with_utc_timestamp(client: TestClient) -> None:
 
     assert response.status_code == 200
     body = response.json()
-    assert body["status"] == "ok"
     ts = datetime.fromisoformat(body["ts"])
     assert ts.utcoffset() == timedelta(0)
     assert abs(datetime.now(UTC) - ts) < timedelta(seconds=5)
 
 
-def test_health_does_not_report_unobserved_dependencies(client: TestClient) -> None:
-    # I1 : l'API n'interroge ni Postgres ni Redis à M0, donc elle n'en dit rien.
-    assert set(client.get("/api/v1/system/health").json()) == {"status", "ts"}
+def test_health_reports_dependencies_observed_and_dated_never_assumed(client: TestClient) -> None:
+    # I1 : sans base ni Redis câblés (pas de lifespan), rien n'est présenté comme sain.
+    body = client.get("/api/v1/system/health").json()
+
+    assert set(body) == {"status", "ts", "checks"}
+    assert body["status"] == "degraded"
+    assert set(body["checks"]) == {"database", "bus", "worker"}
+    assert all(c["status"] == "down" and c["observed_at"] for c in body["checks"].values())
 
 
 def test_unknown_route_returns_problem_json_404(client: TestClient) -> None:
