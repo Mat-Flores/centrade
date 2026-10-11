@@ -38,4 +38,4 @@
 - [x] Après la vague 3 (D) : `make up` sain, parcours login → instance → commande à la main
 - [x] Après la vague 4 (G) : `make lint test` vert (agent `test-runner`), E2E verts
 - [x] Revues indépendantes : sécurité, code, interface ; aucun constat critique ou élevé ouvert
-- [ ] Vérification des skills déclenchés, `docs/invariants.md`, threat-model, README (hypothèses), `docs/agentic/couts.md`
+- [x] Vérification des skills déclenchés, `docs/invariants.md`, threat-model, README (hypothèses), `docs/agentic/couts.md`
