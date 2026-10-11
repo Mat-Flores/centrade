@@ -4,8 +4,16 @@ version = "0.0.0"
 description = "Centrade — façade de gouvernance au-dessus d'un moteur de trading"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "alembic>=1.20.0",
+    "argon2-cffi>=25.1.0",
+    "asyncpg>=0.32.0",
+    "cryptography>=50.0.2",
     "fastapi>=0.143.0",
     "pydantic>=2.14.0",
+    "pydantic-settings>=2.15.0",
+    "pyotp>=2.10.0",
+    "redis>=8.1.0",
+    "sqlalchemy[asyncio]>=2.1.4",
     "structlog>=26.1.0",
     "uvicorn>=0.54.0",
 ]
@@ -28,20 +36,35 @@ select = ["E", "F", "I", "UP", "B", "S", "ASYNC", "RUF"]
 
 [tool.mypy]
 python_version = "3.12"
-mypy_path = "apps/api"
-files = ["apps/api/centrade_api", "apps/api/tests", "tests"]
+mypy_path = ["apps/api", "packages/core", "packages/adapters/fake", "apps/worker"]
+files = [
+    "apps/api/centrade_api",
+    "apps/api/tests",
+    "packages/core/centrade_core",
+    "packages/core/alembic",
+    "packages/adapters/fake/centrade_fake",
+    "apps/worker/centrade_worker",
+    "tests",
+]
+explicit_package_bases = true
 strict = true
 plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 testpaths = ["apps/api/tests", "tests"]
-pythonpath = ["apps/api"]
+pythonpath = ["apps/api", "packages/core", "packages/adapters/fake", "apps/worker"]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "session"
+asyncio_default_test_loop_scope = "session"
 
 [dependency-groups]
 dev = [
     "httpx>=0.28.1",
+    "hypothesis>=6.168.5",
     "mypy>=2.4.0",
     "pre-commit>=4.6.2",
     "pytest>=9.1.1",
+    "pytest-asyncio>=1.4.0",
     "ruff>=0.17.0",
+    "testcontainers[postgres,redis]>=4.15.0",
 ]
