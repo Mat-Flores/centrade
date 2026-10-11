@@ -5,9 +5,14 @@ help: ## Liste les cibles
 
 # Générés une seule fois, jamais affichés. Dossier 700 ; fichiers 644 car le conteneur
 # (uid 70 ou 999) doit les lire : le dossier protège contre les autres comptes de l'hôte.
-secrets: secrets/postgres_password secrets/redis.conf secrets/master_key ## Génère les secrets Docker absents
+secrets: secrets/postgres_password secrets/app_db_password secrets/redis.conf secrets/master_key ## Génère les secrets Docker absents
 
 secrets/postgres_password:
+	@install -d -m 700 secrets
+	@umask 077 && head -c 32 /dev/urandom | base64 | tr -d '/+=\n' > $@ && chmod 644 $@
+
+# Mot de passe du rôle Postgres applicatif (le propriétaire ne sert qu'aux migrations).
+secrets/app_db_password:
 	@install -d -m 700 secrets
 	@umask 077 && head -c 32 /dev/urandom | base64 | tr -d '/+=\n' > $@ && chmod 644 $@
 
@@ -30,10 +35,10 @@ up: secrets ## Démarre le profil core (reconstruit les images)
 down: ## Arrête le profil core (jamais -v)
 	$(COMPOSE) down
 
-# Sur l'hôte, pile démarrée. Mot de passe saisi sans écho ; URI TOTP et codes de récupération
+# Sur l'hôte. `run` lance un conteneur neuf de l'API (terminal interactif), après migrate. Mot de passe saisi sans écho ; URI TOTP et codes de récupération
 # affichés une seule fois. Refuse s'il existe déjà un administrateur (SPEC §13).
 bootstrap-admin: ## Crée le premier administrateur
-	$(COMPOSE) exec api python -m centrade_api.auth.bootstrap
+	$(COMPOSE) run --rm api python -m centrade_api.auth.bootstrap
 
 test: ## Tests Python et front
 	uv run pytest

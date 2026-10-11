@@ -3,6 +3,11 @@
 !pyproject.toml
 !uv.lock
 !apps/api/centrade_api
+!apps/worker/centrade_worker
+!packages/core
+!packages/adapters/fake/centrade_fake
+!alembic.ini
+!deploy/db
 !apps/web
 !deploy/caddy/build
 **/__pycache__
