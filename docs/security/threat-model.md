@@ -2,7 +2,7 @@
 
 Source : SPEC §13 (Sécurité), §3, §11, §12, §17.5. Créé à M0 (2026-10-10), mis à jour à chaque jalon (§17.3 étape 7).
 
-**Lecture de l'état.** `prévu` = la parade est décrite par le SPEC mais n'existe pas encore. `livré (M0)` = présent dans le dépôt et vérifié à la clôture de M0 (CI exécutée, pile démarrée, revues indépendantes). `politique seule` = règle écrite (SPEC, `CLAUDE.md`), sans contrôle technique dans le dépôt. Rien d'autre n'est présenté comme fait. Le SPEC ne décrit pas d'autre parade que celles citées ; les manques sont en section 4.
+**Lecture de l'état.** `prévu` = la parade est décrite par le SPEC mais n'existe pas encore. `livré (M0)` ou `livré (M1)` = présent dans le dépôt et vérifié à la clôture du jalon (tests, pile démarrée, revues indépendantes). `politique seule` = règle écrite (SPEC, `CLAUDE.md`), sans contrôle technique dans le dépôt. Rien d'autre n'est présenté comme fait. Le SPEC ne décrit pas d'autre parade que celles citées ; les manques sont en section 4.
 
 ## 1. Actifs
 
@@ -55,7 +55,7 @@ Jalon = jalon où la parade est livrée, d'après la ligne du §14 qui livre le 
 | ID | Menace | Composant | STRIDE | Parade prévue (SPEC) | Jalon | État |
 | --- | --- | --- | --- | --- | --- | --- |
 | K1 | Relecture d'une clé via l'API ou l'interface | SecretStore, API | I | Saisie en écriture seule, jamais relue (F6, I12) ; test que l'API ne renvoie jamais la valeur (§14 M2) | M2 | prévu |
-| K2 | Clé dans les logs | Journalisation | I | Processeur structlog de masquage, test à valeurs sentinelles (§13) | M1 (avancé de M2 par l'opérateur le 2026-10-10) | prévu |
+| K2 | Clé dans les logs | Journalisation | I | Processeur structlog de masquage, test à valeurs sentinelles (§13) | M1 (avancé de M2 par l'opérateur le 2026-10-10) | livré (M1). Limite : un message du pilote de base peut encore citer une valeur liée ; `hide_parameters=True` est en place |
 | K3 | Clé dans une image, un fichier Compose, une variable d'environnement ou un volume persistant | Runner, moteurs | I | Fichier en lecture seule monté en mémoire, supprimé à l'arrêt (F6, §13) | M2 | prévu |
 | K4 | Secrets de la plateforme dans l'environnement ou le dépôt | Compose, dépôt | I | Docker secrets (§13) ; gitleaks en pre-commit et en CI ; `.env.example` sans valeur (§0.5) | M0 | livré (M0) |
 | K5 | Sauvegarde volée donnant accès aux clés | Sauvegardes | I | Sauvegardes chiffrées ; clé maître et `N8N_ENCRYPTION_KEY` sauvegardées à part, hors serveur (§13) | M7 (déduit) | prévu |
@@ -73,7 +73,7 @@ Jalon = jalon où la parade est livrée, d'après la ligne du §14 qui livre le 
 | W3 | Rejeu d'une écriture n8n vers l'API | API | T | `Idempotency-Key` sur les écritures (§11) | M4 | prévu |
 | W4 | n8n compromis escalade vers les ordres, limites, secrets, kill switch | API | E | Compte `automation` sans scope `orders:*`, `limits:write`, `secrets:*`, `kill-switch:release` ; `n8n-lint` ; réseau `automation` (§11, §13) | M4 | prévu |
 | W5 | Faux clic Telegram approuve une proposition | WF-05 | S, E | Liste blanche d'identités revérifiée côté plateforme ; approbation limitée à `reduces` ; pas d'entrée publique par défaut (§11) | M5 | prévu |
-| W6 | Jeton de service volé | API | S | Jetons hachés, à scopes ; ceux des moteurs liés à une instance et renouvelés à chaque déploiement (§13) | M1 (déduit) | prévu |
+| W6 | Jeton de service volé | API | S | Jetons hachés, à scopes ; ceux des moteurs liés à une instance et renouvelés à chaque déploiement (§13) | M1 (déduit), reporté à M2 | prévu. Rien n'est livré à M1 : aucun jeton de service n'existe encore ; les jetons liés aux instances et remis aux moteurs viennent à M2 |
 
 ### 3.4 Injection de prompt
 
@@ -111,18 +111,24 @@ Jalon = jalon où la parade est livrée, d'après la ligne du §14 qui livre le 
 
 | ID | Menace | Composant | STRIDE | Parade prévue (SPEC) | Jalon | État |
 | --- | --- | --- | --- | --- | --- | --- |
-| X1 | Usurpation d'un opérateur (force brute, vol de session) | API, dashboard | S | TOTP à codes de récupération à usage unique ; verrouillage progressif ; sessions 12 h / 30 min ; cookie `__Host-` et `Secure` ; aucun identifiant par défaut (§13) | M1 | prévu |
-| X2 | Élévation de rôle | API | E | Rôles `viewer`, `operator`, `admin` (§13) | M1 | prévu |
-| X3 | CSRF, XSS, injection | Dashboard, API | T, E | En-têtes de sécurité, CSRF, validation stricte des entrées (§13) | M1 | prévu |
-| X4 | Falsification ou effacement de l'audit | Journal | T, R | I14 : journal inaltérable | M1 | prévu |
+| X1 | Usurpation d'un opérateur (force brute, vol de session) | API, dashboard | S | TOTP à codes de récupération à usage unique ; verrouillage progressif ; sessions 12 h / 30 min ; cookie `__Host-` et `Secure` ; aucun identifiant par défaut (§13) | M1 | livré (M1). Limites : le compteur d'échecs ne décroît pas et il n'existe pas de commande de déblocage depuis l'hôte, donc un pair du VPN peut maintenir verrouillé l'administrateur unique (à traiter à M7, durcissement) ; limiteur de débit en mémoire |
+| X2 | Élévation de rôle | API | E | Rôles `viewer`, `operator`, `admin` (§13). Règle retenue : `operator` peut rouvrir les entrées et démarrer une instance `paper` seulement ; hors paper, `admin` est exigé | M1 | livré (M1) |
+| X3 | CSRF, XSS, injection | Dashboard, API | T, E | En-têtes de sécurité, CSRF, validation stricte des entrées (§13). Livré : contrôle d'origine sur toute requête qui change un état, `SameSite=Strict`, CSP stricte (une fenêtre Radix qui injectait une balise `<style>` a été remplacée par un `<dialog>` natif), validation des entrées, `params` borné | M1 | livré (M1) |
+| X4 | Falsification ou effacement de l'audit | Journal | T, R | I14 : journal inaltérable. Livré : trigger, rôle applicatif `centrade_app` sans `UPDATE`, `DELETE` ni `TRUNCATE` sur `audit_log`, chaîne d'empreintes. Limites : la chaîne n'a pas de clé et n'est vérifiée que par les tests ; la troncature des dernières lignes par le propriétaire de la base n'est pas détectée (ancrage hors base et vérification périodique : M4, avec le panneau « Garanties ») | M1 | livré (M1) |
 | X5 | Moteur hors de contrôle ouvre une position sans décision | Moteurs | E | I6 ; S6 : alerte, pause, arrêt du conteneur en cas de récidive | M3 | prévu |
 | X6 | Affichage trompeur d'un état supposé ou périmé | Dashboard | I | I1 : état observé, daté, périmé ou « inconnu » | M1 | prévu |
 | X7 | Panne de la plateforme non remarquée | Noyau | D | Battement toutes les 60 s vers une surveillance externe, alerte en 5 min (§13) | M4 | prévu |
 | X8 | Panne du Risk service ou du hook | Risk service | D | Entrée refusée (I5), sortie jamais bloquée (I4) ; S11, S12 | M3 | prévu |
 | X9 | Évasion de conteneur ou abus du socket Docker | Runner, worker | E | Socket proxy limité aux opérations de conteneurs ; gabarit durci (non-root, lecture seule, capacités retirées, `no-new-privileges`) (§13) | M2 | prévu |
 | X10 | Interception réseau | Caddy | I | TLS hors réseau Docker interne (livré) ; accès par VPN (§13, §15) : la liaison à l'interface du VPN se règle au déploiement, M0 ne lie que `127.0.0.1` | M0 | livré (M0), VPN au déploiement |
-| X12 | Conteneur du noyau compromis qui lit ou falsifie le bus et la base | Postgres, Redis | T, I, E | Réseau `data` interne, joignable par l'API, le Risk service et le worker seulement (§13) ; secrets par Docker secrets ; conteneurs non-root, en lecture seule, sans capacités. Les événements sont des indices, les relevés font foi (§7) | M0 (réseau, durcissement), M1 (événements) | livré (M0) |
+| X12 | Conteneur du noyau compromis qui lit ou falsifie le bus et la base | Postgres, Redis | T, I, E | Réseau `data` interne, joignable par l'API, le Risk service et le worker seulement (§13) ; secrets par Docker secrets ; conteneurs non-root, en lecture seule, sans capacités. Les événements sont des indices, les relevés font foi (§7) | M0 (réseau, durcissement), M1 (événements) | livré (M0) pour le réseau et le durcissement ; livré (M1) pour les événements : les relevés font foi |
 | X11 | Exposition publique du dashboard | Caddy | I | Rien n'écoute sur Internet ; exposer = décision consignée dans `accepted-risks.md` (§13) | M0 | livré (M0) |
+| X13 | Injection de pannes du FakeEngine par `params.failures` depuis l'API | API, FakeEngine | T | Refusée par défaut : réglage `engine_failure_injection`, faux en production | M1 | livré (M1) |
+| X14 | Commande de réduction du risque qui n'atteint pas le moteur (worker en retard, bus en panne) | Worker | D | Envoi prioritaire, échéance comptée depuis l'envoi, étapes du tour isolées (I4). Reste : appels moteur séquentiels, à paralléliser à M2 avant Freqtrade | M1 | livré (M1) |
+| X15 | Réouverture des entrées sur un état devenu périmé | Worker, commandes | E | Règle rejouée par le worker juste avant l'envoi (I5) | M1 | livré (M1) |
+| X16 | `make bootstrap-admin` affiche l'URI TOTP et les codes de récupération dans la sortie d'un conteneur, donc dans le pilote de journaux Docker | Compose, journaux | I | Consigne à l'opérateur dans le README (noter hors ligne, ne pas laisser dans un journal). Aucun contrôle technique | M2 | ouvert, à traiter à M2 |
+| X17 | Flux SSE sans plafond par session : épuisement des connexions | API | D | Aucune | M4 | ouvert, M4 |
+| X18 | Le worker lit des secrets dont il n'a pas besoin | Compose, worker | I | Il ne monte que les secrets qu'il emploie (clé maître retirée) | M1 | livré (M1) |
 
 ## 4. Menaces sans parade prévue
 
@@ -146,3 +152,4 @@ Le SPEC ne prévoit pas de parade explicite pour :
 | 2026-10-10 | M0 | Plugin `claude-mem@thedotmack` ajouté par l'opérateur aux plugins toujours actifs (C6) : manifeste et liste des hooks relus, scripts non relus ; skill `cloud-sync` soumis à l'accord de l'opérateur (§17.7). |
 | 2026-10-10 | M0 | Clôture : parades de M0 vérifiées et passées à `livré (M0)`. Caddy recompilé avec Go 1.26.9 et `x/net` 0.60.0 (ADR 0003), non-root et sans capacité. |
 | 2026-10-10 | M1 (préparation) | K2 : masquage des secrets dans les logs avancé de M2 à M1, journaux d'uvicorn compris. |
+| 2026-10-11 | M1 | Clôture : K2, X1 à X4 et X12 (événements) `livré (M1)`, avec leurs limites ; W6 reporté à M2 ; ajout de X13 à X18. Revue de sécurité indépendante : 0 critique, 0 élevé, 2 moyens corrigés, 6 faibles dont 3 corrigés et 3 reportés. Balayage `insecure-sweep` en repli manuel : 26 candidats, aucun retenu (le périmètre par défaut de la cible omet `packages/`). |

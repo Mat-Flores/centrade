@@ -1,8 +1,8 @@
 # Registre des invariants et des scénarios de référence
 
-Source : SPEC §1.2 (invariants), §14 (jalons, scénarios), §0.13. À M0, **rien n'est testé** : ce document est un plan. L'état d'une ligne passe de `prévu` à `testé` quand le test existe et passe. `tests/invariants/test_registre.py` vérifie que I1 à I14 et S1 à S14 figurent ici avec leur jalon et au moins un nom de test.
+Source : SPEC §1.2 (invariants), §14 (jalons, scénarios), §0.13. À la clôture de M1, I1, I8, I14, S9 et S10 sont `testé` ; le reste est un plan. L'état d'une ligne passe de `prévu` à `testé` quand le test existe et passe. `tests/invariants/test_registre.py` vérifie que I1 à I14 et S1 à S14 figurent ici avec leur jalon et au moins un nom de test.
 
-Convention : un invariant `In` a son module `tests/invariants/test_iNN_<slug>.py` et des tests `test_iNN_…`. Un invariant n'est « testé » qu'une fois tous ses tests listés écrits et verts. L'ordre des jalons suit le §14. Le SPEC ne rattache les scénarios qu'aux jalons : ceux cités sous un invariant sont un rapprochement par sujet, à revoir quand le test est écrit.
+Convention : un invariant `In` a son module `tests/invariants/test_iNN_<slug>.py` et des tests `test_iNN_…`. Un invariant n'est « testé » qu'une fois tous ses tests listés écrits et verts ; « Tests prévus » devient la liste des tests livrés quand l'invariant est `testé`. L'ordre des jalons suit le §14. Le SPEC ne rattache les scénarios qu'aux jalons : ceux cités sous un invariant sont un rapprochement par sujet, à revoir quand le test est écrit.
 
 ## Invariants
 
@@ -10,9 +10,9 @@ Convention : un invariant `In` a son module `tests/invariants/test_iNN_<slug>.py
 - Énoncé : tout état affiché est observé et daté ; périmé au-delà du seuil de fraîcheur ; inconnu affiché « inconnu » ; l'état voulu n'est jamais présenté comme réel (§1.2, §9, §13 : 5 s flux, 30 s moteur).
 - Jalon : M1
 - Module : `tests/invariants/test_i01_verite_affichage.py`
-- Tests prévus : `test_i01_etat_affiche_porte_horodatage_observation`, `test_i01_etat_perime_au_dela_du_seuil`, `test_i01_etat_inconnu_affiche_inconnu`, `test_i01_etat_voulu_jamais_presente_comme_observe`
+- Tests (livrés, verts) : `test_i01_etat_affiche_porte_horodatage_observation`, `test_i01_etat_perime_au_dela_du_seuil`, `test_i01_etat_inconnu_affiche_inconnu`, `test_i01_etat_voulu_jamais_presente_comme_observe`
 - Scénarios : S9, S10 (aussi S1, S7)
-- État : prévu
+- État : testé (M1)
 
 ### I2 — Une seule porte
 - Énoncé : toute commande vers un moteur passe par la plateforme ; interfaces natives joignables par l'adaptateur seul ou désactivées ; entrée manuelle forcée désactivée (§1.2, §13 réseau `engines`).
@@ -36,6 +36,7 @@ Convention : un invariant `In` a son module `tests/invariants/test_iNN_<slug>.py
 - Module : `tests/invariants/test_i04_sortie_jamais_bloquee.py`
 - Tests prévus : `test_i04_sortie_passe_si_risk_service_en_panne`, `test_i04_sortie_passe_sous_kill_switch`, `test_i04_sortie_passe_limite_depassee` (propriétés, `risk-failclosed-testing`)
 - Scénarios : S12, S3
+- Partiel à M1 (commandes seulement, `tests/invariants/test_i04_reduction_jamais_bloquee.py`, verts) : `test_i04_commande_de_reduction_n_expire_jamais_avant_l_envoi`, `test_i04_echeance_de_la_pause_court_depuis_l_envoi`, `test_i04_panne_du_bus_n_empeche_ni_l_envoi_ni_le_releve`, `test_i04_erreur_sur_une_instance_n_empeche_pas_les_autres`, `test_i04_echec_d_ecriture_pour_une_commande_n_empeche_pas_d_envoyer_les_autres`, `test_i04_pause_envoyee_meme_si_le_moteur_etait_muet_au_tour_precedent`. Le module prévu ci-dessus reste celui de M3.
 - État : prévu
 
 ### I5 — Refus par défaut de ce qui augmente le risque
@@ -44,6 +45,7 @@ Convention : un invariant `In` a son module `tests/invariants/test_iNN_<slug>.py
 - Module : `tests/invariants/test_i05_refus_par_defaut.py`
 - Tests prévus : `test_i05_entree_refusee_en_cas_de_timeout`, `test_i05_entree_refusee_sur_donnee_perimee`, `test_i05_reponse_malformee_du_hook_refusee`, `test_i05_hausse_de_limite_et_passage_live_refuses_en_cas_de_doute`
 - Scénarios : S2, S11
+- Partiel à M1 (commandes seulement, `tests/invariants/test_i05_refus_par_defaut.py`, verts) : `test_i05_regle_de_refus_de_ce_qui_augmente_le_risque`, `test_i05_reprise_reverifiee_juste_avant_l_envoi`, `test_i05_reprise_perimee_ne_part_jamais`, `test_i05_l_envoi_lui_meme_ecarte_une_reprise_perimee`, `test_i05_reprise_acceptee_et_verifiee_quand_rien_ne_s_y_oppose`, `test_i05_demarrage_refuse_sauf_instance_arretee`. Le module prévu ci-dessus reste celui de M3.
 - État : prévu
 
 ### I6 — Aucune entrée sans décision
@@ -66,9 +68,9 @@ Convention : un invariant `In` a son module `tests/invariants/test_iNN_<slug>.py
 - Énoncé : une commande n'est « faite » que lorsque son effet est observé ; sinon en attente, échouée ou expirée, visiblement (§1.2, F9).
 - Jalon : M1
 - Module : `tests/invariants/test_i08_commande_tracee.py`
-- Tests prévus : `test_i08_commande_non_faite_sans_effet_observe`, `test_i08_commande_sans_reponse_passe_timed_out`, `test_i08_cycle_de_vie_de_la_commande_est_ordonne`
+- Tests (livrés, verts) : `test_i08_commande_non_faite_sans_effet_observe`, `test_i08_commande_sans_reponse_passe_timed_out`, `test_i08_cycle_de_vie_de_la_commande_est_ordonne`, `test_i08_pas_de_verification_sur_un_releve_anterieur_a_l_accuse`, `test_i08_pause_et_flatten_passent_devant_une_instance_occupee`, `test_i08_empreinte_d_audit_de_l_expiration_porte_le_statut_precedent`
 - Scénarios : S10
-- État : prévu
+- État : testé (M1)
 
 ### I9 — Indépendance de la plateforme
 - Énoncé : arrêt, redémarrage ou mise à jour de la plateforme ne touche aucune instance ni position ; pendant la panne, entrées refusées, sorties et stops continuent (§1.2, §13).
@@ -98,8 +100,9 @@ Convention : un invariant `In` a son module `tests/invariants/test_iNN_<slug>.py
 - Énoncé : une clé saisie n'est jamais relue, affichée ni journalisée ; transmise seulement au moteur de l'instance live affectée (§1.2, F6, §13 journalisation).
 - Jalon : M2
 - Module : `tests/invariants/test_i12_secrets_sens_unique.py`
-- Tests prévus : `test_i12_api_ne_renvoie_jamais_la_valeur_d_un_secret`, `test_i12_logs_masquent_les_valeurs_sentinelles` (livré dès M1 avec l'authentification, SPEC §14), `test_i12_cle_transmise_par_fichier_memoire_jamais_par_env`, `test_i12_cle_limitee_a_l_instance_live_affectee`
+- Tests prévus : `test_i12_api_ne_renvoie_jamais_la_valeur_d_un_secret`, `test_i12_logs_masquent_les_valeurs_sentinelles` (livré et vert dès M1, SPEC §14), `test_i12_erreur_sql_sans_les_parametres` (livré et vert dès M1), `test_i12_cle_transmise_par_fichier_memoire_jamais_par_env`, `test_i12_cle_limitee_a_l_instance_live_affectee`
 - Scénarios : aucun rattaché au §14
+- Partiel à M1 : les deux tests `test_i12_…` ci-dessus marqués livrés sont verts ; l'invariant reste rattaché à M2 et son état global n'est pas `testé`.
 - État : prévu
 
 ### I13 — Noyau indépendant de la périphérie
@@ -114,9 +117,9 @@ Convention : un invariant `In` a son module `tests/invariants/test_iNN_<slug>.py
 - Énoncé : toute action qui change un état (humain, agent, n8n, automatisme) est écrite dans le journal d'audit inaltérable, avec son auteur (§1.2).
 - Jalon : M1
 - Module : `tests/invariants/test_i14_audit.py`
-- Tests prévus : `test_i14_toute_action_ecrit_une_ligne_d_audit_avec_auteur`, `test_i14_journal_d_audit_inalterable`, `test_i14_action_d_automatisme_attribuee_a_son_auteur`
+- Tests (livrés, verts) : `test_i14_toute_action_ecrit_une_ligne_d_audit_avec_auteur`, `test_i14_journal_d_audit_inalterable`, `test_i14_action_d_automatisme_attribuee_a_son_auteur`, `test_i14_ecritures_concurrentes_sans_fourche`, `test_i14_empreinte_deterministe_et_sans_valeur` ; côté API (`apps/api/tests/auth/test_logs_audit.py`) : `test_i14_evenements_d_auth_laissent_une_ligne_d_audit_avec_auteur_et_ip`, `test_i14_mot_de_passe_correct_sans_totp_laisse_une_trace`, `test_i14_verrouillage_et_echec_sur_compte_inconnu_sont_audites`
 - Scénarios : aucun ne porte directement sur l'audit ; critère « audit alimenté » du §14 M1
-- État : prévu
+- État : testé (M1)
 
 ## Scénarios de référence
 
@@ -132,8 +135,8 @@ Tests de bout en bout sur FakeEngine sauf mention (§14). Fichiers sous `tests/s
 | S6 | M3 | `tests/scenarios/test_s06_moteur_hors_de_controle.py` | Entrée sans décision, pause, arrêt du conteneur | prévu |
 | S7 | M2 | `tests/scenarios/test_s07_ecart_de_mode.py` | Moteur live déclaré pour une instance paper | prévu |
 | S8 | M2 | `tests/scenarios/test_s08_derive_de_configuration.py` | Configuration modifiée hors plateforme, détectée en 60 s | prévu |
-| S9 | M1 | `tests/scenarios/test_s09_evenements_degrades.py` | Événements dupliqués, désordonnés ou perdus | prévu |
-| S10 | M1 | `tests/scenarios/test_s10_commande_sans_reponse.py` | Commande sans réponse : `timed_out` | prévu |
+| S9 | M1 | `tests/scenarios/test_s09_evenements_degrades.py` | Événements dupliqués, désordonnés ou perdus | testé (M1) : `test_s09_projections_exactes_apres_resynchronisation`, `test_s09_modes_enchaines_sur_une_meme_instance` |
+| S10 | M1 | `tests/scenarios/test_s10_commande_sans_reponse.py` | Commande sans réponse : `timed_out` | testé (M1) : `test_s10_commande_sans_reponse_timed_out_visible_jamais_verified` |
 | S11 | M3 | `tests/scenarios/test_s11_hook_en_erreur.py` | Hook en erreur (Freqtrade dry-run) : aucune entrée | prévu |
 | S12 | M3 | `tests/scenarios/test_s12_sortie_risk_service_en_panne.py` | Sortie pendant une panne du Risk service (dry-run) | prévu |
 | S13 | M4 | `tests/scenarios/test_s13_peripherie_arretee.py` | n8n, Grafana et agents arrêtés : S2 et S3 passent | prévu |
