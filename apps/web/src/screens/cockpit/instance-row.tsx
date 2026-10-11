@@ -1,7 +1,6 @@
 import { CircleAlertIcon } from "lucide-react";
 
 import { ObservedValue } from "@/components/observed-value";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
@@ -28,6 +27,8 @@ export interface InstanceRowProps {
   degraded: boolean;
   /** Rôles operator et admin : les autres ne voient aucun bouton d'action. */
   canAct: boolean;
+  /** Administrateur : seul rôle à rouvrir les entrées et démarrer une instance qui n'est pas paper. */
+  isAdmin: boolean;
   seen: ReadonlySet<string>;
   onSeen: (commandId: string) => void;
   onAction: (instance: Instance, action: ActionType) => void;
@@ -35,7 +36,7 @@ export interface InstanceRowProps {
 
 const typeLabel = (type: string) => fr.cockpit.command.types[type] ?? type;
 
-export function InstanceRow({ instance, commands, nowIso, degraded, canAct, seen, onSeen, onAction }: InstanceRowProps) {
+export function InstanceRow({ instance, commands, nowIso, degraded, canAct, isAdmin, seen, onSeen, onAction }: InstanceRowProps) {
   const nowMs = Date.parse(nowIso);
   const view = stateView(instance, nowMs);
   const mode = instance.observed_mode;
@@ -82,6 +83,7 @@ export function InstanceRow({ instance, commands, nowIso, degraded, canAct, seen
             <dt className="text-sm text-muted-foreground">{fr.cockpit.observedState}</dt>
             <dd className="text-base font-medium">
               <ObservedValue
+                mono={false}
                 value={view.kind === "unknown" ? "unknown" : fr.cockpit.states[view.state]}
                 observedAt={instance.state.observed_at}
                 serverTime={nowIso}
@@ -92,7 +94,7 @@ export function InstanceRow({ instance, commands, nowIso, degraded, canAct, seen
           {wantedDiffers(instance, nowMs) && (
             <div className="flex flex-col gap-1">
               <dt className="text-sm text-muted-foreground">{fr.cockpit.wantedState}</dt>
-              <dd className="font-mono text-base">{fr.cockpit.wantedLabels[instance.desired_state]}</dd>
+              <dd className="text-base">{fr.cockpit.wantedLabels[instance.desired_state]}</dd>
             </div>
           )}
         </dl>
@@ -103,7 +105,7 @@ export function InstanceRow({ instance, commands, nowIso, degraded, canAct, seen
       ))}
       {latest && !problems.some((p) => p.id === latest.id) && <CommandLine command={latest} nowMs={nowMs} />}
 
-      {canAct && <Actions instance={instance} degraded={degraded} nowMs={nowMs} onAction={onAction} />}
+      {canAct && <Actions instance={instance} degraded={degraded} role={isAdmin ? "admin" : "operator"} nowMs={nowMs} onAction={onAction} />}
     </li>
   );
 }
@@ -115,7 +117,6 @@ function CommandLine({ command, nowMs }: { command: Command; nowMs: number }) {
   if (v.tone === "problem") return null;
   return (
     <p
-      role="status"
       data-command-status={command.status}
       className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm"
     >
@@ -127,45 +128,48 @@ function CommandLine({ command, nowMs }: { command: Command; nowMs: number }) {
   );
 }
 
+/** Sans cadre ni fond : la ligne est déjà dans un panneau. L'icône et le titre en graisse la distinguent. */
 function ProblemNotice({ command, nowMs, onSeen }: { command: Command; nowMs: number; onSeen: (id: string) => void }) {
   const v = describeCommand(command, nowMs);
   if (v.tone !== "problem") return null;
   return (
-    <Alert role="alert" data-command-status={command.status}>
-      <CircleAlertIcon />
-      <AlertTitle>{fr.cockpit.command.problemTitle}</AlertTitle>
-      <AlertDescription className="flex flex-col gap-2">
-        <span>
+    <div role="alert" data-command-status={command.status} className="flex items-start gap-2 text-sm">
+      <CircleAlertIcon className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <div className="flex flex-col gap-2">
+        <p className="font-semibold">{fr.cockpit.command.problemTitle}</p>
+        <p>
           <span className="font-medium">{typeLabel(command.type)}</span> : {fr.cockpit.command.status[v.status]}{" "}
           <span className="text-muted-foreground">({formatAge(v.ageMs)})</span>
-        </span>
-        <span>
+        </p>
+        <p>
           {fr.cockpit.command.reason} : {v.reason ?? fr.cockpit.command.noReason}
-        </span>
-        <span>
+        </p>
+        <div>
           <Button type="button" variant="outline" onClick={() => onSeen(command.id)}>
             {fr.cockpit.command.seen}
           </Button>
-        </span>
-      </AlertDescription>
-    </Alert>
+        </div>
+      </div>
+    </div>
   );
 }
 
 function Actions({
   instance,
   degraded,
+  role,
   nowMs,
   onAction,
 }: {
   instance: Instance;
   degraded: boolean;
+  role: "operator" | "admin";
   nowMs: number;
   onAction: InstanceRowProps["onAction"];
 }) {
-  const policies = ACTIONS.map((action) => [action, actionPolicy(action, { instance, degraded, nowMs })] as const);
-  const visibleReasons = policies.filter(([, p]) => !p.enabled && p.visible);
-  const reasonsId = `reasons-${instance.id}`;
+  const policies = ACTIONS.map((action) => [action, actionPolicy(action, { instance, degraded, nowMs, role })] as const);
+  const disabled = policies.filter(([, p]) => !p.enabled);
+  const reasonId = (action: ActionType) => `reason-${instance.id}-${action}`;
   return (
     <div className="flex flex-col gap-2">
       <div role="group" aria-label={fr.cockpit.actions.label(instance.name)} className="flex flex-wrap gap-2">
@@ -174,27 +178,22 @@ function Actions({
             key={action}
             type="button"
             variant={action === "flatten" ? "destructive" : "outline"}
-            // `aria-disabled` : le bouton reste focalisable, sa raison reste lisible au clavier et au lecteur d'écran.
+            // `aria-disabled` : le bouton reste focalisable ; sa raison, visible dessous, lui est reliée.
             aria-disabled={policy.enabled ? undefined : true}
-            aria-describedby={policy.enabled ? undefined : `${reasonsId}-${action}`}
-            className={cn(!policy.enabled && "cursor-not-allowed opacity-60")}
+            aria-describedby={policy.enabled ? undefined : reasonId(action)}
+            className={cn(!policy.enabled && "cursor-not-allowed opacity-50")}
             onClick={() => policy.enabled && onAction(instance, action)}
           >
             {fr.cockpit.actions[action]}
           </Button>
         ))}
       </div>
-      {policies.map(([action, policy]) =>
-        policy.enabled ? null : (
-          <span key={action} id={`${reasonsId}-${action}`} className="sr-only">
-            {fr.cockpit.reasons.unavailable(fr.cockpit.actions[action], policy.reason ?? "")}
-          </span>
-        ),
-      )}
-      {visibleReasons.length > 0 && (
-        <ul className="flex flex-col gap-0.5 text-sm text-muted-foreground" aria-hidden="true">
-          {visibleReasons.map(([action, policy]) => (
-            <li key={action}>{fr.cockpit.reasons.unavailable(fr.cockpit.actions[action], policy.reason ?? "")}</li>
+      {disabled.length > 0 && (
+        <ul className="flex flex-col gap-0.5 text-sm text-muted-foreground">
+          {disabled.map(([action, policy]) => (
+            <li key={action} id={reasonId(action)}>
+              {fr.cockpit.reasons.unavailable(fr.cockpit.actions[action], policy.reason ?? "")}
+            </li>
           ))}
         </ul>
       )}

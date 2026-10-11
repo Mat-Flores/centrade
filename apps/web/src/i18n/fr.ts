@@ -95,7 +95,7 @@ export const fr = {
     },
     empty: {
       title: "Aucune instance",
-      body: "Une instance simulée tourne sur le FakeEngine, sans ordre réel. Créer la première pour voir son état observé en temps réel.",
+      body: "Une instance simulée ne passe aucun ordre réel. Créer la première pour voir son état observé en temps réel.",
       bodyViewer: "Aucune instance n'existe encore. Un opérateur peut en créer une.",
     },
     create: {
@@ -125,6 +125,7 @@ export const fr = {
       alreadyOpen: "Les entrées sont déjà ouvertes.",
       alreadyStarted: "L'instance est déjà démarrée.",
       modeMismatch: "Le mode observé diffère du mode voulu.",
+      adminOnly: "Réservé aux administrateurs : le mode voulu de l'instance n'est pas paper.",
       notExitsOnly: (state: string) => `État observé « ${state} » : reprise impossible.`,
       unavailable: (action: string, why: string) => `${action} indisponible : ${why}`,
     },
@@ -198,6 +199,13 @@ export const fr = {
       healthUnknown: "La santé des services est introuvable.",
       rule: "Seules les actions qui réduisent le risque restent actives.",
     },
+  },
+  announce: {
+    state: (name: string, state: string) => `${name} : état observé ${state}.`,
+    command: (type: string, name: string, status: string) => `${type} sur ${name} : ${status}.`,
+    alert: (severity: string, message: string) => `Nouvelle alerte ${severity} : ${message}`,
+    degradedOn: "Mode dégradé : seules les actions qui réduisent le risque restent actives.",
+    degradedOff: "Fin du mode dégradé : les données sont de nouveau à jour.",
   },
   observed: {
     unknown: "inconnu",

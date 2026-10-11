@@ -102,9 +102,25 @@ export const instancesQuery = queryOptions({
   staleTime: Infinity, // tenu à jour par le flux ; relu en entier à la reconnexion
 });
 
+/**
+ * Les 100 dernières commandes, plus les échecs et expirations quel que soit leur âge : une commande en
+ * échec non vue ne disparaît pas au rechargement parce que 100 autres sont venues après (SPEC §9).
+ */
+async function loadCommands(signal: AbortSignal): Promise<Page<Command>> {
+  const [recent, problems] = await Promise.all([
+    timed(apiFetch("/commands?limit=100", page(CommandSchema), { signal })),
+    timed(apiFetch("/commands?status=timed_out&status=failed&limit=100", page(CommandSchema), { signal })),
+  ]);
+  const byId = new Map([...problems.items, ...recent.items].map((c) => [c.id, c]));
+  const items = [...byId.values()].sort(
+    (a, b) => Date.parse(b.requested_at) - Date.parse(a.requested_at) || (a.id < b.id ? 1 : -1),
+  );
+  return { ...recent, items };
+}
+
 export const commandsQuery = queryOptions({
   queryKey: commandsKey,
-  queryFn: ({ signal }) => timed(apiFetch("/commands?limit=100", page(CommandSchema), { signal })),
+  queryFn: ({ signal }) => loadCommands(signal),
   staleTime: Infinity,
 });
 
@@ -141,6 +157,6 @@ export function sendAction(instanceId: string, action: ActionType, idempotencyKe
 }
 
 export function createInstance(name: string) {
-  // Seul type de moteur de M1 : le FakeEngine. Toujours paper (le live passe par la promotion, F1).
-  return apiFetch("/instances", InstanceSchema, { method: "POST", body: { name, engine: "fake", mode: "paper" } });
+  // Le moteur n'est pas choisi ici (le serveur prend l'unique moteur enregistré). Toujours paper (le live passe par la promotion, F1).
+  return apiFetch("/instances", InstanceSchema, { method: "POST", body: { name, mode: "paper" } });
 }

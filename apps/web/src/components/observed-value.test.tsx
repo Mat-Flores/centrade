@@ -42,4 +42,13 @@ describe("ObservedValue", () => {
   it("n'affiche pas la dernière valeur connue quand l'état est inconnu", () => {
     expect(render({ value: "unknown" })).not.toContain("1 250,00 USDT");
   });
+
+  it("la chasse fixe est réservée aux identifiants, prix et horodatages : jamais par défaut", () => {
+    expect(render({ value: "en marche" })).not.toContain("font-mono");
+    expect(render({ value: "1 250,00", mono: true })).toContain("font-mono");
+  });
+
+  it("« inconnu » se distingue autrement que par la couleur : italique", () => {
+    expect(render({ value: "unknown" })).toContain("italic");
+  });
 });

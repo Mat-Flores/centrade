@@ -9,6 +9,8 @@ const row = (page: Page, name: string) => page.locator(`li[data-instance="${name
 const iso = (ms: number) => new Date(ms).toISOString();
 
 test("grille : fraîche, périmée, inconnue, mode incohérent ; voulu à côté de l'observé seulement s'il diffère", async ({ page }) => {
+  // Page entière à l'écran : Radix ferme l'infobulle au défilement, et le focus clavier en provoque un.
+  await page.setViewportSize({ width: 1280, height: 1600 });
   await mockCockpit(page);
   await page.goto("/");
 
@@ -42,6 +44,18 @@ test("grille : fraîche, périmée, inconnue, mode incohérent ; voulu à côté
     if (await page.evaluate(() => !!document.activeElement?.closest('li[data-instance="echo"]') && (document.activeElement as HTMLElement).dataset.state === "fresh")) break;
   }
   await expect(page.getByRole("tooltip")).toContainText("Observé il y a");
+});
+
+test("kill switch : lu comme inactif (neutre, 50 %), raison écrite en permanence", async ({ page }) => {
+  await mockCockpit(page);
+  await page.goto("/");
+  const kill = page.getByRole("banner").getByRole("button", { name: "Kill switch global" });
+  await expect(page.getByRole("banner").getByText("Disponible au jalon M3")).toBeVisible(); // sans survol ni focus
+  await expect(kill).toHaveAccessibleDescription("Disponible au jalon M3");
+  expect(await kill.evaluate((el) => getComputedStyle(el).opacity)).toBe("0.5");
+  // Même contour neutre qu'un bouton inactif ordinaire, plus de rouge.
+  const neutral = await row(page, "echo").getByRole("button", { name: "Démarrer" }).evaluate((el) => getComputedStyle(el).borderColor);
+  expect(await kill.evaluate((el) => getComputedStyle(el).borderColor)).toBe(neutral);
 });
 
 test("barre persistante : mode d'après l'observé, alertes, connexions ; kill switch grisé", async ({ page }) => {
@@ -174,7 +188,7 @@ test("création d'une instance simulée : un nom suffit", async ({ page }) => {
   await page.getByRole("button", { name: "Créer l'instance" }).click();
   await expect(row(page, "gamma")).toBeVisible();
   const post = api.requests.find((r) => r.method === "POST" && r.path === "/instances");
-  expect(JSON.parse(post!.body!)).toEqual({ name: "gamma", engine: "fake", mode: "paper" });
+  expect(JSON.parse(post!.body!)).toEqual({ name: "gamma", mode: "paper" });
 });
 
 test("états de chargement, vide (lecteur) et erreur avec reprise", async ({ page }) => {
@@ -296,3 +310,134 @@ for (const scheme of ["light", "dark"] as const) {
     });
   }
 }
+
+/* --------------------------------------------------- corrections de la revue d'interface */
+
+test("chaque bouton désactivé a sa raison écrite à l'écran, reliée au bouton", async ({ page }) => {
+  await mockCockpit(page);
+  await page.goto("/");
+  const echo = row(page, "echo"); // en marche, paper : « Rouvrir » et « Démarrer » sont des évidences
+  await expect(echo.getByText("Rouvrir les entrées indisponible : Les entrées sont déjà ouvertes.")).toBeVisible();
+  await expect(echo.getByText("Démarrer indisponible : L'instance est déjà démarrée.")).toBeVisible();
+  await expect(echo.getByRole("button", { name: "Démarrer" })).toHaveAccessibleDescription("Démarrer indisponible : L'instance est déjà démarrée.");
+  for (const li of await page.locator("li[data-instance]").all()) {
+    for (const b of await li.locator('button[aria-disabled="true"]').all()) {
+      const id = await b.getAttribute("aria-describedby");
+      const reason = li.locator(`[id="${id}"]`);
+      await expect(reason).toBeVisible();
+      await expect(reason).not.toHaveText("");
+    }
+  }
+});
+
+test("rôles : l'opérateur ne rouvre ni ne démarre une instance non paper ; l'administrateur le peut", async ({ page }) => {
+  const now = Date.now();
+  const data = {
+    instances: [
+      instance(now, { id: "i-live", name: "reelle", desired_mode: "live", observed_mode: observed("live", now, 1), desired_state: "exits_only" }),
+      instance(now, { id: "i-off", name: "eteinte", desired_mode: "live", observed_mode: observed("live", now, 1), desired_state: "stopped", state: observed("stopped", now, 1) }),
+    ],
+    alerts: [],
+  };
+  await mockCockpit(page, { role: "operator", data });
+  await page.goto("/");
+  for (const [name, button] of [["reelle", "Rouvrir les entrées"], ["eteinte", "Démarrer"]] as const) {
+    const b = row(page, name).getByRole("button", { name: button });
+    await expect(b).toHaveAttribute("aria-disabled", "true");
+    await expect(row(page, name).getByText(/Réservé aux administrateurs/).first()).toBeVisible();
+    await expect(b).toHaveAccessibleDescription(/Réservé aux administrateurs/);
+  }
+  await expect(row(page, "reelle").getByRole("button", { name: "Bloquer les entrées" })).not.toHaveAttribute("aria-disabled", "true");
+
+  const admin = await page.context().newPage();
+  await mockCockpit(admin, { role: "admin", data });
+  await admin.goto("/");
+  await expect(row(admin, "reelle").getByRole("button", { name: "Rouvrir les entrées" })).not.toHaveAttribute("aria-disabled", "true");
+  await expect(row(admin, "eteinte").getByRole("button", { name: "Démarrer" })).not.toHaveAttribute("aria-disabled", "true");
+});
+
+test("refus 409 de démarrer : la raison est affichée comme pour rouvrir les entrées", async ({ page }) => {
+  const now = Date.now();
+  const api = await mockCockpit(page, {
+    data: { instances: [instance(now, { id: "i-off", name: "eteinte", desired_state: "stopped", state: observed("stopped", now, 1) })], alerts: [] },
+  });
+  api.actionResponse = () => ({
+    status: 409,
+    contentType: "application/problem+json",
+    body: { type: "about:blank", title: "Conflict", status: 409, detail: "L'instance est déjà en marche : démarrage refusé." },
+  });
+  await page.goto("/");
+  await row(page, "eteinte").getByRole("button", { name: "Démarrer" }).click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog.getByRole("button", { name: "Démarrer" }).click();
+  await expect(dialog.getByRole("alert")).toContainText("L'instance est déjà en marche : démarrage refusé.");
+});
+
+test("annonces : une région aria-live toujours montée dit les changements, pas les battements", async ({ page }) => {
+  const noise: string[] = [];
+  page.on("console", (m) => ["error", "warning"].includes(m.type()) && noise.push(m.text()));
+  page.on("pageerror", (e) => noise.push(e.message));
+  page.on("request", (r) => {
+    const u = new URL(r.url());
+    if (u.protocol.startsWith("http") && u.hostname !== "127.0.0.1") noise.push(`requête tierce : ${r.url()}`);
+  });
+  const api = await mockCockpit(page);
+  await page.goto("/");
+  const live = page.locator("[data-live-region]");
+  await expect(live).toHaveAttribute("aria-live", "polite");
+  await expect(row(page, "alpha")).toBeVisible();
+  await page.waitForTimeout(2500); // des battements passent : rien n'est annoncé
+  await expect(live).toHaveText("");
+  // Ni le bandeau dégradé ni la ligne de commande ne comptent sur un role=status monté avec son contenu.
+  const alpha = api.instances[0]!;
+
+  await emit(page, "instance", sseEvent(Date.now(), "instance", { ...alpha, state: observed("running", Date.now(), 0), server_time: iso(Date.now()) }));
+  await expect(live).toHaveText("alpha : état observé en marche.");
+
+  await emit(page, "command", sseEvent(Date.now(), "command", command(Date.now(), { id: "c-a", instance_id: alpha.id as string, status: "requested" })));
+  await expect(live).toHaveText("alpha : état observé en marche."); // « demandée » n'est pas terminale
+  await expect(row(page, "alpha").locator("[data-command-status]")).not.toHaveAttribute("role", /.+/);
+  await emit(page, "command", sseEvent(Date.now(), "command", command(Date.now(), { id: "c-a", instance_id: alpha.id as string, status: "verified", verified_at: iso(Date.now()) })));
+  await expect(live).toHaveText("Réouverture des entrées sur alpha : faite, effet observé dans le moteur.");
+
+  await emit(page, "alert", sseEvent(Date.now(), "alert", { id: "a-new", rule: "x", severity: "critical", target_kind: "global", status: "open", message: "Le bus est en retard.", created_at: iso(Date.now()) }));
+  await expect(live).toHaveText("Nouvelle alerte critique : Le bus est en retard.");
+
+  await stopBeats(page);
+  await expect(live).toContainText("Mode dégradé", { timeout: 10_000 });
+  await expect(page.getByRole("banner").getByRole("status")).toHaveCount(0);
+  await emit(page, "heartbeat", { server_time: iso(Date.now()) });
+  await expect(live).toContainText("Fin du mode dégradé");
+  expect(noise).toEqual([]); // console sans erreur ni violation de CSP, aucune requête tierce
+});
+
+test("échecs non vus : chargés par leur statut même au-delà des 100 dernières commandes", async ({ page }) => {
+  const now = Date.now();
+  const w = world(now);
+  const recent = Array.from({ length: 105 }, (_, n) =>
+    command(now, { id: `c-ok-${String(n).padStart(3, "0")}`, instance_id: w.instances[4]!.id as string, status: "verified", requested_at: iso(now - (n + 1) * 60_000) }),
+  );
+  const old = command(now, { id: "c-old", instance_id: w.instances[0]!.id as string, type: "stop", status: "timed_out", requested_at: iso(now - 86_400_000), timed_out_at: iso(now - 86_000_000), result: { reason: "le moteur n'a pas confirmé l'arrêt" } });
+  const api = await mockCockpit(page, { data: { instances: w.instances, commands: [...recent, old] } });
+  await page.goto("/");
+  const notice = row(page, "alpha").getByRole("alert");
+  await expect(notice).toContainText("délai dépassé : effet non observé");
+  await expect(notice).toContainText("le moteur n'a pas confirmé l'arrêt");
+  const searches = api.requests.filter((r) => r.path === "/commands").map((r) => r.search);
+  expect(searches).toContain("?status=timed_out&status=failed&limit=100");
+});
+
+test.describe("tablette tactile", () => {
+  test.use({ hasTouch: true, viewport: { width: 820, height: 1180 } });
+  test("l'âge d'une valeur observée s'obtient au tap, et se retire au tap suivant", async ({ page }) => {
+    await mockCockpit(page);
+    await page.goto("/");
+    const value = row(page, "echo").locator('[data-state="fresh"]').first();
+    await expect(page.locator("[data-age-pinned]")).toHaveCount(0);
+    await value.tap();
+    await expect(row(page, "echo").locator("[data-age-pinned]")).toContainText("Observé il y a");
+    await value.tap();
+    await expect(page.locator("[data-age-pinned]")).toHaveCount(0);
+    await expectNoViolation(page);
+  });
+});

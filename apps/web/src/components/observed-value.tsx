@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { cloneElement, useState, type MouseEvent, type ReactElement, type ReactNode } from "react";
 
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { fr } from "@/i18n/fr";
@@ -15,17 +15,17 @@ export interface ObservedValueProps {
   /** Seuil de fraîcheur en millisecondes (5 000 pour un flux, 30 000 pour un moteur). */
   staleAfterMs: number;
   className?: string;
-  /** Chasse fixe pour un nombre ou un identifiant ; désactivée quand `value` est un badge. */
+  /** Chasse fixe, pour un nombre, un prix ou un identifiant seulement (DESIGN.md) ; jamais pour un libellé d'état. */
   mono?: boolean;
 }
 
 /**
  * Seul moyen d'afficher une valeur issue d'un moteur ou d'une venue (SPEC §9, I1) : la valeur avec
- * son âge au survol et au focus ; estompée et marquée « périmé depuis … » au-delà du seuil ;
+ * son âge au survol, au focus et au toucher (un tap l'affiche sous la valeur, un second le retire) ; estompée et marquée « périmé depuis … » au-delà du seuil ;
  * « inconnu » si elle est absente ou sans horodatage. La dernière valeur connue n'est jamais
  * présentée comme actuelle.
  */
-export function ObservedValue({ value, observedAt, serverTime, staleAfterMs, className, mono = true }: ObservedValueProps) {
+export function ObservedValue({ value, observedAt, serverTime, staleAfterMs, className, mono = false }: ObservedValueProps) {
   const missing = value == null || value === "" || value === "unknown";
   const f = missing ? ({ state: "unknown" } as const) : freshness({ observedAt, serverTime, staleAfterMs });
 
@@ -53,13 +53,33 @@ export function ObservedValue({ value, observedAt, serverTime, staleAfterMs, cla
   );
 }
 
-function Hint({ text, children }: { text: string; children: ReactNode }) {
+/**
+ * Âge de la valeur : infobulle au survol et au focus, et bascule au clic ou au tap, car une tablette n'a
+ * ni survol ni focus. Épinglé, l'âge s'écrit sous la valeur (lisible, sans dépendre d'une infobulle).
+ */
+function Hint({ text, children }: { text: string; children: ReactElement<{ onClick?: (event: MouseEvent<HTMLElement>) => void }> }) {
+  const [pinned, setPinned] = useState(false);
   return (
     <TooltipProvider delayDuration={150}>
-      <Tooltip>
-        <TooltipTrigger asChild>{children}</TooltipTrigger>
-        <TooltipContent>{text}</TooltipContent>
-      </Tooltip>
+      <span className="inline-flex flex-col items-start">
+        <Tooltip>
+          <TooltipTrigger asChild>
+            {cloneElement(children, {
+              onClick: (event) => {
+                // Le tap ne doit pas refermer l'infobulle de Radix : l'âge épinglé prend le relais.
+                event.preventDefault();
+                setPinned((p) => !p);
+              },
+            })}
+          </TooltipTrigger>
+          {!pinned && <TooltipContent>{text}</TooltipContent>}
+        </Tooltip>
+        {pinned && (
+          <span data-age-pinned className="text-xs text-muted-foreground">
+            {text}
+          </span>
+        )}
+      </span>
     </TooltipProvider>
   );
 }

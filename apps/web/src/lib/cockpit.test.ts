@@ -124,7 +124,7 @@ describe("état observé", () => {
 
 describe("mode dégradé : quelles actions restent actives", () => {
   const fresh = instance({ age: 2, stateValue: "exits_only", desired_state: "exits_only" });
-  const ctx = (degraded: boolean, i = fresh) => ({ instance: i, degraded, nowMs: NOW });
+  const ctx = (degraded: boolean, i = fresh, role: "operator" | "admin" = "operator") => ({ instance: i, degraded, nowMs: NOW, role });
 
   it("bloquer, tout fermer et arrêter restent actifs en mode dégradé", () => {
     for (const action of ["pause_entries", "flatten", "stop"] as const) {
@@ -149,6 +149,44 @@ describe("mode dégradé : quelles actions restent actives", () => {
     expect(actionPolicy("resume_entries", ctx(false, instance({ age: 200, stateValue: "exits_only" }))).reason).toMatch(/périmé/);
     expect(actionPolicy("resume_entries", ctx(false, instance({ stateValue: "running" }))).enabled).toBe(false);
     expect(actionPolicy("resume_entries", ctx(false, instance({ stateValue: "exits_only", mode_mismatch: true }))).reason).toMatch(/mode/);
+  });
+
+  it("toute action désactivée a une raison à montrer", () => {
+    const cases = [
+      ctx(true),
+      ctx(false, instance({ age: null })),
+      ctx(false, instance({ age: 200, stateValue: "exits_only" })),
+      ctx(false, instance({ stateValue: "running" })),
+      ctx(false, instance({ stateValue: "exits_only", mode_mismatch: true })),
+      ctx(false, instance({ stateValue: "exits_only", desired_mode: "live" })),
+    ];
+    for (const c of cases) {
+      for (const action of ["resume_entries", "start"] as const) {
+        const p = actionPolicy(action, c);
+        if (!p.enabled) expect(p.reason, `${action}`).toBeTruthy();
+      }
+    }
+  });
+
+  it("l'opérateur ne rouvre ni ne démarre une instance dont le mode voulu n'est pas paper : administrateur requis", () => {
+    const live = instance({ stateValue: "exits_only", desired_mode: "live" });
+    const stopped = instance({ stateValue: "stopped", desired_mode: "live" });
+    const resume = actionPolicy("resume_entries", ctx(false, live, "operator"));
+    expect(resume.enabled).toBe(false);
+    expect(resume.reason).toMatch(/administrateur/);
+    const start = actionPolicy("start", ctx(false, stopped, "operator"));
+    expect(start.enabled).toBe(false);
+    expect(start.reason).toMatch(/administrateur/);
+    expect(actionPolicy("resume_entries", ctx(false, live, "admin")).enabled).toBe(true);
+    expect(actionPolicy("start", ctx(false, stopped, "admin")).enabled).toBe(true);
+    expect(actionPolicy("start", ctx(false, instance({ stateValue: "stopped" }), "operator")).enabled).toBe(true);
+  });
+
+  it("l'opérateur garde les actions qui réduisent le risque sur une instance live", () => {
+    const live = instance({ desired_mode: "live" });
+    for (const action of ["pause_entries", "flatten", "stop"] as const) {
+      expect(actionPolicy(action, ctx(false, live, "operator")).enabled).toBe(true);
+    }
   });
 
   it("les actions qui réduisent le risque ne sont jamais bloquées par un état douteux", () => {

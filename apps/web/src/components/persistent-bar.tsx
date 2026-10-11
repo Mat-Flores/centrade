@@ -3,7 +3,6 @@ import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { fr } from "@/i18n/fr";
 
 export type Mode = "paper" | "live" | "unknown";
@@ -75,30 +74,28 @@ export function PersistentBar({ mode, connections, alertCount, degradedBanner, a
   );
 }
 
-/** Présent mais inactif jusqu'à M3 : `aria-disabled` garde le bouton focalisable, donc sa raison reste lisible. */
+/**
+ * Présent mais inactif jusqu'à M3. Style « inactif » neutre (DESIGN.md : 50 % d'opacité, pas de rouge) et
+ * raison écrite à côté, en permanence ; `aria-disabled` garde le bouton focalisable et la raison lui est reliée.
+ */
 function KillSwitch() {
   const reasonId = "kill-switch-reason";
   return (
-    <TooltipProvider delayDuration={150}>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Button
-            type="button"
-            variant="destructive"
-            aria-disabled="true"
-            aria-describedby={reasonId}
-            className="cursor-not-allowed opacity-60 hover:bg-destructive/10"
-            onClick={(event) => event.preventDefault()}
-          >
-            <PowerIcon data-icon="inline-start" />
-            {fr.bar.killSwitch}
-          </Button>
-        </TooltipTrigger>
-        <TooltipContent>{fr.bar.killSwitchReason}</TooltipContent>
-      </Tooltip>
-      <span id={reasonId} className="sr-only">
+    <div className="flex flex-col items-start gap-0.5">
+      <Button
+        type="button"
+        variant="outline"
+        aria-disabled="true"
+        aria-describedby={reasonId}
+        className="cursor-not-allowed text-muted-foreground opacity-50 hover:bg-background"
+        onClick={(event) => event.preventDefault()}
+      >
+        <PowerIcon data-icon="inline-start" />
+        {fr.bar.killSwitch}
+      </Button>
+      <span id={reasonId} className="text-xs text-muted-foreground">
         {fr.bar.killSwitchReason}
       </span>
-    </TooltipProvider>
+    </div>
   );
 }

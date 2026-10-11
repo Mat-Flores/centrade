@@ -82,7 +82,7 @@ export interface Api {
   instancesDelayMs: number;
   /** Réponse aux POST d'action (par défaut 202 `requested`). */
   actionResponse: (path: string) => { status: number; body: Json; contentType?: string };
-  requests: { path: string; method: string; headers: Record<string, string>; body: string | null }[];
+  requests: { path: string; search: string; method: string; headers: Record<string, string>; body: string | null }[];
 }
 
 const page_ = (items: Json[], now: number) => ({ items, next_cursor: null, server_time: iso(now) });
@@ -158,7 +158,7 @@ export async function mockCockpit(
       const request = route.request();
       const url = new URL(request.url());
       const path = url.pathname.replace("/api/v1", "");
-      api.requests.push({ path, method: request.method(), headers: request.headers(), body: request.postData() });
+      api.requests.push({ path, search: url.search, method: request.method(), headers: request.headers(), body: request.postData() });
       if (request.method() === "POST") {
         if (path === "/instances") {
           const name = (JSON.parse(request.postData() ?? "{}") as { name: string }).name;
@@ -173,7 +173,16 @@ export async function mockCockpit(
         if (api.instancesStatus !== 200) return fulfill(route, api.instancesStatus, { title: "Error", status: api.instancesStatus }, "application/problem+json");
         return fulfill(route, 200, page_(api.instances, now()));
       }
-      if (path === "/commands") return fulfill(route, 200, page_(api.commands, now()));
+      if (path === "/commands") {
+        // Comme l'API : filtre `status` répétable, plus récentes d'abord, au plus `limit`.
+        const statuses = url.searchParams.getAll("status");
+        const limit = Number(url.searchParams.get("limit") ?? 100);
+        const items = api.commands
+          .filter((c) => statuses.length === 0 || statuses.includes(c.status as string))
+          .sort((a, b) => Date.parse(b.requested_at as string) - Date.parse(a.requested_at as string))
+          .slice(0, limit);
+        return fulfill(route, 200, page_(items, now()));
+      }
       if (path === "/alerts") return fulfill(route, 200, page_(api.alerts, now()));
       return fulfill(route, 404, { title: "Not Found", status: 404 }, "application/problem+json");
     },

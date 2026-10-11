@@ -31,8 +31,7 @@ test("mot de passe, puis code, puis coquille", async ({ page }) => {
   const kill = page.getByRole("button", { name: "Kill switch global" });
   await expect(kill).toHaveAttribute("aria-disabled", "true");
   await expect(kill).toHaveAccessibleDescription("Disponible au jalon M3");
-  await kill.focus();
-  await expect(page.getByRole("tooltip")).toHaveText("Disponible au jalon M3");
+  await expect(page.getByRole("banner").getByText("Disponible au jalon M3")).toBeVisible(); // visible sans survol ni focus
 
   const nav = page.getByRole("navigation", { name: "Écrans" });
   await expect(nav.getByRole("listitem")).toHaveCount(10);

@@ -21,6 +21,7 @@ export interface CockpitScreenProps {
   nowIso: string;
   degraded: boolean;
   canAct: boolean;
+  isAdmin: boolean;
   instances: { state: Load; items: Instance[]; retry: () => void };
   commands: Command[];
   alerts: { state: Load; items: AlertItem[] | undefined };
@@ -29,7 +30,7 @@ export interface CockpitScreenProps {
 
 const SUMMARY_ORDER = ["running", "exits_only", "starting", "stopped", "halted", "error", "stale", "unknown"] as const;
 
-export function CockpitScreen({ nowIso, degraded, canAct, instances, commands, alerts, health }: CockpitScreenProps) {
+export function CockpitScreen({ nowIso, degraded, canAct, isAdmin, instances, commands, alerts, health }: CockpitScreenProps) {
   const { seen, markSeen } = useSeenCommands();
   const [pending, setPending] = useState<PendingAction | null>(null);
   const nowMs = Date.parse(nowIso);
@@ -111,6 +112,7 @@ export function CockpitScreen({ nowIso, degraded, canAct, instances, commands, a
                   nowIso={nowIso}
                   degraded={degraded}
                   canAct={canAct}
+                  isAdmin={isAdmin}
                   seen={seen}
                   onSeen={markSeen}
                   onAction={open}

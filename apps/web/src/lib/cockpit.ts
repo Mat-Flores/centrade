@@ -112,25 +112,28 @@ export interface ActionPolicy {
   enabled: boolean;
   /** Raison lisible quand l'action est désactivée. */
   reason: string | null;
-  /** Raison à écrire sous les boutons (doute, panne) ; les évidences (« déjà démarrée ») restent en description. */
-  visible?: boolean;
 }
 
 /**
  * Qui a le droit d'agir et quand. Ce qui réduit le risque (bloquer, tout fermer, arrêter) n'est jamais
  * désactivé par une panne ni par un état douteux (I4, I5) ; ce qui l'augmente l'est au moindre doute.
  */
-export function actionPolicy(action: ActionType, ctx: { instance: Instance; degraded: boolean; nowMs: number }): ActionPolicy {
+export function actionPolicy(
+  action: ActionType,
+  ctx: { instance: Instance; degraded: boolean; nowMs: number; role: "operator" | "admin" },
+): ActionPolicy {
   if (RISK_REDUCING.has(action)) return { enabled: true, reason: null };
   const r = fr.cockpit.reasons;
-  if (ctx.degraded) return { enabled: false, reason: r.degraded, visible: true };
+  if (ctx.degraded) return { enabled: false, reason: r.degraded };
+  // Comme le serveur : hors paper, rouvrir et démarrer exigent un administrateur.
+  if (ctx.role !== "admin" && ctx.instance.desired_mode !== "paper") return { enabled: false, reason: r.adminOnly };
   const view = stateView(ctx.instance, ctx.nowMs);
   if (action === "resume_entries") {
-    if (view.kind === "unknown") return { enabled: false, reason: r.unknown, visible: true };
-    if (view.kind === "stale") return { enabled: false, reason: r.stale, visible: true };
+    if (view.kind === "unknown") return { enabled: false, reason: r.unknown };
+    if (view.kind === "stale") return { enabled: false, reason: r.stale };
     if (view.state === "running") return { enabled: false, reason: r.alreadyOpen };
-    if (view.state !== "exits_only") return { enabled: false, reason: r.notExitsOnly(fr.cockpit.states[view.state]), visible: true };
-    if (ctx.instance.mode_mismatch) return { enabled: false, reason: r.modeMismatch, visible: true };
+    if (view.state !== "exits_only") return { enabled: false, reason: r.notExitsOnly(fr.cockpit.states[view.state]) };
+    if (ctx.instance.mode_mismatch) return { enabled: false, reason: r.modeMismatch };
     return { enabled: true, reason: null };
   }
   // start
@@ -141,7 +144,7 @@ export function actionPolicy(action: ActionType, ctx: { instance: Instance; degr
 }
 
 export function canCreate(degraded: boolean): ActionPolicy {
-  return degraded ? { enabled: false, reason: fr.cockpit.reasons.degraded, visible: true } : { enabled: true, reason: null };
+  return degraded ? { enabled: false, reason: fr.cockpit.reasons.degraded } : { enabled: true, reason: null };
 }
 
 /* ------------------------------------------------------------- mode dégradé */

@@ -38,7 +38,7 @@ export function CreateInstance({ degraded }: { degraded: boolean }) {
           variant="outline"
           aria-disabled={policy.enabled ? undefined : true}
           aria-describedby={policy.enabled ? undefined : "create-reason"}
-          className={policy.enabled ? undefined : "cursor-not-allowed opacity-60"}
+          className={policy.enabled ? undefined : "cursor-not-allowed opacity-50"}
           onClick={() => policy.enabled && setOpen(true)}
         >
           <PlusIcon data-icon="inline-start" />
