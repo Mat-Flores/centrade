@@ -43,6 +43,11 @@ class Settings(BaseSettings):
     # Fichier de configuration Redis du secret (`requirepass <valeur>`) : si présent, son mot de
     # passe est inséré dans `redis_url` en mémoire seulement (jamais en variable d'environnement).
     redis_conf_file: Path | None = None
+    # Répertoire en mémoire (tmpfs) des fichiers remis aux moteurs, un sous-dossier par instance.
+    # Même nom de variable que le runner : `ENGINE_RUNTIME_DIR`, sans préfixe.
+    engine_runtime_dir: Path = Field(
+        default=Path("/run/centrade"), validation_alias="ENGINE_RUNTIME_DIR"
+    )
 
     @model_validator(mode="before")
     @classmethod

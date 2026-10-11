@@ -3,21 +3,21 @@
 Sources (versions de uv.lock) :
 - argon2-cffi 25.1 : https://argon2-cffi.readthedocs.io/en/stable/api.html
 - pyotp 2.10 : https://pyauth.github.io/pyotp/
-- cryptography 50 : https://cryptography.io/en/latest/hazmat/primitives/aead/#cryptography.hazmat.primitives.ciphers.aead.AESGCM
 """
 
 import hashlib
 import hmac
-import os
 import re
 import secrets
 from datetime import datetime
-from uuid import UUID
 
 import pyotp
 from argon2 import PasswordHasher
 from argon2.exceptions import Argon2Error, InvalidHashError
-from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+# Le chiffrement du secret TOTP passe par le SecretStore (même primitive, AAD de M1).
+from centrade_core.secrets import decrypt_totp_secret as decrypt_totp_secret
+from centrade_core.secrets import encrypt_totp_secret as encrypt_totp_secret
 
 _hasher = PasswordHasher()  # argon2id, paramètres par défaut de la bibliothèque (RFC 9106)
 # Vérifiée quand le compte n'existe pas ou est verrouillé : même coût, jamais de succès.
@@ -47,25 +47,6 @@ def new_token() -> str:
 def token_hash(token: str) -> str:
     """SHA-256 suffit : le jeton porte 256 bits d'aléa, il n'y a rien à deviner hors ligne."""
     return hashlib.sha256(token.encode()).hexdigest()
-
-
-def _aesgcm(master_key: bytes) -> AESGCM:
-    if len(master_key) != 32:  # AESGCM accepterait 16 ou 24 octets : on exige AES-256
-        raise ValueError("la clé maître doit faire 32 octets")
-    return AESGCM(master_key)
-
-
-def encrypt_totp_secret(*, master_key: bytes, user_id: UUID, secret: str) -> tuple[bytes, bytes]:
-    """Renvoie (nonce, chiffré). Nonce aléatoire neuf à chaque appel ; l'utilisateur en AAD."""
-    nonce = os.urandom(12)
-    return nonce, _aesgcm(master_key).encrypt(nonce, secret.encode(), user_id.bytes)
-
-
-def decrypt_totp_secret(
-    *, master_key: bytes, user_id: UUID, nonce: bytes, ciphertext: bytes
-) -> str:
-    """Lève `InvalidTag` si la clé, le nonce, le chiffré ou l'utilisateur ne correspondent pas."""
-    return _aesgcm(master_key).decrypt(nonce, ciphertext, user_id.bytes).decode()
 
 
 def totp_step(secret: str, code: str, now: datetime) -> int | None:

@@ -94,7 +94,20 @@ async def test_i14_toute_action_ecrit_une_ligne_d_audit_avec_auteur(stack: Stack
     }
     actions = ("start", "stop", "pause-entries", "resume-entries", "flatten")
     # Une route qui change un état et qui n'est pas parcourue ici fait échouer ce test.
-    assert changing == {("POST", "/api/v1/instances")} | {
+    registre = {
+        ("POST", "/api/v1/strategies"),
+        ("POST", "/api/v1/strategies/{strategy_id}/versions"),
+        ("PATCH", "/api/v1/strategies/{strategy_id}/versions/{version}"),
+    }
+    # Comptes et clés : auditées dans tests/scenarios/test_comptes_et_cles.py.
+    comptes = {
+        ("POST", "/api/v1/accounts"),
+        ("PUT", "/api/v1/accounts/{account_id}/secret"),
+        ("POST", "/api/v1/accounts/{account_id}/test"),
+        ("POST", "/api/v1/accounts/{account_id}/rotate"),
+    }
+    assert changing >= registre | comptes
+    assert changing - registre - comptes == {("POST", "/api/v1/instances")} | {
         ("POST", f"/api/v1/instances/{{instance_id}}/{a}") for a in actions
     }
 
