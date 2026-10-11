@@ -63,6 +63,7 @@ class Command(Base):
     type: Mapped[str]
     actor: Mapped[str]
     idempotency_key: Mapped[str]
+    args: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # position_id, order_id
     request_hash: Mapped[str] = mapped_column(server_default="")  # instance + type, anti-rejeu
     status: Mapped[str] = mapped_column(server_default="requested", index=True)
     correlation_id: Mapped[UUID]
