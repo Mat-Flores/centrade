@@ -4,7 +4,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import BigInteger, ForeignKey, Text, UniqueConstraint, func
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
 from centrade_core.models.base import Base, now_col, updated_at, uuid_pk
@@ -18,6 +18,8 @@ class Engine(Base):
     image: Mapped[str]
     version: Mapped[str]
     digest: Mapped[str | None]
+    memory_reservation_mb: Mapped[int | None]  # par instance, pour l'admission
+    cpu_reservation: Mapped[Decimal | None]
     capabilities: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default="{}")
     created_at: Mapped[datetime] = now_col()
     updated_at: Mapped[datetime] = updated_at()
@@ -35,6 +37,18 @@ class Instance(Base):
     observed_at: Mapped[datetime | None]
     observed_mode: Mapped[str | None]
     params: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default="{}")
+    strategy_version_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("strategy_versions.id"), index=True
+    )
+    account_id: Mapped[UUID | None] = mapped_column(ForeignKey("accounts.id"), index=True)
+    limits: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default="{}")
+    container_ref: Mapped[str | None]
+    deployment_fingerprint: Mapped[str | None]  # I10
+    config_hash: Mapped[str | None]  # hash de la configuration générée
+    effective_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # relue (F9)
+    effective_config_at: Mapped[datetime | None]
+    drift: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # dérive constatée
+    paper_origin_id: Mapped[UUID | None] = mapped_column(ForeignKey("instances.id"))
     created_at: Mapped[datetime] = now_col()
     updated_at: Mapped[datetime] = updated_at()
 
@@ -92,6 +106,12 @@ class Position(Base):
     entry_price: Mapped[Decimal | None]
     currency: Mapped[str]
     observed_at: Mapped[datetime]
+    # Protection (F10, I7) : le stop est dans la devise de la position.
+    stop_price: Mapped[Decimal | None]
+    stop_venue: Mapped[str | None]  # venue | engine
+    stop_type: Mapped[str | None]  # fixed | trailing | dynamic
+    protection_state: Mapped[str] = mapped_column(server_default="unknown")
+    protection_verified_at: Mapped[datetime | None]
     updated_at: Mapped[datetime] = updated_at()
 
 
@@ -129,4 +149,104 @@ class Alert(Base):
     created_at: Mapped[datetime] = now_col()
     acknowledged_at: Mapped[datetime | None]
     resolved_at: Mapped[datetime | None]
+    updated_at: Mapped[datetime] = updated_at()
+
+
+class Secret(Base):
+    """Jamais renvoyé par l'API (I12) : seul le worker déchiffre."""
+
+    __tablename__ = "secrets"
+
+    id: Mapped[UUID] = uuid_pk()
+    kind: Mapped[str]
+    usage: Mapped[str]  # trade | read | engine_api | webhook
+    ciphertext: Mapped[bytes]
+    nonce: Mapped[bytes]
+    key_version: Mapped[int]
+    last_used_at: Mapped[datetime | None]
+    rotated_at: Mapped[datetime | None]
+    created_at: Mapped[datetime] = now_col()
+    updated_at: Mapped[datetime] = updated_at()
+
+
+class Account(Base):
+    __tablename__ = "accounts"
+
+    id: Mapped[UUID] = uuid_pk()
+    venue: Mapped[str]
+    type: Mapped[str]  # paper | live
+    environment: Mapped[str]  # production | sandbox
+    label: Mapped[str]
+    currency: Mapped[str]
+    capital_cap: Mapped[Decimal | None]  # dans `currency`
+    secret_ref: Mapped[UUID | None] = mapped_column(ForeignKey("secrets.id"))
+    read_secret_ref: Mapped[UUID | None] = mapped_column(ForeignKey("secrets.id"))
+    permissions_verified_at: Mapped[datetime | None]  # vide = non vérifié, live bloqué
+    ip_restricted: Mapped[bool | None]  # constaté sur la venue ; None = inconnu
+    created_at: Mapped[datetime] = now_col()
+    updated_at: Mapped[datetime] = updated_at()
+
+
+class Strategy(Base):
+    __tablename__ = "strategies"
+
+    id: Mapped[UUID] = uuid_pk()
+    name: Mapped[str] = mapped_column(unique=True)
+    created_at: Mapped[datetime] = now_col()
+    updated_at: Mapped[datetime] = updated_at()
+
+
+class StrategyVersion(Base):
+    """Manifest, code et politique de sortie sont immuables (trigger) ; seul le statut change."""
+
+    __tablename__ = "strategy_versions"
+    __table_args__ = (UniqueConstraint("strategy_id", "version"),)
+
+    id: Mapped[UUID] = uuid_pk()
+    strategy_id: Mapped[UUID] = mapped_column(ForeignKey("strategies.id"), index=True)
+    version: Mapped[int]
+    manifest: Mapped[dict[str, Any]] = mapped_column(JSONB)
+    code_hash: Mapped[str]
+    status: Mapped[str] = mapped_column(server_default="draft")  # draft | approved | retired
+    author: Mapped[str]
+    static_checks: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default="{}")
+    exits: Mapped[dict[str, Any]] = mapped_column(JSONB)  # politique de sortie (F10)
+    created_at: Mapped[datetime] = now_col()
+    updated_at: Mapped[datetime] = updated_at()
+
+
+class Trade(Base):
+    """Position close ; projection dérivée des événements."""
+
+    __tablename__ = "trades"
+    __table_args__ = (UniqueConstraint("instance_id", "external_id"),)
+
+    id: Mapped[UUID] = uuid_pk()
+    instance_id: Mapped[UUID] = mapped_column(ForeignKey("instances.id"), index=True)
+    external_id: Mapped[str]  # identifiant côté moteur
+    instrument: Mapped[str]
+    quantity: Mapped[Decimal]
+    entry_price: Mapped[Decimal]
+    exit_price: Mapped[Decimal]
+    entry_cause: Mapped[str]
+    exit_cause: Mapped[str]  # énumération de F10
+    pnl: Mapped[Decimal]
+    fees: Mapped[Decimal]
+    currency: Mapped[str]
+    opened_at: Mapped[datetime]
+    closed_at: Mapped[datetime]
+    duration_s: Mapped[int]
+    created_at: Mapped[datetime] = now_col()
+    updated_at: Mapped[datetime] = updated_at()
+
+
+class ServiceAccount(Base):
+    __tablename__ = "service_accounts"
+
+    id: Mapped[UUID] = uuid_pk()
+    name: Mapped[str] = mapped_column(unique=True)
+    scopes: Mapped[list[str]] = mapped_column(ARRAY(Text), server_default="{}")
+    token_hash: Mapped[str] = mapped_column(unique=True)
+    instance_id: Mapped[UUID | None] = mapped_column(ForeignKey("instances.id"), index=True)
+    created_at: Mapped[datetime] = now_col()
     updated_at: Mapped[datetime] = updated_at()

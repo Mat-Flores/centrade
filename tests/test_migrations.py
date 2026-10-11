@@ -112,3 +112,92 @@ def test_downgrade_0003_avec_deux_positions_sur_le_meme_instrument(
     }
     assert "uq_positions_instance_instrument_side" in constraints
     command.upgrade(cfg, "head")
+
+
+def test_migration_0005_montee_descente_et_donnees_m1(
+    pg_url: str, make_alembic_config: Callable[[str], Config]
+) -> None:
+    asyncio.run(_rows(pg_url, "CREATE DATABASE mig0005"))
+    url = make_url(pg_url).set(database="mig0005").render_as_string(hide_password=False)
+    cfg = make_alembic_config(url)
+    command.upgrade(cfg, "0004")
+    asyncio.run(_rows(url, "INSERT INTO instances (id, engine_id, name, mode, desired_state) "
+                           "SELECT gen_random_uuid(), id, 'i-m1', 'paper', 'stopped' "
+                           "FROM engines LIMIT 1"))  # fmt: skip
+
+    command.upgrade(cfg, "0005")  # les données de M1 survivent
+    assert asyncio.run(_rows(url, "SELECT name FROM instances")) == [("i-m1",)]
+    tables = "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+    assert {"accounts", "secrets", "strategies", "strategy_versions", "trades",
+            "service_accounts"} <= {r[0] for r in asyncio.run(_rows(url, tables))}  # fmt: skip
+
+    command.downgrade(cfg, "0004")
+    names = {r[0] for r in asyncio.run(_rows(url, tables))}
+    assert not {"accounts", "secrets", "strategies", "strategy_versions", "trades"} & names
+    cols = "SELECT column_name FROM information_schema.columns WHERE table_name = 'instances'"
+    assert "deployment_fingerprint" not in {r[0] for r in asyncio.run(_rows(url, cols))}
+    command.upgrade(cfg, "head")
+
+
+async def _version(s: AsyncSession) -> Any:
+    sid, vid = uuid7(), uuid7()
+    await s.execute(
+        text("INSERT INTO strategies (id, name) VALUES (:i, :n)"), {"i": sid, "n": f"s-{uuid4()}"}
+    )
+    await s.execute(
+        text("INSERT INTO strategy_versions (id, strategy_id, version, manifest, code_hash, "
+             "author, exits) VALUES (:v, :s, 1, '{}', 'h', 'op', '{}')"),
+        {"v": vid, "s": sid},
+    )  # fmt: skip
+    return sid, vid
+
+
+async def test_strategy_versions_immuable_sauf_statut(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as s, s.begin():
+        _, vid = await _version(s)
+    updates = (
+        "UPDATE strategy_versions SET manifest = '{\"b\": 2}' WHERE id = :i",
+        "UPDATE strategy_versions SET code_hash = 'x' WHERE id = :i",
+        'UPDATE strategy_versions SET exits = \'{"stoploss": "-0.5"}\' WHERE id = :i',
+    )
+    for sql in updates:
+        async with session_factory() as s:
+            with pytest.raises(DBAPIError, match="immuables"):
+                await s.execute(text(sql), {"i": vid})
+    async with session_factory() as s, s.begin():  # le statut reste modifiable
+        await s.execute(
+            text("UPDATE strategy_versions SET status = 'approved' WHERE id = :i"), {"i": vid}
+        )
+
+
+async def test_strategy_versions_unicite_strategie_numero(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    async with session_factory() as s, s.begin():
+        sid, _ = await _version(s)
+    async with session_factory() as s:
+        with pytest.raises(IntegrityError):
+            await s.execute(
+                text("INSERT INTO strategy_versions (id, strategy_id, version, manifest, "
+                     "code_hash, author, exits) VALUES (:v, :s, 1, '{}', 'h', 'op', '{}')"),
+                {"v": uuid7(), "s": sid},
+            )  # fmt: skip
+
+
+async def test_orders_client_order_id_unique(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    ins = (
+        "INSERT INTO orders (id, instance_id, client_order_id, instrument, side, intent, "
+        "status, quantity, currency, observed_at) "
+        "VALUES (:id, :i, 'dup-1', 'crypto:fake:BTC/USDT', 'buy', 'entry', 'open', 1, 'USDT', "
+        "now())"
+    )
+    async with session_factory() as s, s.begin():
+        iid = await _instance(s)
+        await s.execute(text(ins), {"id": uuid7(), "i": iid})
+    async with session_factory() as s:
+        with pytest.raises(IntegrityError):
+            await s.execute(text(ins), {"id": uuid7(), "i": iid})
