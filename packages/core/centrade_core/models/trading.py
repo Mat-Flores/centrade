@@ -81,6 +81,7 @@ class Position(Base):
 
     id: Mapped[UUID] = uuid_pk()
     instance_id: Mapped[UUID] = mapped_column(ForeignKey("instances.id"), index=True)
+    external_id: Mapped[str]  # identifiant côté moteur ; unique par instance
     instrument: Mapped[str]
     side: Mapped[str]  # long | short
     quantity: Mapped[Decimal]
