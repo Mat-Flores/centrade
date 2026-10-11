@@ -1,0 +1,25 @@
+name: sma-cross
+engine: freqtrade
+version: 3
+entrypoint: user_data/strategies/SmaCross.py
+asset_classes: [crypto]
+trading_mode: spot
+timeframes: [5m, 1h]
+modes: [backtest, paper, live]
+params_schema:
+  type: object
+  properties:
+    fast: {type: integer, minimum: 2, default: 10}
+    slow: {type: integer, minimum: 5, default: 30}
+sizing:
+  stake_amount: "50"
+  max_open_positions: 3
+exits:
+  stoploss: "-0.05"
+  stop_on_venue: true
+  trailing: {enabled: false}
+  take_profit: {"0": "0.04", "60": "0.02"}
+risk_defaults:
+  max_notional_per_order: "100"
+  max_daily_loss: "20"
+requires_data: [ohlcv]
