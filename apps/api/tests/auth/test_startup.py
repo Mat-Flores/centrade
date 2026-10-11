@@ -60,3 +60,15 @@ def test_api_ne_demarre_pas_sans_cle_maitre_valide(env: Path, content: str | Non
             pass
     finally:
         get_settings.cache_clear()
+
+
+def test_api_ne_demarre_pas_sans_chemin_de_cle_maitre(
+    env: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("CENTRADE_MASTER_KEY_FILE")
+    get_settings.cache_clear()
+    try:
+        with pytest.raises(ValueError, match="clé maître"), TestClient(create_app()):
+            pass
+    finally:
+        get_settings.cache_clear()

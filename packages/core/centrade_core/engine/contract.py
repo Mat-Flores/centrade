@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Callable
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Protocol
@@ -55,10 +56,12 @@ async def observe_status(
     adapter: EngineAdapter,
     ref: InstanceRef,
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
+    timeout_s: float | None = None,
 ) -> InstanceStatus:
     """Moteur injoignable -> `unknown`, jamais `running` (I1, I5). Un moteur muet lève
-    EngineUnreachable (ou TimeoutError) ; cette fonction le traduit en statut inconnu."""
+    EngineUnreachable, ou ne répond pas dans le délai ; les deux donnent un statut inconnu."""
     try:
-        return await adapter.status(ref)
+        async with asyncio.timeout(timeout_s):
+            return await adapter.status(ref)
     except (EngineUnreachable, TimeoutError):
         return InstanceStatus(state="unknown", mode=None, observed_at=clock())

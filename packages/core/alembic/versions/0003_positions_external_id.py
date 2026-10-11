@@ -24,6 +24,9 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Deux positions d'un même instrument violeraient l'ancienne unicité. `positions` est une
+    # projection dérivée : on la vide, le prochain relevé du worker la reconstruit.
+    op.execute("DELETE FROM positions")
     op.drop_constraint("uq_positions_instance_id_external_id", "positions", type_="unique")
     op.create_unique_constraint(
         "uq_positions_instance_instrument_side", "positions", ["instance_id", "instrument", "side"]

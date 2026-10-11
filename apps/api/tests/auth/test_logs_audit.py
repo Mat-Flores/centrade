@@ -133,12 +133,36 @@ async def test_i14_evenements_d_auth_laissent_une_ligne_d_audit_avec_auteur_et_i
     author = f"user:{account.id}"
     assert [tuple(r) for r in rows] == [
         ("auth.login.failed", "anonymous", IP),  # mot de passe faux : identité non prouvée
+        ("auth.password.accepted", author, IP),
         ("auth.totp.failed", author, IP),
         ("auth.login.succeeded", author, IP),
         ("auth.logout", author, IP),
+        ("auth.password.accepted", author, IP),
         ("auth.recovery_code.used", author, IP),
         ("auth.login.succeeded", author, IP),
     ]
+
+
+async def test_i14_mot_de_passe_correct_sans_totp_laisse_une_trace(
+    make_client: MakeClient,
+    make_account: MakeAccount,
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
+    account = await make_account()
+    client = make_client(ip=IP)
+    creds = {"username": account.email, "password": account.password}
+
+    assert (await client.post(LOGIN, json=creds)).status_code == 200  # puis plus rien
+
+    async with session_factory() as s:
+        rows = (
+            await s.execute(
+                select(AuditLog.action, AuditLog.actor, AuditLog.ip).where(
+                    AuditLog.target == f"user:{account.id}"
+                )
+            )
+        ).all()
+    assert [tuple(r) for r in rows] == [("auth.password.accepted", f"user:{account.id}", IP)]
 
 
 async def test_i14_verrouillage_et_echec_sur_compte_inconnu_sont_audites(

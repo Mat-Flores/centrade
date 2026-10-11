@@ -15,15 +15,27 @@ from structlog.typing import EventDict, WrappedLogger
 
 MASK = "***"
 # Nom de clé sensible, en sous-chaîne, sans casse : `X-Api-Key`, `totp_secret`, `Set-Cookie`…
+# `code` (TOTP, récupération) seulement en nom entier : `status_code` reste lisible.
 _SENSITIVE_KEY = re.compile(
     r"pass(word|wd)?$|pwd|secret|token|authorization|cookie|api[-_]?key|private[-_]?key"
-    r"|master[-_]?key|totp|(^|[-_])otp|recovery|credential|session|bearer|signature|passphrase",
+    r"|master[-_]?key|totp|(^|[-_])otp|recovery|credential|session|bearer|signature|passphrase"
+    r"|^codes?$",
     re.I,
 )
-# Valeurs sensibles dans du texte libre (message, URL, trace) : `Bearer xxx`, `token=xxx`.
-_SENSITIVE_TEXT = re.compile(
-    r"(?i)((?:bearer|basic)\s+|(?:pass(?:word)?|pwd|secret|token|api[-_]?key|totp|otp|authorization"
-    r"|cookie)[\"']?\s*[=:]\s*[\"']?(?:(?:bearer|basic)\s+)?)[^\s&\"',;]+"
+_NAMES = (
+    r"(?:pass(?:word|wd|phrase)?|pwd|secret|token|api[-_]?key|totp|otp|authorization|cookie"
+    r"|\bcodes?)"
+)
+# Valeurs sensibles dans du texte libre (message, URL, trace), dans l'ordre d'application.
+_SENSITIVE_TEXT = (
+    # Valeur refusée que Pydantic recopie dans son message : `input_value=…, input_type=…`.
+    re.compile(r"(input_value=).*?(?=, input_type=|$)", re.M),
+    # Identifiants d'une URL : `scheme://utilisateur:secret@hôte`.
+    re.compile(r"(://[^/\s:@]*:)[^/\s@]+(?=@)"),
+    re.compile(r"(?i)((?:bearer|basic)\s+)[^\s&\"',;]+"),
+    # `nom=valeur`, `nom: valeur`. Entre guillemets : jusqu'au guillemet fermant. Sinon jusqu'à
+    # un séparateur ou la fin de ligne, espaces compris : on masque trop plutôt que pas assez.
+    re.compile(rf"(?i)({_NAMES}[\"']?\s*[=:]\s*)(?:\"[^\"\n]*\"?|'[^'\n]*'?|[^&\"',;\n]+)"),
 )
 
 
@@ -36,7 +48,9 @@ def _mask(value: Any) -> Any:
     if isinstance(value, list | tuple | set | frozenset):
         return [_mask(v) for v in value]
     if isinstance(value, str):
-        return _SENSITIVE_TEXT.sub(lambda m: m.group(1) + MASK, value)
+        for pattern in _SENSITIVE_TEXT:
+            value = pattern.sub(lambda m: m.group(1) + MASK, value)
+        return value
     if isinstance(value, bytes | bytearray):
         return MASK  # du binaire dans un log est au mieux inutile, au pire une clé
     return value

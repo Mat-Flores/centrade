@@ -107,10 +107,14 @@ async def test_i14_toute_action_ecrit_une_ligne_d_audit_avec_auteur(stack: Stack
         "command.deploy",
     }
     await stack.world.worker.run_once()
-    for a in actions:
+    # `resume-entries` n'est refusé que sur état douteux ; ici l'état observé est frais.
+    # `start` n'a de sens que sur une instance arrêtée : il passe après l'effet de `stop`.
+    for a in ("pause-entries", "resume-entries", "flatten", "stop", "start"):
+        if a == "start":
+            for _ in range(2):  # pause et flatten d'abord, puis stop
+                await stack.world.worker.run_once()
         before = len(await _audit_for(stack, target))
         r = await act(c, created["id"], a)
-        # `resume-entries` n'est refusé que sur état douteux ; ici l'état observé est frais.
         assert r.status_code == 202, (a, r.text)
         rows = await _audit_for(stack, target)
         assert len(rows) == before + 1
@@ -134,6 +138,7 @@ async def test_i14_action_d_automatisme_attribuee_a_son_auteur(stack: Stack) -> 
     await w.worker.run_once()  # passage à unknown + alerte
     r2 = await act(c, iid, "flatten")
     cid2 = r2.json()["command_id"]
+    await w.worker.run_once()  # envoyée, sans réponse : l'échéance court depuis l'envoi
     w.clock.advance(stack.settings.deadline_flatten_s + 1)
     await w.worker.run_once()  # timed_out
     w.fake.set_failure(ref_of(iid), Failure.SILENT, on=False)

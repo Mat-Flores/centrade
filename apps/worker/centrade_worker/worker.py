@@ -1,8 +1,10 @@
 """Worker : porte les adaptateurs, publie leurs événements, les ingère, tient les projections.
 
-Un tour (`run_once`) : relève les événements -> bus -> ingestion -> relevé de chaque instance
-(état + instantané) -> battement. Aucun sommeil ici : `run` dort entre deux tours, les tests
-appellent `run_once` avec une horloge injectée.
+Un tour (`run_once`) : envoi des commandes -> événements (bus, ingestion) -> relevé de chaque
+instance (état + instantané) -> vérification des commandes -> battement. Chaque étape est isolée :
+une panne (bus, base, un moteur) n'empêche ni l'envoi d'une commande ni le relevé des autres
+instances (I4). Aucun sommeil ici : `run` dort entre deux tours, les tests appellent `run_once`
+avec une horloge injectée.
 """
 
 from __future__ import annotations
@@ -10,9 +12,10 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import signal
-from collections.abc import Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import partial
 from uuid import UUID
 
 import structlog
@@ -44,6 +47,8 @@ class WorkerConfig:
     batch: int = 100
     # Une instance inchangée est quand même notifiée à cette cadence : sa date d'observation avance.
     refresh_notify_s: float = 10.0
+    # Fraîcheur exigée du relevé fait juste avant d'envoyer ce qui augmente le risque (I5).
+    stale_after_s: float = 30.0
 
 
 class Worker:
@@ -72,6 +77,7 @@ class Worker:
             adapters=adapters,
             clock=clock,
             call_timeout_s=config.engine_silent_after_s,
+            stale_after_s=config.stale_after_s,
             register=self.register,
             note=lambda kind, ident: self._notes.append((kind, ident)),
         )
@@ -99,19 +105,34 @@ class Worker:
 
     async def run_once(self) -> None:
         tour = log.bind(correlation_id=str(uuid7()))
+        errors: list[Exception] = []
+        observed: dict[UUID, Observation] = {}
+
+        async def step(name: str, do: Callable[[], Awaitable[None]], **ctx: str) -> None:
+            try:
+                await do()
+            except Exception as exc:  # l'étape suivante a lieu quand même
+                tour.exception("etape_en_echec", step=name, **ctx)
+                errors.append(exc)
+
+        async def observe(ref: InstanceRef) -> None:
+            obs = await self._resync(tour.bind(instance_id=str(ref.instance_id)), ref)
+            if obs is not None:
+                observed[ref.instance_id] = obs
+
         try:
-            await self._bus.ensure_group(EVENTS_STREAM)
-            await self._publish_events(tour)
-            await self._consume(tour)
-            await self._commands.expire(("requested",))  # une commande périmée ne part jamais
-            await self._commands.dispatch()
-            observed: dict[UUID, Observation] = {}
+            # Les commandes d'abord : ni le bus ni un lot d'événements ne retardent une pause.
+            # Seul ce qui augmente le risque peut périmer avant de partir.
+            await step("expiration_avant_envoi", lambda: self._commands.expire(("requested",)))
+            await step("envoi", self._commands.dispatch)
+            await step("publication", lambda: self._publish_events(tour))
+            await step("ingestion", lambda: self._consume(tour))
             for iid, ref in list(self._refs.items()):
-                if (obs := await self._resync(tour.bind(instance_id=str(iid)), ref)) is not None:
-                    observed[iid] = obs
-            await self._commands.verify(observed)
-            await self._commands.expire_all()
-            # Seulement si le tour a abouti : clé absente = worker figé.
+                await step("releve", partial(observe, ref), instance_id=str(iid))
+            await step("verification", lambda: self._commands.verify(observed))
+            await step("expiration", self._commands.expire_all)
+            if errors:
+                raise errors[0]  # tour incomplet : pas de battement, l'API voit un worker figé
             await self._redis.set(
                 HEARTBEAT_KEY, self._clock().isoformat(), ex=self._cfg.heartbeat_ttl_s
             )
@@ -132,6 +153,8 @@ class Worker:
 
     # --- étapes ---------------------------------------------------------------------------
     async def _publish_events(self, tour: structlog.stdlib.BoundLogger) -> None:
+        # Bus en panne : on échoue ici, avant de vider la boîte d'envoi d'un moteur.
+        await self._bus.ensure_group(EVENTS_STREAM)
         for iid, ref in self._refs.items():
             try:
                 async with asyncio.timeout(self._cfg.engine_silent_after_s):

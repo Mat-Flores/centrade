@@ -51,7 +51,7 @@ def test_migration_head_hypertable_et_downgrade(
 async def _instance(s: AsyncSession) -> Any:
     eid, iid = uuid7(), uuid7()
     await s.execute(
-        text("INSERT INTO engines (id, kind, image, version) VALUES (:i, 'k', 'img', '1')"),
+        text("INSERT INTO engines (id, kind, image, version) VALUES (:i, 'fake', 'img', '1')"),
         {"i": eid},
     )
     await s.execute(
@@ -83,3 +83,32 @@ async def test_events_unicite_instance_seq_ts(
     async with session_factory() as s:
         with pytest.raises(IntegrityError):
             await s.execute(text(ins), {"id": uuid7(), "i": iid})
+
+
+def test_downgrade_0003_avec_deux_positions_sur_le_meme_instrument(
+    pg_url: str, make_alembic_config: Callable[[str], Config]
+) -> None:
+    asyncio.run(_rows(pg_url, "CREATE DATABASE migdown"))
+    url = make_url(pg_url).set(database="migdown").render_as_string(hide_password=False)
+    cfg = make_alembic_config(url)
+    command.upgrade(cfg, "head")
+    for sql in (
+        "INSERT INTO instances (id, engine_id, name, mode, desired_state) "
+        "SELECT gen_random_uuid(), id, 'i-down', 'paper', 'stopped' FROM engines LIMIT 1",
+        "INSERT INTO positions (id, instance_id, external_id, instrument, side, quantity, "
+        "currency, observed_at) SELECT gen_random_uuid(), i.id, v.ext, 'crypto:fake:BTC/USDT', "
+        "'long', 1, 'USDT', now() FROM instances i, (VALUES ('p1'), ('p2')) AS v(ext)",
+    ):
+        asyncio.run(_rows(url, sql))
+
+    command.downgrade(cfg, "0002")  # les projections sont dérivées : vidées, puis reconstruites
+
+    assert asyncio.run(_rows(url, "SELECT count(*) FROM positions")) == [(0,)]
+    constraints = {
+        r[0]
+        for r in asyncio.run(
+            _rows(url, "SELECT conname FROM pg_constraint WHERE conrelid = 'positions'::regclass")
+        )
+    }
+    assert "uq_positions_instance_instrument_side" in constraints
+    command.upgrade(cfg, "head")

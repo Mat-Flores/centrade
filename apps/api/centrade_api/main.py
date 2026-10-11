@@ -8,7 +8,7 @@ import structlog
 from centrade_core.bus import HEARTBEAT_KEY
 from centrade_core.db import make_engine, make_session_factory
 from centrade_core.settings import Settings, get_settings
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from pydantic import AwareDatetime, BaseModel
 from redis.asyncio import Redis
 from sqlalchemy import text
@@ -65,6 +65,34 @@ class NoStore:
         await self.app(scope, receive, send_no_store)
 
 
+MAX_BODY_BYTES = 64 * 1024  # toutes les routes reçoivent de petits corps JSON
+
+
+class BodyLimit:
+    """Borne le corps des requêtes : au-delà, 413, sans le lire en entier ni l'analyser.
+
+    Compte ce qui arrive réellement (un `Content-Length` se déclare, un envoi par morceaux n'en
+    a pas). L'exception remonte de la lecture du corps jusqu'au gestionnaire d'erreurs.
+    """
+
+    def __init__(self, app: ASGIApp) -> None:
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        seen = 0
+
+        async def bounded() -> Message:
+            nonlocal seen
+            message = await receive()
+            if message["type"] == "http.request":
+                seen += len(message.get("body", b""))
+                if seen > MAX_BODY_BYTES:
+                    raise HTTPException(413, "Corps de requête trop volumineux.")
+            return message
+
+        await self.app(scope, bounded if scope["type"] == "http" else receive, send)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
@@ -91,6 +119,7 @@ def create_app() -> FastAPI:
     )
     install_error_handlers(app)
     app.add_middleware(NoStore)
+    app.add_middleware(BodyLimit)
     app.include_router(auth_router)
     app.include_router(instances_router)
     app.include_router(feeds_router)

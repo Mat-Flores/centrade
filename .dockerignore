@@ -10,6 +10,9 @@
 !deploy/db
 !apps/web
 !deploy/caddy/build
+# Aide aux tests (remise à zéro de Redis et de tables) : jamais dans une image.
+apps/api/centrade_api/testing.py
+apps/worker/centrade_worker/testing.py
 **/__pycache__
 **/node_modules
 **/dist

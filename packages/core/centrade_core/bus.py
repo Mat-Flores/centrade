@@ -27,13 +27,10 @@ class Message:
 
 
 class Bus:
-    def __init__(self, redis: Redis, group: str, consumer: str, reclaim_idle_ms: int = 0) -> None:
-        # reclaim_idle_ms=0 : un seul consommateur par groupe (le worker) reprend tout ce qui est
-        # en attente. Avec plusieurs consommateurs, fixer un délai supérieur au temps de traitement.
+    def __init__(self, redis: Redis, group: str, consumer: str) -> None:
         self._r = redis
         self._group = group
         self._consumer = consumer
-        self._reclaim_idle_ms = reclaim_idle_ms
 
     async def publish(self, stream: str, data: str) -> str:
         return str(await self._r.xadd(stream, {FIELD: data}))
@@ -48,8 +45,11 @@ class Bus:
     async def read(self, stream: str, count: int = 100) -> list[Message]:
         """D'abord les messages en attente (redémarrage), puis les nouveaux. Sans attente."""
         await self.ensure_group(stream)
+        # Délai d'inactivité nul : le seul consommateur du groupe (le worker) reprend tout ce
+        # qui est en attente. shortcut: à plusieurs consommateurs, un délai supérieur au temps
+        # de traitement devient nécessaire.
         claimed: Any = await self._r.xautoclaim(
-            stream, self._group, self._consumer, self._reclaim_idle_ms, "0-0", count=count
+            stream, self._group, self._consumer, 0, "0-0", count=count
         )
         # [prochain id, [(id, champs)], ids supprimés] ; les entrées supprimées sont ignorées
         out = [Message(i, f[FIELD]) for i, f in claimed[1] if f]
@@ -64,9 +64,6 @@ class Bus:
     async def ack(self, stream: str, *ids: str) -> None:
         if ids:
             await self._r.xack(stream, self._group, *ids)
-
-    async def pending(self, stream: str) -> int:
-        return int((await self._r.xpending(stream, self._group))["pending"])
 
 
 HEARTBEAT_KEY = (

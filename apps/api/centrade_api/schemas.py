@@ -10,13 +10,14 @@ from __future__ import annotations
 
 import base64
 import binascii
+import json
 from datetime import datetime, timedelta
 from typing import Any, Literal, cast
 from uuid import UUID
 
 from centrade_core.models.trading import Alert, Command, Event, Instance
 from fastapi import HTTPException
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
+from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator
 
 ObservedState = Literal[
     "starting", "exits_only", "running", "halted", "stopped", "error", "unknown"
@@ -119,13 +120,27 @@ class InstanceOut(BaseModel):
         )
 
 
+MAX_PARAMS_CHARS = 4096  # JSON des paramètres d'une instance : stocké, audité, rendu au moteur
+
+
 class InstanceCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-    engine: str = Field(min_length=1, max_length=32, pattern=r"^[a-z][a-z0-9_-]*$")
+    # Absent : le serveur prend l'unique moteur enregistré (aucun écran ne nomme un moteur, §7).
+    engine: str | None = Field(
+        default=None, min_length=1, max_length=32, pattern=r"^[a-z][a-z0-9_-]*$"
+    )
     mode: Literal["paper"] = "paper"  # le passage en live suit la procédure de promotion (F1)
     params: dict[str, Any] = Field(default_factory=dict, max_length=32)  # transmis à l'adaptateur
+
+    @field_validator("params")
+    @classmethod
+    def _bounded(cls, value: dict[str, Any]) -> dict[str, Any]:
+        # `max_length` ne compte que les clés : on borne aussi ce qu'elles contiennent.
+        if len(json.dumps(value)) > MAX_PARAMS_CHARS:
+            raise ValueError("paramètres trop volumineux")
+        return value
 
 
 class CommandAccepted(BaseModel):

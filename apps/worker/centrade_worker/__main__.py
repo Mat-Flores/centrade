@@ -26,7 +26,12 @@ async def main() -> None:
     redis = Redis.from_url(cfg.redis_url, decode_responses=True)
     # Registre moteur -> adaptateur : un nouveau moteur s'ajoute ici et nulle part ailleurs.
     adapters: dict[str, EngineAdapter] = {
-        FAKE: FakeEngine(clock=lambda: datetime.now(UTC), seed=1, new_id=uuid7)
+        FAKE: FakeEngine(
+            clock=lambda: datetime.now(UTC),
+            seed=1,
+            new_id=uuid7,
+            allow_failure_injection=cfg.engine_failure_injection,
+        )
     }
     worker = Worker(
         adapters=adapters,
@@ -37,6 +42,7 @@ async def main() -> None:
             interval_s=cfg.worker_interval_s,
             engine_silent_after_s=cfg.engine_silent_after_s,
             heartbeat_ttl_s=cfg.worker_heartbeat_ttl_s,
+            stale_after_s=cfg.observed_stale_after_s,
         ),
     )
     stop = asyncio.Event()

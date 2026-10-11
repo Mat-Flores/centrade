@@ -1,15 +1,23 @@
 """I8 : une commande n'est « faite » que lorsque son effet est observé (SPEC §1.2, F9)."""
 
+import asyncio
 from typing import get_args
 
 import httpx
 from centrade_api.testing import Stack, act, create_instance, get, ref_of
-from centrade_core.commands import NEXT, TERMINAL, Status, can_transition
+from centrade_core.audit import fingerprint
+from centrade_core.commands import Status, transition
+from centrade_core.db import make_engine, make_session_factory
+from centrade_core.ids import uuid7
+from centrade_core.models import AuditLog
+from centrade_core.models.trading import Command
 from centrade_fake.engine import Failure
-from hypothesis import given
+from centrade_worker.testing import T0
+from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
+from sqlalchemy import select, text
 
-STATUSES: tuple[str, ...] = get_args(Status)
+STATUSES: tuple[Status, ...] = get_args(Status)
 RANK = {"requested": 0, "dispatched": 1, "acknowledged": 2}
 
 
@@ -65,22 +73,121 @@ async def test_i08_commande_sans_reponse_passe_timed_out(stack: Stack) -> None:
     assert (await get(c, f"/api/v1/commands/{cid}"))["status"] == "timed_out"
 
 
-@given(path=st.lists(st.sampled_from(STATUSES), max_size=12))
-def test_i08_cycle_de_vie_de_la_commande_est_ordonne(path: list[str]) -> None:
-    """Quelle que soit la suite de transitions tentées : jamais en arrière, jamais de saut
-    d'étape vers `verified`, et un état terminal ne change plus."""
-    state, visited = "requested", ["requested"]
-    for target in path:
-        before = state
-        if can_transition(state, target):
-            state = target
-            visited.append(target)
-        else:
-            assert state == before
-        if before in TERMINAL:
-            assert state == before
-    if "verified" in visited:  # effet observé seulement après dispatch puis accusé
-        assert visited[: visited.index("verified")][-2:] == ["dispatched", "acknowledged"]
-    ranks = [RANK[s] for s in visited if s in RANK]
-    assert ranks == sorted(ranks) and len(set(ranks)) == len(ranks)
-    assert all(src in RANK for src in NEXT)
+async def test_i08_pas_de_verification_sur_un_releve_anterieur_a_l_accuse(stack: Stack) -> None:
+    c, iid = await _running(stack)
+    w = stack.world
+    w.fake.set_failure(ref_of(iid), Failure.SLOW)  # le moteur obéit, mais ses relevés datent
+    cid = (await act(c, iid, "pause-entries")).json()["command_id"]
+    await w.worker.run_once()
+    assert (await w.fake.status(ref_of(iid))).state == "exits_only"  # l'effet est réel…
+    cmd = await get(c, f"/api/v1/commands/{cid}")
+    assert cmd["status"] == "acknowledged" and cmd["verified_at"] is None  # …mais pas observé
+
+    w.fake.set_failure(ref_of(iid), Failure.SLOW, on=False)
+    w.clock.advance(1)
+    await w.worker.run_once()
+    assert (await get(c, f"/api/v1/commands/{cid}"))["status"] == "verified"
+
+
+async def test_i08_pause_et_flatten_passent_devant_une_instance_occupee(stack: Stack) -> None:
+    c, iid = await _running(stack)
+    w = stack.world
+    w.fake.set_failure(ref_of(iid), Failure.SILENT)
+    stop = (await act(c, iid, "stop")).json()["command_id"]
+    await w.worker.run_once()  # `stop` reste envoyé, sans réponse : l'instance est occupée
+    assert (await get(c, f"/api/v1/commands/{stop}"))["status"] == "dispatched"
+    w.fake.set_failure(ref_of(iid), Failure.SILENT, on=False)
+
+    pause = (await act(c, iid, "pause-entries")).json()["command_id"]
+    flatten = (await act(c, iid, "flatten")).json()["command_id"]
+    await w.worker.run_once()
+
+    assert (await get(c, f"/api/v1/commands/{stop}"))["status"] == "dispatched"
+    for cid in (pause, flatten):
+        assert (await get(c, f"/api/v1/commands/{cid}"))["status"] == "verified"
+
+
+async def test_i08_empreinte_d_audit_de_l_expiration_porte_le_statut_precedent(
+    stack: Stack,
+) -> None:
+    c, iid = await _running(stack)
+    w = stack.world
+    w.fake.set_failure(ref_of(iid), Failure.SILENT)
+    cid = (await act(c, iid, "flatten")).json()["command_id"]
+    await w.worker.run_once()
+    w.clock.advance(stack.settings.deadline_flatten_s + 1)
+    await w.worker.run_once()
+    async with w.sessions() as s:
+        row = (
+            await s.execute(
+                select(AuditLog).where(
+                    AuditLog.action == "command.timed_out", AuditLog.target == f"command:{cid}"
+                )
+            )
+        ).scalar_one()
+    assert row.before_hash == fingerprint({"status": "dispatched"})
+    assert row.after_hash == fingerprint({"status": "timed_out"})
+
+
+async def _lifecycle(pg_url: str, path: list[Status]) -> None:
+    """Tente chaque transition en base, puis compare à ce que le cycle de F9 autorise."""
+    engine = make_engine(pg_url)
+    try:
+        sessions = make_session_factory(engine)
+        cid, iid = uuid7(), uuid7()
+        async with sessions.begin() as s:
+            eid = await s.scalar(text("SELECT id FROM engines LIMIT 1"))
+            await s.execute(
+                text(
+                    "INSERT INTO instances (id, engine_id, name, mode, desired_state) "
+                    "VALUES (:i, :e, :n, 'paper', 'exits_only')"
+                ),
+                {"i": iid, "e": eid, "n": str(iid)},
+            )
+            s.add(
+                Command(
+                    id=cid,
+                    instance_id=iid,
+                    type="pause_entries",
+                    actor="user:test",
+                    idempotency_key=str(cid),
+                    correlation_id=cid,
+                    deadline_at=T0,
+                    requested_at=T0,
+                )
+            )
+        state: str = "requested"
+        for target in path:
+            async with sessions.begin() as s:
+                done = await transition(s, cid, target, T0)
+            async with sessions() as s:
+                row = await s.get(Command, cid)
+            assert row is not None
+            allowed = (state, target) in LEGAL
+            assert done is allowed, (state, target)
+            assert row.status == (target if allowed else state)  # un refus ne change rien
+            if allowed:
+                assert getattr(row, f"{target}_at") == T0
+                state = target
+            if state == "verified":  # effet observé seulement après envoi puis accusé
+                assert row.dispatched_at is not None and row.acknowledged_at is not None
+    finally:
+        await engine.dispose()
+
+
+# Le cycle de F9, écrit ici indépendamment du code : toute autre transition est refusée.
+LEGAL = {
+    ("requested", "dispatched"),
+    ("dispatched", "acknowledged"),
+    ("acknowledged", "verified"),
+    ("dispatched", "failed"),
+    *((src, end) for src in RANK for end in ("timed_out", "superseded")),
+}
+
+
+@settings(max_examples=40, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(path=st.lists(st.sampled_from(STATUSES), max_size=8))
+def test_i08_cycle_de_vie_de_la_commande_est_ordonne(migrated_url: str, path: list[Status]) -> None:
+    """Quelle que soit la suite de transitions tentées sur la vraie table : jamais en arrière,
+    jamais de saut d'étape, et un état terminal ne change plus."""
+    asyncio.run(_lifecycle(migrated_url, path))

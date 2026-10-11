@@ -9,7 +9,8 @@ from sqlalchemy.ext.asyncio import (
 
 
 def make_engine(url: str) -> AsyncEngine:
-    return create_async_engine(url, pool_pre_ping=True)
+    # hide_parameters : une erreur SQL journalisée ne recopie aucune valeur liée (I12).
+    return create_async_engine(url, pool_pre_ping=True, hide_parameters=True)
 
 
 def make_session_factory(engine: AsyncEngine) -> async_sessionmaker[AsyncSession]:

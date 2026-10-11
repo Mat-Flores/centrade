@@ -83,8 +83,14 @@ class _Inst:
 
 class FakeEngine:
     def __init__(
-        self, clock: Callable[[], datetime], seed: int, new_id: Callable[[], UUID]
+        self,
+        clock: Callable[[], datetime],
+        seed: int,
+        new_id: Callable[[], UUID],
+        allow_failure_injection: bool = False,
     ) -> None:
+        # Faux par défaut : hors test, les paramètres d'une instance ne simulent aucune panne.
+        self._allow_failure_injection = allow_failure_injection
         self._clock = clock
         self._rng = random.Random(seed)  # noqa: S311 - simulation, pas de cryptographie
         self._new_id = new_id
@@ -169,7 +175,10 @@ class FakeEngine:
         ref = InstanceRef(engine=ENGINE, instance_id=spec.instance_id)
         if spec.instance_id not in self._insts:  # idempotent
             # `params["failures"]` : modes de panne dès le déploiement (simulation sans route).
-            failures = {Failure(name) for name in spec.params.get("failures", ())}
+            names = spec.params.get("failures", ())
+            if names and not self._allow_failure_injection:
+                raise CommandRejected("injection de pannes non autorisée sur ce déploiement")
+            failures = {Failure(name) for name in names}
             self._insts[spec.instance_id] = _Inst(spec, dict(self.render_config(spec).values))
             for mode in failures:
                 self.set_failure(ref, mode)

@@ -58,6 +58,7 @@ class Projection:
     positions: frozenset[tuple[Any, ...]]
     open_orders: frozenset[tuple[Any, ...]]
     n_events: int
+    orders: frozenset[tuple[str, str]] = frozenset()  # (client_order_id, status), tous statuts
 
 
 class World:
@@ -72,7 +73,7 @@ class World:
         self.redis: Redis = Redis.from_url(self._redis_url, decode_responses=True)
         await self.redis.flushdb()
         self.clock = Clock()
-        self.fake = FakeEngine(clock=self.clock, seed=3, new_id=uuid7)
+        self.fake = FakeEngine(clock=self.clock, seed=3, new_id=uuid7, allow_failure_injection=True)
         self.bus = Bus(self.redis, "worker", self._consumer)
         self.worker = self.make_worker(self._consumer)
         return self
@@ -96,7 +97,9 @@ class World:
     async def new_instance(self, seed: int | None = None) -> InstanceRef:
         """Déploie une instance, la met en marche, crée ses lignes et l'enregistre au worker."""
         if seed is not None:
-            self.fake = FakeEngine(clock=self.clock, seed=seed, new_id=uuid7)
+            self.fake = FakeEngine(
+                clock=self.clock, seed=seed, new_id=uuid7, allow_failure_injection=True
+            )
             self.worker = self.make_worker(self._consumer)
         spec = make_spec()
         ref = await self.fake.deploy(spec)
@@ -147,13 +150,10 @@ class World:
             pos = (
                 await s.scalars(select(Position).where(Position.instance_id == ref.instance_id))
             ).all()
-            ords = (
-                await s.scalars(
-                    select(Order).where(
-                        Order.instance_id == ref.instance_id, Order.status == "open"
-                    )
-                )
+            every = (
+                await s.scalars(select(Order).where(Order.instance_id == ref.instance_id))
             ).all()
+            ords = [o for o in every if o.status == "open"]
             n = len(
                 (
                     await s.scalars(select(Event.id).where(Event.instance_id == ref.instance_id))
@@ -168,6 +168,7 @@ class World:
                 for o in ords
             ),
             n,
+            frozenset((o.client_order_id, o.status) for o in every),
         )
 
     async def expected(self, ref: InstanceRef) -> Projection:

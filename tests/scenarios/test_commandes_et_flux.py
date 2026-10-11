@@ -6,12 +6,15 @@ from datetime import timedelta
 from uuid import uuid4
 
 import httpx
-from centrade_api.testing import Stack, act, create_instance, get
+import pytest
+from centrade_api.testing import Stack, act, create_instance, get, ref_of
+from centrade_core.audit import fingerprint
+from centrade_core.engine.contract import CommandRejected
 from centrade_core.ids import uuid7
-from centrade_core.models import Session
+from centrade_core.models import AuditLog, Session
 from centrade_core.models.trading import Command
-from centrade_fake.engine import FakeEngine
-from sqlalchemy import func, select
+from centrade_fake.engine import Failure, FakeEngine
+from sqlalchemy import func, select, text
 
 ACTIONS = ("start", "stop", "pause-entries", "resume-entries", "flatten")
 
@@ -255,3 +258,137 @@ async def test_le_flux_exige_une_session_et_ne_repousse_pas_l_inactivite(stack: 
     )
     await gen2.__anext__()
     assert [ev async for ev in gen2] == []  # se termine sans rien envoyer
+
+
+async def test_filtre_de_statut_repetable_et_valide(stack: Stack) -> None:
+    w = stack.world
+    c, iid = await _ready(stack)
+    verified = (await act(c, iid, "resume-entries")).json()["command_id"]
+    await w.worker.run_once()
+    w.fake.set_failure(ref_of(iid), Failure.SILENT)
+    timed_out = (await act(c, iid, "flatten")).json()["command_id"]
+    await w.worker.run_once()
+    w.clock.advance(stack.settings.deadline_flatten_s + 1)
+    await w.worker.run_once()
+    bad = await create_instance(c, failures=["panne-inconnue"])
+    await w.worker.run_once()
+
+    page = await get(c, "/api/v1/commands?status=timed_out&status=failed&limit=100")
+    assert {i["status"] for i in page["items"]} == {"timed_out", "failed"}
+    ids = {i["id"] for i in page["items"]}
+    assert timed_out in ids and verified not in ids
+    assert any(i["instance_id"] == bad["id"] and i["status"] == "failed" for i in page["items"])
+
+    one = await get(c, f"/api/v1/commands?status=verified&instance_id={iid}")
+    assert verified in {i["id"] for i in one["items"]}
+    assert {i["status"] for i in one["items"]} == {"verified"}
+    for query in ("status=nimporte", "status=failed&status=nimporte"):
+        assert (await c.get(f"/api/v1/commands?{query}")).status_code == 422, query
+
+
+async def test_limite_de_page_invalide_422(stack: Stack) -> None:
+    admin = await stack.client("admin")
+    for path in ("instances", "commands", "events", "alerts", "audit"):
+        for bad in ("abc", "0", "-1", "201", "1.5"):
+            r = await admin.get(f"/api/v1/{path}?limit={bad}")
+            assert r.status_code == 422, (path, bad, r.status_code)
+        assert (await admin.get(f"/api/v1/{path}?limit=200")).status_code == 200, path
+
+
+async def test_moteur_optionnel_a_la_creation(stack: Stack) -> None:
+    c = await stack.client("operator")
+    r = await c.post("/api/v1/instances", json={"name": f"n-{uuid4().hex[:8]}"})
+    assert r.status_code == 201, r.text  # un seul moteur enregistré : le serveur le prend
+    engine = r.json()["engine"]
+
+    other = uuid7()
+    async with stack.world.sessions.begin() as s:
+        await s.execute(
+            text("INSERT INTO engines (id, kind, image, version) VALUES (:i, 'autre', 'x', '1')"),
+            {"i": other},
+        )
+    try:  # plusieurs moteurs : le serveur ne choisit pas à la place de l'opérateur
+        r = await c.post("/api/v1/instances", json={"name": f"n-{uuid4().hex[:8]}"})
+        assert r.status_code == 422, r.text
+        named = {"name": f"n-{uuid4().hex[:8]}", "engine": engine}
+        assert (await c.post("/api/v1/instances", json=named)).status_code == 201
+    finally:
+        async with stack.world.sessions.begin() as s:
+            await s.execute(text("DELETE FROM engines WHERE id = :i"), {"i": other})
+
+
+async def test_params_bornes_et_dans_l_empreinte_d_audit(stack: Stack) -> None:
+    c = await stack.client("operator")
+    body = {"name": f"n-{uuid4().hex[:8]}", "params": {"x": "a" * 5000}}
+    assert (await c.post("/api/v1/instances", json=body)).status_code == 422
+    deep = {"name": f"n-{uuid4().hex[:8]}", "params": {"x": [[["a"] * 50] * 50]}}
+    assert (await c.post("/api/v1/instances", json=deep)).status_code == 422
+    huge = {"name": f"n-{uuid4().hex[:8]}", "params": {"x": "a" * 200_000}}
+    r = await c.post("/api/v1/instances", json=huge)  # corps refusé avant d'être analysé
+    assert r.status_code == 413 and r.headers["content-type"].startswith("application/problem")
+
+    inst = await create_instance(c, fast=10)
+    async with stack.world.sessions() as s:
+        row = (
+            await s.execute(
+                select(AuditLog).where(
+                    AuditLog.action == "instance.create",
+                    AuditLog.target == f"instance:{inst['id']}",
+                )
+            )
+        ).scalar_one()
+    assert row.after_hash == fingerprint(
+        {"name": inst["name"], "engine": "fake", "mode": "paper", "params": {"fast": 10}}
+    )
+
+
+async def test_injection_de_pannes_refusee_par_defaut(stack: Stack) -> None:
+    w = stack.world
+    assert stack.settings.engine_failure_injection is False
+    w.fake = FakeEngine(clock=w.clock, seed=1, new_id=uuid7)  # réglage par défaut
+    w.worker = w.make_worker("defaut")
+    c = await stack.client("operator")
+    inst = await create_instance(c, failures=["silent"])
+    await w.worker.run_once()
+    deploy = (await get(c, "/api/v1/commands?instance_id=" + inst["id"]))["items"][0]
+    assert deploy["type"] == "deploy" and deploy["status"] == "failed"
+    assert "injection de pannes" in deploy["result"]["reason"]
+    with pytest.raises(CommandRejected, match="inconnue"):  # jamais démarrée
+        await w.fake.status(ref_of(inst["id"]))
+
+
+async def _foreign_instance(stack: Stack, mode: str, state: str) -> str:
+    """Instance d'un autre mode que `paper`, posée en base : aucune route n'en crée (F1)."""
+    iid = uuid7()
+    async with stack.world.sessions.begin() as s:
+        await s.execute(
+            text(
+                "INSERT INTO instances (id, engine_id, name, mode, desired_state, "
+                "observed_state, observed_mode, observed_at) "
+                "SELECT :i, id, :n, :m, 'exits_only', :st, :m, :at FROM engines "
+                "WHERE kind = 'fake' LIMIT 1"
+            ),
+            {"i": iid, "n": str(iid), "m": mode, "st": state, "at": stack.world.clock.now},
+        )
+    return str(iid)
+
+
+async def test_roles_ce_qui_augmente_le_risque_hors_paper_exige_admin(stack: Stack) -> None:
+    op = await stack.client("operator")
+    admin = await stack.client("admin")
+    paper = (await create_instance(op))["id"]
+    await stack.world.worker.run_once()
+    assert (await act(op, paper, "resume-entries")).status_code == 202  # paper : operator suffit
+
+    live = await _foreign_instance(stack, "live", "exits_only")
+    stopped = await _foreign_instance(stack, "live", "stopped")
+    for iid, action in ((live, "resume-entries"), (stopped, "start")):
+        r = await act(op, iid, action)
+        assert r.status_code == 403, (action, r.text)
+        async with stack.world.sessions() as s:
+            n = await s.scalar(select(func.count()).where(Command.instance_id == iid))
+        assert n == 0  # refusé avant tout enregistrement
+    for action in ("pause-entries", "flatten", "stop"):  # réduire le risque reste ouvert
+        assert (await act(op, live, action)).status_code == 202, action
+    assert (await act(admin, live, "resume-entries")).status_code == 202
+    assert (await act(admin, stopped, "start")).status_code == 202

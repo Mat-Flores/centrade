@@ -15,11 +15,18 @@ from uuid import UUID
 import structlog
 from centrade_core.audit import write_audit
 from centrade_core.bus import notify
-from centrade_core.commands import ACTIVE, DESIRED_AFTER, PRIORITY, RISK_INCREASING
+from centrade_core.commands import (
+    ACTIVE,
+    DESIRED_AFTER,
+    PRIORITY,
+    RISK_INCREASING,
+    Status,
+    risk_increase_refusal,
+)
 from centrade_core.ids import uuid7
 from centrade_core.models.trading import Command, Engine, Instance
 from centrade_core.settings import Settings, get_settings
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
 from redis.asyncio import Redis
 from sqlalchemy import select, tuple_, update
 from sqlalchemy.exc import IntegrityError
@@ -50,7 +57,7 @@ IdempotencyKey = Annotated[
     str,
     Header(alias="Idempotency-Key", min_length=8, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$"),
 ]
-Limit = Annotated[int, Depends(lambda limit=50: min(max(int(limit), 1), 200))]
+Limit = Annotated[int, Query(ge=1, le=200)]  # hors bornes ou non entier : 422
 ActionType = Literal["start", "stop", "pause_entries", "resume_entries", "flatten"]
 
 
@@ -143,19 +150,6 @@ def _new_command(
     )
 
 
-def resume_refusal(inst: Instance, now: datetime, cfg: Settings) -> str | None:
-    """Ce qui augmente le risque est refusé au moindre doute (I5) : lecture seule de l'observé."""
-    if inst.observed_at is None or inst.observed_state == "unknown":
-        return "L'état observé est inconnu : reprise des entrées refusée."
-    if now - inst.observed_at > timedelta(seconds=cfg.observed_stale_after_s):
-        return "L'état observé est périmé : reprise des entrées refusée."
-    if inst.observed_state not in ("exits_only", "running"):
-        return f"État observé « {inst.observed_state} » : reprise des entrées impossible."
-    if inst.observed_mode != inst.mode:
-        return "Le mode observé diffère du mode de l'instance (I3) : reprise des entrées refusée."
-    return None
-
-
 async def _replay(db: AsyncSession, user: Principal, key: str, request_hash: str) -> Command | None:
     existing = await db.scalar(
         select(Command).where(Command.actor == user.actor, Command.idempotency_key == key)
@@ -187,10 +181,23 @@ async def request_command(
     inst = await db.scalar(select(Instance).where(Instance.id == instance_id).with_for_update())
     if inst is None:
         raise HTTPException(404, "Instance inconnue.")
+    # SPEC §13 : `operator` n'augmente le risque qu'en paper ; tout autre mode exige `admin`.
+    if type_ in RISK_INCREASING and inst.mode != "paper" and user.role != "admin":
+        raise HTTPException(403, "Droits insuffisants pour cette action hors mode paper.")
     replay = await _replay(db, user, key, _request_hash(instance_id, type_))
     if replay is not None:
         return replay, True
-    if type_ == "resume_entries" and (reason := resume_refusal(inst, now, cfg)) is not None:
+    # I5 : refus au moindre doute. Le worker rejoue la même règle juste avant l'envoi.
+    reason = risk_increase_refusal(
+        type_,
+        mode=inst.mode,
+        observed_state=inst.observed_state,
+        observed_mode=inst.observed_mode,
+        observed_at=inst.observed_at,
+        now=now,
+        stale_after_s=cfg.observed_stale_after_s,
+    )
+    if reason is not None:
         raise HTTPException(409, reason)
 
     cmd = _new_command(inst, type_, user, key, now, cfg)
@@ -259,11 +266,14 @@ async def create_instance(
     cfg: Cfg,
     redis: Bus,
 ) -> InstanceOut:
+    kind = body.engine
+    if kind is None:  # le serveur ne choisit que s'il n'y a rien à choisir
+        kinds = (await db.scalars(select(Engine.kind).distinct().limit(2))).all()
+        if len(kinds) != 1:
+            raise HTTPException(422, "Moteur à préciser : aucun ou plusieurs sont enregistrés.")
+        kind = kinds[0]
     engine = await db.scalar(
-        select(Engine)
-        .where(Engine.kind == body.engine)
-        .order_by(Engine.created_at, Engine.id)
-        .limit(1)
+        select(Engine).where(Engine.kind == kind).order_by(Engine.created_at, Engine.id).limit(1)
     )
     if engine is None:
         raise HTTPException(422, "Type de moteur inconnu.")
@@ -292,7 +302,7 @@ async def create_instance(
         actor=user.actor,
         action="instance.create",
         target=f"instance:{inst.id}",
-        after={"name": inst.name, "engine": body.engine, "mode": inst.mode},
+        after={"name": inst.name, "engine": kind, "mode": inst.mode, "params": inst.params},
         ip=ip,
     )
     await write_audit(
@@ -347,15 +357,15 @@ async def list_commands(
     db: Db,
     now: Now,
     instance_id: UUID | None = None,
-    status: str | None = None,
+    status: Annotated[list[Status] | None, Query()] = None,  # répétable : ?status=a&status=b
     cursor: str | None = None,
     limit: Limit = 50,
 ) -> Page[CommandOut]:
     stmt = select(Command)
     if instance_id is not None:
         stmt = stmt.where(Command.instance_id == instance_id)
-    if status is not None:
-        stmt = stmt.where(Command.status == status)
+    if status:
+        stmt = stmt.where(Command.status.in_(status))
     if (at := _page_args(cursor)) is not None:
         stmt = stmt.where(tuple_(Command.requested_at, Command.id) < tuple_(*at))
     rows = (

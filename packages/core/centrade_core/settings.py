@@ -31,11 +31,15 @@ class Settings(BaseSettings):
     deadline_stop_s: float = 60.0
     deadline_start_s: float = 60.0
     deadline_deploy_s: float = 60.0
+    # Injection de pannes dans un moteur simulé par les paramètres d'une instance : jamais hors
+    # des tests et de la pile e2e jetable.
+    engine_failure_injection: bool = False
     # Seule origine admise pour les requêtes qui changent un état (CSRF). Défaut : celui de Caddy.
     public_origin: str = Field(default="https://localhost:8443", pattern=r"^https://[^/\s]+$")
     # Chemins de Docker secrets (/run/secrets/…), jamais les valeurs.
     postgres_password_file: Path
-    master_key_file: Path
+    # Seule l'API la reçoit (moindre privilège) : sans elle, `master_key()` échoue.
+    master_key_file: Path | None = None
     # Fichier de configuration Redis du secret (`requirepass <valeur>`) : si présent, son mot de
     # passe est inséré dans `redis_url` en mémoire seulement (jamais en variable d'environnement).
     redis_conf_file: Path | None = None
@@ -69,6 +73,8 @@ class Settings(BaseSettings):
 
     def master_key(self) -> bytes:
         """Clé maître AES-256 : 32 octets encodés en base64 dans le fichier."""
+        if self.master_key_file is None:
+            raise ValueError("clé maître non fournie à ce processus (CENTRADE_MASTER_KEY_FILE)")
         key = base64.b64decode(
             self.master_key_file.read_text(encoding="utf-8").strip(), validate=True
         )

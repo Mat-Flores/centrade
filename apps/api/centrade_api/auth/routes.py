@@ -203,6 +203,9 @@ async def login(
                     or_(Session.stage == "pre_totp", Session.expires_at <= now),
                 )
             )
+            # Tracé même si le TOTP ne suit jamais : un mot de passe connu d'un tiers se voit.
+            actor = f"user:{user.id}"
+            await write_audit(db, actor=actor, action="auth.password.accepted", target=actor, ip=ip)
             token = security.new_token()
             db.add(
                 Session(

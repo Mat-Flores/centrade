@@ -149,6 +149,8 @@ def main() -> int:
                 "CENTRADE_REDIS_URL": redis_url,
                 "CENTRADE_PUBLIC_ORIGIN": PUBLIC_ORIGIN,
                 "CENTRADE_WORKER_INTERVAL_S": "0.5",
+                # Pile jetable seulement : les E2E simulent des pannes du FakeEngine.
+                "CENTRADE_ENGINE_FAILURE_INJECTION": "true",
             }
             os.environ.update({k: v for k, v in env.items() if k.startswith("CENTRADE_")})
 

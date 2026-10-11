@@ -2,19 +2,50 @@
 
 import asyncio
 from datetime import timedelta
+from typing import Any
 
+import pytest
 from centrade_core.bus import EVENTS_STREAM, HEARTBEAT_KEY, Bus
-from centrade_core.events import CanonicalEvent
+from centrade_core.engine.types import InstanceRef
+from centrade_core.events import CanonicalEvent, EventType, OrderPayload
 from centrade_core.ids import uuid7
+from centrade_core.models.trading import Order
 from centrade_fake.engine import Failure
-from centrade_worker.ingest import ingest
+from centrade_worker.ingest import Ingested, ingest
 from centrade_worker.testing import T0, World
+from redis.asyncio import Redis
 from sqlalchemy import select
 
 
-async def test_bus_non_acquitte_relivre_apres_redemarrage(redis_url: str) -> None:
-    from redis.asyncio import Redis
+async def _pending(redis: Redis, stream: str, group: str) -> int:
+    return int((await redis.xpending(stream, group))["pending"])
 
+
+async def _filled_entry(w: World, ref: InstanceRef) -> tuple[CanonicalEvent, CanonicalEvent]:
+    """(soumission, exécution) d'un même ordre d'entrée, que le moteur ne tient donc plus ouvert."""
+    w.step(ref, 60)
+    evs = await w.drain_engine(ref)
+    for filled in evs:
+        if filled.type is EventType.ORDER_FILLED and isinstance(filled.payload, OrderPayload):
+            for sub in evs:
+                if (
+                    sub.type is EventType.ORDER_SUBMITTED
+                    and isinstance(sub.payload, OrderPayload)
+                    and sub.payload.client_order_id == filled.payload.client_order_id
+                ):
+                    return sub, filled
+    raise AssertionError("aucun ordre soumis puis exécuté : le test ne prouverait rien")
+
+
+async def _order_status(w: World, ev: CanonicalEvent) -> str | None:
+    assert isinstance(ev.payload, OrderPayload)
+    async with w.sessions() as s:
+        return await s.scalar(
+            select(Order.status).where(Order.client_order_id == str(ev.payload.client_order_id))
+        )
+
+
+async def test_bus_non_acquitte_relivre_apres_redemarrage(redis_url: str) -> None:
     r = Redis.from_url(redis_url, decode_responses=True)
     await r.flushdb()
     a = Bus(r, "g", "a")
@@ -23,11 +54,11 @@ async def test_bus_non_acquitte_relivre_apres_redemarrage(redis_url: str) -> Non
     first = await a.read("s")
     assert [m.data for m in first] == ["0", "1", "2"]
     await a.ack("s", first[0].id)
-    assert await a.pending("s") == 2
+    assert await _pending(r, "s", "g") == 2
     again = await Bus(r, "g", "b").read("s")  # autre consommateur : reprise des non-acquittés
     assert [m.data for m in again] == ["1", "2"]
     await a.ack("s", *(m.id for m in again))
-    assert await a.pending("s") == 0
+    assert await _pending(r, "s", "g") == 0
     await r.aclose()
 
 
@@ -83,7 +114,7 @@ async def test_redemarrage_au_milieu_d_un_lot_sans_perte_ni_doublon(
         await w.make_worker("apres").run_once()
 
         assert (await w.projection(ref)).n_events == len(evs)
-        assert await w.bus.pending(EVENTS_STREAM) == 0
+        assert await _pending(w.redis, EVENTS_STREAM, "worker") == 0
 
 
 async def test_moteur_injoignable_unknown_et_valeurs_non_rafraichies(
@@ -178,3 +209,56 @@ async def test_battement_expire_et_arret_propre(migrated_url: str, redis_url: st
         w.worker.run_once = un_tour  # type: ignore[method-assign]
         await asyncio.wait_for(w.worker.run(stop), timeout=5)
         assert tours == 1
+
+
+async def test_message_acquitte_seulement_apres_un_traitement_reussi(
+    migrated_url: str, redis_url: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async with World(migrated_url, redis_url) as w:
+        ref = await w.new_instance(seed=9)
+        w.step(ref, 40)
+        evs = await w.drain_engine(ref)
+        assert len(evs) >= 8
+        await w.publish(evs)
+        calls = 0
+
+        async def flaky(*args: Any) -> Ingested:
+            nonlocal calls
+            calls += 1
+            if calls == 3:
+                raise RuntimeError("base indisponible")
+            return await ingest(*args)
+
+        monkeypatch.setattr("centrade_worker.worker.ingest", flaky)
+        with pytest.raises(RuntimeError, match="base indisponible"):
+            await w.worker.run_once()
+        assert (await w.projection(ref)).n_events == 2
+        # Le message en échec n'est pas acquitté : il sera relivré, rien n'est perdu.
+        assert await _pending(w.redis, EVENTS_STREAM, "worker") >= 1
+
+        await w.worker.run_once()
+        assert (await w.projection(ref)).n_events == len(evs)
+        assert await _pending(w.redis, EVENTS_STREAM, "worker") == 0
+
+
+async def test_evenement_tardif_ne_fait_pas_reculer_un_ordre(
+    migrated_url: str, redis_url: str
+) -> None:
+    async with World(migrated_url, redis_url) as w:
+        ref = await w.new_instance(seed=2)
+        submitted, filled = await _filled_entry(w, ref)
+        await ingest(w.sessions, filled, T0)
+        await ingest(w.sessions, submitted, T0)  # arrive après l'exécution
+        assert await _order_status(w, filled) == "filled"
+
+
+async def test_ordre_local_ouvert_que_le_moteur_ne_connait_plus_devient_unknown(
+    migrated_url: str, redis_url: str
+) -> None:
+    async with World(migrated_url, redis_url) as w:
+        ref = await w.new_instance(seed=2)
+        submitted, _lost = await _filled_entry(w, ref)  # l'exécution est perdue
+        await ingest(w.sessions, submitted, T0)
+        assert await _order_status(w, submitted) == "open"
+        await w.worker.run_once()  # le relevé ne contient plus cet ordre
+        assert await _order_status(w, submitted) == "unknown"  # ni ouvert, ni issue inventée

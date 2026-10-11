@@ -4,6 +4,10 @@ La table `commands` sert de file (`FOR UPDATE SKIP LOCKED`) : pas de double écr
 Une commande n'est `verified` que si un relevé postérieur à l'accusé montre l'effet du §7.
 Un moteur qui ne répond pas laisse la commande `dispatched` : elle n'est jamais rejouée, elle
 expire (`timed_out`, alerte). Les actions du worker sont auditées sous `system:worker` (I14).
+
+Asymétrie (I4, I5) : ce qui réduit le risque n'expire jamais avant d'être envoyé, et son échéance
+court à compter de l'envoi ; ce qui l'augmente est revérifié sur un relevé frais juste avant
+l'envoi, et n'est pas envoyé au moindre doute.
 """
 
 from __future__ import annotations
@@ -18,8 +22,16 @@ from uuid import UUID
 
 import structlog
 from centrade_core.audit import SYSTEM_WORKER, write_audit
-from centrade_core.commands import ACTIVE, PRIORITY, Status, transition
-from centrade_core.engine.contract import EngineAdapter, EngineUnreachable
+from centrade_core.commands import (
+    ACTIVE,
+    PRIORITY,
+    RISK_INCREASING,
+    RISK_REDUCING,
+    Status,
+    risk_increase_refusal,
+    transition,
+)
+from centrade_core.engine.contract import EngineAdapter, EngineUnreachable, observe_status
 from centrade_core.engine.types import (
     Exits,
     InstanceRef,
@@ -30,7 +42,7 @@ from centrade_core.engine.types import (
     Snapshot,
 )
 from centrade_core.models.trading import Alert, Command, Engine, Instance
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 log = structlog.get_logger("commands")
@@ -87,6 +99,7 @@ class _Claimed:
     type: str
     kind: str
     instance_id: UUID
+    mode: str
     spec: InstanceSpec
 
 
@@ -98,6 +111,7 @@ class Commands:
         adapters: Mapping[str, EngineAdapter],
         clock: Callable[[], datetime],
         call_timeout_s: float,
+        stale_after_s: float,
         register: Callable[[InstanceRef], None],
         note: Note,
     ) -> None:
@@ -105,20 +119,27 @@ class Commands:
         self._adapters = adapters
         self._clock = clock
         self._call_timeout_s = call_timeout_s
+        self._stale_after_s = stale_after_s
         self._register = register
         self._note = note
 
     async def expire(self, statuses: tuple[str, ...]) -> None:
-        """Échéance dépassée sans effet observé : `timed_out`, alerte, aucune relance."""
+        """Échéance dépassée sans effet observé : `timed_out`, alerte, aucune relance.
+        Une commande qui réduit le risque n'expire pas tant qu'elle n'est pas partie (I4)."""
         now = self._clock()
         async with self._sessions.begin() as s:
             due = await s.scalars(
                 select(Command)
-                .where(Command.status.in_(statuses), Command.deadline_at <= now)
+                .where(
+                    Command.status.in_(statuses),
+                    Command.deadline_at <= now,
+                    or_(Command.status != "requested", Command.type.not_in(RISK_REDUCING)),
+                )
                 .with_for_update(skip_locked=True)
             )
             for cmd in due.all():
                 reason = {"reason": "échéance dépassée sans effet observé"}
+                before = cmd.status  # lu avant : la transition met l'objet à jour
                 if not await transition(s, cmd.id, "timed_out", now, result=reason):
                     continue
                 alert = Alert(
@@ -132,7 +153,7 @@ class Commands:
                 )
                 s.add(alert)
                 await s.flush()
-                await self._audit(s, "command.timed_out", cmd.id, cmd.status, "timed_out")
+                await self._audit(s, "command.timed_out", cmd.id, before, "timed_out")
                 await write_audit(
                     s,
                     actor=SYSTEM_WORKER,
@@ -172,27 +193,65 @@ class Commands:
             for cmd, inst, kind in rows:
                 if cmd.type not in PRIORITY and cmd.instance_id in busy:
                     continue
-                if await transition(s, cmd.id, "dispatched", now):
+                if cmd.type not in RISK_REDUCING and cmd.deadline_at <= now:
+                    continue  # périmée : elle ne part jamais (I5) ; `expire` la clôt
+                # Réduit le risque : l'échéance mesure l'effet, à compter de l'envoi (I4).
+                deadline = (
+                    now + (cmd.deadline_at - cmd.requested_at)
+                    if cmd.type in RISK_REDUCING
+                    else None
+                )
+                if await transition(s, cmd.id, "dispatched", now, deadline_at=deadline):
                     busy.add(cmd.instance_id)
-                    claimed.append(_Claimed(cmd.id, cmd.type, kind, inst.id, spec_for(inst, kind)))
-        for c in claimed:
-            await self._call(c)
+                    claimed.append(
+                        _Claimed(cmd.id, cmd.type, kind, inst.id, inst.mode, spec_for(inst, kind))
+                    )
+        failures: list[Exception] = []
+        for c in claimed:  # un échec pour une commande n'empêche pas d'envoyer les suivantes
+            try:
+                await self._call(c)
+            except Exception as exc:
+                log.exception("commande_non_suivie", command_id=str(c.id), type=c.type)
+                failures.append(exc)
+        if failures:
+            raise failures[0]
+
+    async def _refusal(self, c: _Claimed, adapter: EngineAdapter, ref: InstanceRef) -> str | None:
+        """Relevé frais juste avant l'envoi : la demande a pu être acceptée sur un état qui
+        n'est plus vrai (I5)."""
+        status = await observe_status(adapter, ref, self._clock, self._call_timeout_s)
+        return risk_increase_refusal(
+            c.type,
+            mode=c.mode,
+            observed_state=status.state,
+            observed_mode=status.mode,
+            observed_at=status.observed_at,
+            now=self._clock(),
+            stale_after_s=self._stale_after_s,
+        )
 
     async def _call(self, c: _Claimed) -> None:
+        refusal: str | None = None
         try:
-            async with asyncio.timeout(self._call_timeout_s):
-                adapter = self._adapters[c.kind]
-                if c.type == "deploy":
-                    self._register(await adapter.deploy(c.spec))
-                else:
-                    ref = InstanceRef(engine=c.kind, instance_id=c.instance_id)
-                    await getattr(adapter, _METHOD[c.type])(ref)
+            adapter = self._adapters[c.kind]
+            ref = InstanceRef(engine=c.kind, instance_id=c.instance_id)
+            if c.type in RISK_INCREASING:
+                refusal = await self._refusal(c, adapter, ref)
+            if refusal is None:
+                async with asyncio.timeout(self._call_timeout_s):
+                    if c.type == "deploy":
+                        self._register(await adapter.deploy(c.spec))
+                    else:
+                        await getattr(adapter, _METHOD[c.type])(ref)
         except (EngineUnreachable, TimeoutError):
             # Ni accusé ni échec : on ignore si le moteur a reçu l'ordre. Pas de rejeu.
             log.warning("commande_sans_reponse", command_id=str(c.id), type=c.type)
             return
         except Exception as exc:
             await self._finish(c.id, "failed", {"reason": f"{type(exc).__name__}: {exc}"[:200]})
+            return
+        if refusal is not None:  # rien n'a été envoyé au moteur
+            await self._finish(c.id, "failed", {"reason": refusal})
             return
         await self._finish(c.id, "acknowledged")
 
