@@ -18,3 +18,4 @@ test-results/
 secrets/
 .pnpm-store/
 .claude/
+google-chrome-stable_current_amd64.deb
