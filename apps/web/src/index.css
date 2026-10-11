@@ -39,8 +39,9 @@
   --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* Thème sombre : le réglage du système, sauf choix explicite de l'opérateur (data-theme). */
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --background: oklch(0.195 0.014 255);
     --foreground: oklch(0.94 0.008 255);
     --card: oklch(0.235 0.016 255);
@@ -58,6 +59,33 @@
 
     --elevation-panel: 0 1px 2px oklch(0.1 0.02 255 / 0.4), 0 4px 16px oklch(0.1 0.02 255 / 0.3);
   }
+}
+
+/* shortcut: bloc dupliqué (un @media ne se partage pas avec un sélecteur) ; garder les deux identiques. */
+:root[data-theme="dark"] {
+  --background: oklch(0.195 0.014 255);
+  --foreground: oklch(0.94 0.008 255);
+  --card: oklch(0.235 0.016 255);
+  --muted: oklch(0.285 0.016 255);
+  --muted-foreground: oklch(0.74 0.016 255);
+  --border: oklch(0.35 0.016 255);
+  --input: oklch(0.62 0.022 255);
+
+  --primary: oklch(0.78 0.1 245);
+  --primary-foreground: oklch(0.2 0.03 255);
+  --ring: oklch(0.78 0.1 245);
+
+  --live: oklch(0.7 0.17 25);
+  --live-foreground: oklch(0.2 0.03 255);
+
+  --elevation-panel: 0 1px 2px oklch(0.1 0.02 255 / 0.4), 0 4px 16px oklch(0.1 0.02 255 / 0.3);
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
 }
 
 @theme {

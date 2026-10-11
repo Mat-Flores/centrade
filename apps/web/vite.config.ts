@@ -12,5 +12,5 @@ export default defineConfig({
   resolve: { alias: { "@": path.resolve(import.meta.dirname, "src") } },
   build: { assetsInlineLimit: 0 },
   preview: { headers: { "Content-Security-Policy": csp } },
-  test: { include: ["src/**/*.test.ts"] },
+  test: { include: ["src/**/*.test.{ts,tsx}"] },
 });

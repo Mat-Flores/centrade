@@ -1,6 +1,7 @@
 import path from "node:path";
-import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Page } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+
+import { expectNoViolation, mockAuth } from "./support";
 
 const CAPTURES = path.resolve(import.meta.dirname, "../../../docs/captures/m0");
 const LOGIN_API = "**/api/v1/auth/login";
@@ -10,13 +11,11 @@ const viewports = {
   tablette: { width: 820, height: 1180 },
 };
 
-async function expectNoSeriousViolation(page: Page) {
-  const { violations } = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
-    .analyze();
-  // Toute violation bloque, quelle que soit sa gravité.
-  expect(violations.map((v) => v.id)).toEqual([]);
-}
+const expectNoSeriousViolation = expectNoViolation;
+
+test.beforeEach(async ({ page }) => {
+  await mockAuth(page);
+});
 
 for (const scheme of ["light", "dark"] as const) {
   for (const [name, viewport] of Object.entries(viewports)) {
@@ -41,7 +40,10 @@ for (const scheme of ["light", "dark"] as const) {
       await expectNoSeriousViolation(page);
 
       await page.evaluate(() => document.fonts.ready);
-      await page.screenshot({ path: path.join(CAPTURES, `login-${scheme === "light" ? "clair" : "sombre"}-${name}.png`) });
+      // Captures de référence : régénérées à la demande (CAPTURES=1), pas à chaque run.
+      if (process.env.CAPTURES === "1") {
+          await page.screenshot({ path: path.join(CAPTURES, `login-${scheme === "light" ? "clair" : "sombre"}-${name}.png`) });
+      }
 
       // État d'erreur (API absente) : même contrôle axe dans ce thème.
       await page.route(LOGIN_API, (route) => route.fulfill({ status: 404, body: "not found" }));
@@ -58,6 +60,7 @@ for (const scheme of ["light", "dark"] as const) {
 test("login : parcours au clavier, erreur 404 reliée au formulaire, mot de passe non conservé", async ({ page }) => {
   await page.route(LOGIN_API, (route) => route.fulfill({ status: 404, body: "not found" }));
   await page.goto("/");
+  await expect(page.getByLabel("Identifiant")).toBeVisible(); // le formulaire attend la réponse de /auth/me
 
   await page.keyboard.press("Tab");
   await expect(page.getByLabel("Identifiant")).toBeFocused();

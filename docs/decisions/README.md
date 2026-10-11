@@ -10,3 +10,4 @@ Format : titre `ADR-NNNN : …`, puis les sections Statut (Proposée, Acceptée,
 | 0002 | Dépendances du front à M0 | Acceptée |
 | 0003 | Caddy recompilé dans le dépôt | Acceptée |
 | 0004 | Dépendances du jalon M1 | Acceptée |
+| 0005 | Dépendances du front à M1 | Acceptée |
