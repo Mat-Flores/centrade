@@ -38,7 +38,7 @@ select = ["E", "F", "I", "UP", "B", "S", "ASYNC", "RUF"]
 
 [tool.mypy]
 python_version = "3.12"
-mypy_path = ["apps/api", "packages/core", "packages/adapters/fake", "packages/adapters/freqtrade", "apps/worker"]
+mypy_path = ["apps/api", "packages/core", "packages/adapters/fake", "packages/adapters/freqtrade", "apps/worker", "tests"]
 files = [
     "apps/api/centrade_api",
     "apps/api/tests",
@@ -64,7 +64,7 @@ disallow_subclassing_any = false
 
 [tool.pytest.ini_options]
 testpaths = ["apps/api/tests", "tests"]
-pythonpath = ["apps/api", "packages/core", "packages/adapters/fake", "packages/adapters/freqtrade", "apps/worker"]
+pythonpath = ["apps/api", "packages/core", "packages/adapters/fake", "packages/adapters/freqtrade", "apps/worker", "tests"]
 markers = ["docker: exige un Docker local (sautée si absent)"]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"

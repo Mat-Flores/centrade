@@ -2,20 +2,15 @@
 Côté configuration générée, puis côté réseau (Compose et gabarit du runner)."""
 
 import json
-import sys
 from pathlib import Path
-from typing import get_args
+from typing import Any, get_args
 from uuid import uuid4
 
 from centrade_core.engine.types import Mode
-from hypothesis import given
-from hypothesis import strategies as st
-
-sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages" / "adapters" / "freqtrade"))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
 from centrade_freqtrade.config import config_file, render_config
 from freqtrade_adapter.support import make_spec
+from hypothesis import given
+from hypothesis import strategies as st
 
 modes = st.sampled_from(get_args(Mode))
 
@@ -45,12 +40,12 @@ def test_i02_moteur_ne_joint_que_risk_et_recepteur(tmp_path: Path) -> None:
     """Le conteneur de moteur n'est que sur `engines` (interne), sans port publié ; ni la base,
     ni le bus, ni l'API, ni Docker n'y sont joignables. Membres de `engines` : le worker (récepteur
     d'événements) ; le Risk service s'y ajoute à M3."""
-    import yaml
+    import yaml  # type: ignore[import-untyped]
     from centrade_worker.runner import ContainerSpec, DockerRunner
 
     root = Path(__file__).resolve().parents[2] / "deploy" / "compose"
-    services: dict[str, dict[str, object]] = {}
-    networks: dict[str, dict[str, object]] = {}
+    services: dict[str, dict[str, Any]] = {}
+    networks: dict[str, dict[str, Any]] = {}
     for name in ("core.yml", "engines.yml"):
         doc = yaml.safe_load((root / name).read_text(encoding="utf-8"))
         networks.update(doc["networks"])

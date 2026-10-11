@@ -1,9 +1,7 @@
-"""Fabriques partagées. Le paquet de l'adaptateur n'est pas encore dans `pythonpath`
-(pyproject.toml) : on l'ajoute ici, sans toucher à la configuration commune."""
+"""Fabriques partagées."""
 
 from __future__ import annotations
 
-import sys
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -13,7 +11,6 @@ import yaml  # type: ignore[import-untyped]
 from centrade_core.engine.types import InstanceSpec, Manifest, Mode
 
 ROOT = Path(__file__).resolve().parents[2]
-sys.path.insert(0, str(ROOT / "packages" / "adapters" / "freqtrade"))
 
 SMA_DIR = ROOT / "strategies" / "sma-cross"
 
