@@ -6,11 +6,15 @@ Livraison au moins une fois : un message non acquitté est relivré (traitement 
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any
 
+import structlog
 from redis.asyncio import Redis
 from redis.exceptions import ResponseError
+
+log = structlog.get_logger("bus")
 
 EVENTS_STREAM = "events"
 FIELD = "data"  # une seule clé : le JSON du message
@@ -68,3 +72,13 @@ class Bus:
 HEARTBEAT_KEY = (
     "worker:heartbeat"  # valeur : horodatage ISO UTC ; la clé expire si le worker se tait
 )
+
+NOTIFY_CHANNEL = "notify"  # Pub/Sub : quelque chose a changé, l'API relit la base (pas d'état ici)
+
+
+async def notify(redis: Redis, kind: str, ident: object) -> None:
+    """Prévient les flux SSE (`instance`, `command`, `alert`). Au mieux : la base fait foi."""
+    try:
+        await redis.publish(NOTIFY_CHANNEL, json.dumps({"kind": kind, "id": str(ident)}))
+    except Exception:
+        log.warning("notification_perdue", kind=kind)  # le flux se resynchronise au prochain tour

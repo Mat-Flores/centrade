@@ -5,9 +5,11 @@ Chaque ligne garde l'heure de l'observation dont elle provient (`observed_at`, I
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
+from centrade_core.audit import SYSTEM_WORKER, write_audit
 from centrade_core.engine.types import InstanceStatus, Snapshot
 from centrade_core.models.trading import Alert, Instance, Order, Position
 from sqlalchemy import delete, func, select, update
@@ -23,7 +25,8 @@ def _currency(symbol: str) -> str:
 
 async def apply_observation(
     s: AsyncSession, instance_id: UUID, status: InstanceStatus, snap: Snapshot
-) -> None:
+) -> list[UUID]:
+    """Remplace les projections par le relevé. Rend les alertes résolues (déjà auditées)."""
     await s.execute(
         update(Instance)
         .where(Instance.id == instance_id)
@@ -85,20 +88,40 @@ async def apply_observation(
                 index_elements=["client_order_id"], set_={**row, "updated_at": func.now()}
             )
         )
-    await s.execute(  # le moteur répond de nouveau : l'alerte se résout
-        update(Alert)
-        .where(
-            Alert.rule == UNREACHABLE_RULE,
-            Alert.target_id == instance_id,
-            Alert.status != "resolved",
+    resolved = (  # le moteur répond de nouveau : l'alerte se résout
+        await s.scalars(
+            update(Alert)
+            .where(
+                Alert.rule == UNREACHABLE_RULE,
+                Alert.target_id == instance_id,
+                Alert.status != "resolved",
+            )
+            .values(status="resolved", resolved_at=func.now())
+            .returning(Alert.id)
         )
-        .values(status="resolved", resolved_at=func.now())
-    )
+    ).all()
+    for alert_id in resolved:  # l'audit en dernier : même ordre de verrous que l'API
+        await write_audit(
+            s,
+            actor=SYSTEM_WORKER,
+            action="alert.resolved",
+            target=f"alert:{alert_id}",
+            before={"status": "open"},
+            after={"status": "resolved"},
+        )
+    return list(resolved)
 
 
-async def mark_unknown(s: AsyncSession, instance_id: UUID, now: datetime) -> bool:
+@dataclass(frozen=True)
+class Unknown:
+    became_unknown: bool  # l'instance n'était pas déjà `unknown`
+    alert_id: UUID | None  # alerte créée à ce tour
+
+
+async def mark_unknown(s: AsyncSession, instance_id: UUID, now: datetime) -> Unknown:
     """Moteur injoignable : état `unknown`. Positions et ordres gardent leur ancienne observation
-    (ils deviendront périmés) ; rien n'est remis à zéro. Rend True si une alerte a été créée."""
+    (ils deviendront périmés) ; rien n'est remis à zéro."""
+    previous = await s.scalar(select(Instance.observed_state).where(Instance.id == instance_id))
     await s.execute(
         update(Instance)
         .where(Instance.id == instance_id)
@@ -111,10 +134,9 @@ async def mark_unknown(s: AsyncSession, instance_id: UUID, now: datetime) -> boo
             Alert.status != "resolved",
         )
     )
-    if open_alert is not None:
-        return False
-    s.add(
-        Alert(
+    alert = None
+    if open_alert is None:
+        alert = Alert(
             rule=UNREACHABLE_RULE,
             severity="critical",
             target_kind="instance",
@@ -122,5 +144,24 @@ async def mark_unknown(s: AsyncSession, instance_id: UUID, now: datetime) -> boo
             message="Moteur injoignable : état observé inconnu, relevés conservés mais périmés.",
             invariant="I1",
         )
-    )
-    return True
+        s.add(alert)
+        await s.flush()
+    became = previous is not None and previous != "unknown"
+    if became:  # un automatisme change un état : il est audité (I14)
+        await write_audit(
+            s,
+            actor=SYSTEM_WORKER,
+            action="instance.observed_unknown",
+            target=f"instance:{instance_id}",
+            before={"observed_state": previous},
+            after={"observed_state": "unknown"},
+        )
+    if alert is not None:
+        await write_audit(
+            s,
+            actor=SYSTEM_WORKER,
+            action="alert.raised",
+            target=f"alert:{alert.id}",
+            after={"rule": alert.rule, "severity": alert.severity},
+        )
+    return Unknown(became, None if alert is None else alert.id)

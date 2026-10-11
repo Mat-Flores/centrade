@@ -48,7 +48,9 @@ async def test_ingestion_idempotente_par_id_et_par_seq(migrated_url: str, redis_
         from centrade_core.models.trading import Event
 
         async with w.sessions() as s:
-            assert (await s.scalar(select(Event.ts_ingest))) == T0  # posé à la réception
+            assert (
+                await s.scalar(select(Event.ts_ingest).where(Event.instance_id == ref.instance_id))
+            ) == T0  # posé à la réception
 
 
 async def test_trou_et_desordre_detectes(migrated_url: str, redis_url: str) -> None:

@@ -168,7 +168,11 @@ class FakeEngine:
     async def deploy(self, spec: InstanceSpec) -> InstanceRef:
         ref = InstanceRef(engine=ENGINE, instance_id=spec.instance_id)
         if spec.instance_id not in self._insts:  # idempotent
+            # `params["failures"]` : modes de panne dès le déploiement (simulation sans route).
+            failures = {Failure(name) for name in spec.params.get("failures", ())}
             self._insts[spec.instance_id] = _Inst(spec, dict(self.render_config(spec).values))
+            for mode in failures:
+                self.set_failure(ref, mode)
         return ref
 
     async def start(self, ref: InstanceRef) -> None:

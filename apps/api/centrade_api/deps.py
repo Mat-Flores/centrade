@@ -5,7 +5,8 @@ from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 from fastapi import Request
-from sqlalchemy.ext.asyncio import AsyncSession
+from redis.asyncio import Redis
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
 async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
@@ -31,3 +32,12 @@ def client_ip(request: Request) -> str | None:
         return str(ipaddress.ip_address(request.client.host))
     except ValueError:
         return None
+
+
+def get_session_factory(request: Request) -> async_sessionmaker[AsyncSession] | None:
+    """Fabrique de sessions du processus (None si le cycle de vie n'a pas tourné)."""
+    return getattr(request.app.state, "session_factory", None)
+
+
+def get_redis(request: Request) -> Redis | None:
+    return getattr(request.app.state, "redis", None)

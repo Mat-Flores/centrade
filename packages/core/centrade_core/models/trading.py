@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import BigInteger, ForeignKey, Text, func
+from sqlalchemy import BigInteger, ForeignKey, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -34,19 +34,23 @@ class Instance(Base):
     observed_state: Mapped[str] = mapped_column(server_default="unknown")
     observed_at: Mapped[datetime | None]
     observed_mode: Mapped[str | None]
+    params: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default="{}")
     created_at: Mapped[datetime] = now_col()
     updated_at: Mapped[datetime] = updated_at()
 
 
 class Command(Base):
     __tablename__ = "commands"
+    # La clé d'idempotence est propre à son auteur.
+    __table_args__ = (UniqueConstraint("actor", "idempotency_key"),)
 
     id: Mapped[UUID] = uuid_pk()
     instance_id: Mapped[UUID] = mapped_column(ForeignKey("instances.id"), index=True)
     type: Mapped[str]
     actor: Mapped[str]
-    idempotency_key: Mapped[str] = mapped_column(unique=True)
-    status: Mapped[str] = mapped_column(server_default="requested")
+    idempotency_key: Mapped[str]
+    request_hash: Mapped[str] = mapped_column(server_default="")  # instance + type, anti-rejeu
+    status: Mapped[str] = mapped_column(server_default="requested", index=True)
     correlation_id: Mapped[UUID]
     deadline_at: Mapped[datetime]
     requested_at: Mapped[datetime] = now_col()

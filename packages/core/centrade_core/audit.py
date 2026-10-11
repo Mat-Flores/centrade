@@ -13,6 +13,7 @@ from centrade_core.ids import uuid7
 from centrade_core.models import AuditLog
 
 GENESIS = "0" * 64
+SYSTEM_WORKER = "system:worker"  # auteur des actions du worker (I14)
 _LOCK_KEY = 0x43454E54  # arbitraire, propre au journal d'audit
 
 

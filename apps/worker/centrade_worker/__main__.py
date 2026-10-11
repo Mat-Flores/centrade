@@ -42,6 +42,7 @@ async def main() -> None:
     stop = asyncio.Event()
     install_stop_signals(stop)
     try:
+        await worker.load_instances()
         await worker.run(stop)
     finally:
         await redis.aclose()

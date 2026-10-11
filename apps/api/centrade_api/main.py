@@ -1,27 +1,44 @@
-from collections.abc import AsyncIterator
+import asyncio
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import datetime, timedelta
+from typing import Annotated, Literal
 
 import structlog
+from centrade_core.bus import HEARTBEAT_KEY
 from centrade_core.db import make_engine, make_session_factory
-from centrade_core.settings import get_settings
-from fastapi import Depends, FastAPI
+from centrade_core.settings import Settings, get_settings
+from fastapi import Depends, FastAPI, Request
 from pydantic import AwareDatetime, BaseModel
+from redis.asyncio import Redis
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from centrade_api.auth import require_same_origin
 from centrade_api.auth import router as auth_router
+from centrade_api.deps import get_redis, get_session_factory, utcnow
 from centrade_api.errors import install_error_handlers
+from centrade_api.feeds import router as feeds_router
+from centrade_api.instances import router as instances_router
 from centrade_api.logging import configure_logging
+from centrade_api.stream import router as stream_router
 
 configure_logging()
 log = structlog.get_logger()
 
 
+class Check(BaseModel):
+    status: Literal["ok", "down"]
+    observed_at: AwareDatetime  # chaque état annoncé est observé et daté (I1)
+    detail: str | None = None
+
+
 class Health(BaseModel):
-    status: str
+    status: Literal["ok", "degraded"]
     ts: AwareDatetime
+    checks: dict[str, Check]
 
 
 class NoStore:
@@ -54,7 +71,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings.master_key()  # clé absente ou invalide : l'API ne démarre pas
     engine = make_engine(settings.database_url())
     app.state.session_factory = make_session_factory(engine)
+    app.state.redis = Redis.from_url(settings.redis_url, decode_responses=True)
     yield
+    await app.state.redis.aclose()
     await engine.dispose()
 
 
@@ -73,12 +92,62 @@ def create_app() -> FastAPI:
     install_error_handlers(app)
     app.add_middleware(NoStore)
     app.include_router(auth_router)
+    app.include_router(instances_router)
+    app.include_router(feeds_router)
+    app.include_router(stream_router)
 
     @app.get("/api/v1/system/health")
-    async def health() -> Health:
-        """Vivacité du processus API uniquement (ni Postgres ni Redis, I1)."""
-        log.debug("health_checked")  # sondé toutes les 5 s : pas au niveau INFO
-        return Health(status="ok", ts=datetime.now(UTC))
+    async def health(
+        now: Annotated[datetime, Depends(utcnow)],
+        factory: Annotated[async_sessionmaker[AsyncSession] | None, Depends(get_session_factory)],
+        redis: Annotated[Redis | None, Depends(get_redis)],
+        request: Request,
+    ) -> Health:
+        """Sans session. Base, bus et battement du worker : chacun observé et daté (I1).
+        Toujours 200 : un composant en panne rend `degraded`, il ne fait pas redémarrer l'API."""
+
+        async def probe(name: str, check: Callable[[], Awaitable[str | None]]) -> Check:
+            try:
+                async with asyncio.timeout(2):
+                    detail = await check()
+                return Check(status="ok", observed_at=now, detail=detail)
+            except Exception as exc:  # panne de n'importe quelle nature : composant « down »
+                log.warning("sante_composant_en_panne", component=name, error=type(exc).__name__)
+                return Check(status="down", observed_at=now)
+
+        async def database() -> str | None:
+            if factory is None:
+                raise RuntimeError("base non configurée")
+            async with factory() as s:
+                await s.execute(text("SELECT 1"))
+            return None
+
+        async def bus() -> str | None:
+            if redis is None:
+                raise RuntimeError("bus non configuré")
+            await redis.ping()
+            return None
+
+        async def worker() -> str | None:
+            if redis is None:
+                raise RuntimeError("bus non configuré")
+            raw = await redis.get(HEARTBEAT_KEY)  # la clé expire si le worker se tait
+            if raw is None:
+                raise RuntimeError("battement absent")
+            beat = str(raw)
+            cfg: Settings = request.app.dependency_overrides.get(get_settings, get_settings)()
+            age = now - datetime.fromisoformat(beat)
+            if age > timedelta(seconds=cfg.worker_heartbeat_ttl_s):
+                raise RuntimeError("battement trop ancien")
+            return beat
+
+        checks = {
+            "database": await probe("database", database),
+            "bus": await probe("bus", bus),
+            "worker": await probe("worker", worker),
+        }
+        ok = all(c.status == "ok" for c in checks.values())
+        return Health(status="ok" if ok else "degraded", ts=now, checks=checks)
 
     return app
 
