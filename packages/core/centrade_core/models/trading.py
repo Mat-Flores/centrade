@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import BigInteger, ForeignKey, Text, UniqueConstraint, func
+from sqlalchemy import BigInteger, ForeignKey, Index, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -121,6 +121,7 @@ class Position(Base):
 
 class Order(Base):
     __tablename__ = "orders"
+    __table_args__ = (Index("ix_orders_created_at_id", "created_at", "id"),)  # tri de GET /orders
 
     id: Mapped[UUID] = uuid_pk()
     instance_id: Mapped[UUID] = mapped_column(ForeignKey("instances.id"), index=True)
@@ -228,7 +229,10 @@ class Trade(Base):
     """Position close ; projection dérivée des événements."""
 
     __tablename__ = "trades"
-    __table_args__ = (UniqueConstraint("instance_id", "external_id"),)
+    __table_args__ = (
+        UniqueConstraint("instance_id", "external_id"),
+        Index("ix_trades_closed_at_id", "closed_at", "id"),  # tri de GET /trades
+    )
 
     id: Mapped[UUID] = uuid_pk()
     instance_id: Mapped[UUID] = mapped_column(ForeignKey("instances.id"), index=True)

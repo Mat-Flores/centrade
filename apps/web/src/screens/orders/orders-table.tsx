@@ -8,6 +8,8 @@ import type { Order } from "@/lib/trading";
 import { InstanceCell, num } from "./cells";
 
 const t = fr.orders.ordersList;
+// L'action (annuler, ou pourquoi elle n'existe pas) reste collée à droite quand le tableau défile.
+const PIN = "sticky right-0 z-[1] min-w-44 border-l bg-card";
 
 /**
  * Ordres en cours. Le bouton d'annulation n'existe que pour un ordre d'entrée encore ouvert (`cancelable`) ;
@@ -40,7 +42,7 @@ export function OrdersTable({
           <th scope="col" className={TH}>{t.columns.status}</th>
           <th scope="col" className={THR}>{t.columns.quantity}</th>
           <th scope="col" className={THR}>{t.columns.price}</th>
-          <th scope="col" className={TH}>{t.columns.action}</th>
+          <th scope="col" className={`${TH} ${PIN}`}>{t.columns.action}</th>
         </tr>
       </thead>
       <tbody className="divide-y">
@@ -70,7 +72,7 @@ export function OrdersTable({
                   <ObservedValue mono value={`${num(o.price)}\u00a0${o.currency}`} observedAt={o.observed_at} serverTime={nowIso} staleAfterMs={ENGINE_STALE_MS} className="justify-end" />
                 )}
               </td>
-              <td className={TD}>
+              <td className={`${TD} ${PIN}`}>
                 {o.cancelable && entry ? (
                   canAct ? (
                     <Button type="button" variant="outline" aria-label={t.cancelLabel(o.instrument, name)} onClick={() => onCancel(o)}>

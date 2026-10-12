@@ -1,9 +1,10 @@
 """I10 : l'empreinte de déploiement ne dépend que de ce qui fait le comportement, jamais du mode."""
 
+import json
 from typing import Any
 
 from centrade_core.deployment import config_hash, deployment_fingerprint
-from hypothesis import given
+from hypothesis import example, given
 from hypothesis import strategies as st
 
 BASE: dict[str, Any] = {
@@ -64,6 +65,7 @@ def test_i10_independant_de_l_ordre_des_cles(params: dict[str, Any], seed: Any) 
     assert config_hash(params) == config_hash(dict(items))
 
 
+@example(a={"": True}, b={"": 1})
 @given(
     a=st.dictionaries(st.text(), json_values, max_size=4),
     b=st.dictionaries(st.text(), json_values, max_size=4),
@@ -73,7 +75,12 @@ def test_i10_parametres_differents_empreintes_differentes(
 ) -> None:
     fa = deployment_fingerprint(**{**BASE, "params": a})
     fb = deployment_fingerprint(**{**BASE, "params": b})
-    assert (fa == fb) == (a == b)
+
+    # JSON canonique, pas `a == b` : en Python `{"": True} == {"": 1}`, pas en JSON.
+    def canon(d: dict[str, Any]) -> str:
+        return json.dumps(d, sort_keys=True)
+
+    assert (fa == fb) == (canon(a) == canon(b))
 
 
 # --- au déploiement et à la vérification de F9 (worker) -----------------------------------------

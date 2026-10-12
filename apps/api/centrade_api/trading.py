@@ -3,17 +3,18 @@
 Aucune route ne crée d'ordre ni n'annule une sortie ou un stop (SPEC §8) : annuler une sortie
 augmente le risque, la plateforme ne le propose pas. Fermer et annuler une entrée réduisent le
 risque : commandes sans 2FA, jamais refusées pour un état observé inconnu ou périmé (I4).
-Argent et quantités en chaînes décimales, avec la devise ; chaque ligne porte le mode de son
-instance pour que l'interface ne mélange jamais paper et live (§9).
+Argent et quantités en chaînes décimales, avec la devise ; chaque ligne porte le mode voulu et le
+mode observé (daté) de son instance pour que l'interface ne mélange jamais paper et live (§9).
 """
 
 from __future__ import annotations
 
 from datetime import datetime
 from decimal import Decimal
-from typing import Any, Literal, get_args
+from typing import Any, Literal, cast
 from uuid import UUID
 
+from centrade_core.engine.types import EXIT_CAUSES
 from centrade_core.models.trading import Account, Instance, Order, Position, Trade
 from centrade_core.settings import Settings
 from fastapi import APIRouter, HTTPException, Request, Response
@@ -33,23 +34,19 @@ from centrade_api.instances import (
     _page_args,
     request_command,
 )
-from centrade_api.schemas import CommandAccepted, CommandOut, Page, encode_cursor
+from centrade_api.schemas import (
+    CommandAccepted,
+    CommandOut,
+    Observed,
+    ObservedMode,
+    Page,
+    encode_cursor,
+    observe,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["trading"])
 
-ExitCause = Literal[
-    "stop_loss",
-    "trailing_stop",
-    "take_profit",
-    "signal",
-    "timeout",
-    "manual",
-    "kill_switch",
-    "engine_protection",
-    "liquidation",
-    "unknown",
-]
-ENTRY_INTENTS = frozenset({"entry", "increase"})  # les seuls ordres que l'on peut annuler
+ENTRY_INTENTS = frozenset({"entry"})  # seul ordre annulable : les renforts sont désactivés en V1
 Mode = Literal["paper", "live"]
 
 
@@ -66,10 +63,12 @@ def _stale(at: datetime, now: datetime, cfg: Settings) -> bool:
 
 
 class _Owned(BaseModel):
-    """Ce que toute ligne dit de son instance : mode et compte (None : instance sans compte)."""
+    """Ce que toute ligne dit de son instance : modes et compte (None : instance sans compte)."""
 
     instance_id: UUID
-    mode: Mode
+    mode: Mode  # = desired_mode, gardé pour les clients existants
+    desired_mode: Mode  # voulu
+    observed_mode: Observed[ObservedMode]  # observé, daté ; « unknown » si jamais observé
     account_id: UUID | None
     account_label: str | None
 
@@ -117,7 +116,7 @@ class TradeOut(_Owned):
     entry_price: str
     exit_price: str
     entry_cause: str
-    exit_cause: ExitCause
+    exit_cause: str  # une valeur de EXIT_CAUSES
     pnl: str
     fees: str
     currency: str
@@ -129,8 +128,15 @@ class TradeOut(_Owned):
 Owner = dict[str, Any]  # mode, account_id, account_label d'une ligne (voir `_owner`)
 
 
-def _owner(row: Any) -> Owner:
-    return {"mode": row[1], "account_id": row[2], "account_label": row[3]}
+def _owner(row: Any, now: datetime, cfg: Settings) -> Owner:
+    seen = row[4] if row[4] and row[5] else "unknown"
+    return {
+        "mode": row[1],
+        "desired_mode": row[1],
+        "observed_mode": observe(cast(ObservedMode, seen), row[5], now, cfg.observed_stale_after_s),
+        "account_id": row[2],
+        "account_label": row[3],
+    }
 
 
 def order_of(o: Order, own: Owner, now: datetime, cfg: Settings) -> OrderOut:
@@ -183,7 +189,7 @@ def position_of(p: Position, own: Owner, now: datetime, cfg: Settings) -> Positi
 
 
 def trade_of(t: Trade, own: Owner, now: datetime, cfg: Settings) -> TradeOut:
-    cause = t.exit_cause if t.exit_cause in get_args(ExitCause) else "unknown"
+    cause = t.exit_cause if t.exit_cause in EXIT_CAUSES else "unknown"
     return TradeOut(
         id=t.id,
         instance_id=t.instance_id,
@@ -215,7 +221,14 @@ _KINDS: dict[str, tuple[Any, Any, Any]] = {
 def _select(kind: str) -> Select[Any]:
     model = _KINDS[kind][0]
     return (
-        select(model, Instance.mode, Instance.account_id, Account.label)
+        select(
+            model,
+            Instance.mode,
+            Instance.account_id,
+            Account.label,
+            Instance.observed_mode,
+            Instance.observed_at,
+        )
         .join(Instance, Instance.id == model.instance_id)
         .outerjoin(Account, Account.id == Instance.account_id)
     )
@@ -226,7 +239,7 @@ async def trading_out(
 ) -> BaseModel | None:
     model, build, _ = _KINDS[kind]
     row = (await db.execute(_select(kind).where(model.id == ident))).one_or_none()
-    return None if row is None else build(row[0], _owner(row), now, cfg)
+    return None if row is None else build(row[0], _owner(row, now, cfg), now, cfg)
 
 
 async def _page(
@@ -256,7 +269,9 @@ async def _page(
         head = now if kind == "position" else getattr(last, order.key)
         nxt = encode_cursor(head, last.id)
     return Page(
-        items=[build(r[0], _owner(r), now, cfg) for r in page], next_cursor=nxt, server_time=now
+        items=[build(r[0], _owner(r, now, cfg), now, cfg) for r in page],
+        next_cursor=nxt,
+        server_time=now,
     )
 
 
@@ -363,7 +378,7 @@ async def cancel_order(
     if order.intent not in ENTRY_INTENTS:
         raise HTTPException(
             409,
-            "Annuler une sortie ou un stop augmente le risque : la plateforme ne le propose pas.",
+            "Seul un ordre d'entrée s'annule : annuler une sortie ou un stop augmente le risque.",
         )
     if order.status != "open":
         raise HTTPException(409, "Cet ordre n'est plus ouvert.")

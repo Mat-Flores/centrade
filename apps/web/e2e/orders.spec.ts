@@ -264,6 +264,22 @@ test("tablette (820 px) : protection, NON PROTÉGÉE et Fermer restent dans le c
   await expectInView(posRow(page, "BTC/USDT", "alpha").getByText("Protégée"));
 });
 
+test("tablette (820 px) : Annuler l'ordre reste dans le champ visible", async ({ page }) => {
+  await page.setViewportSize({ width: 820, height: 1180 });
+  await mockTrading(page);
+  await page.goto("/orders");
+  const cancel = page.getByRole("button", { name: /Annuler l'ordre/ });
+  await expect(cancel.first()).toBeVisible();
+  for (const b of await cancel.all()) await expectInView(b);
+  // Toute la colonne est collée à droite (comme « Fermer »), pas seulement le bouton : elle reste dans le champ
+  // même quand une valeur plus longue élargit le tableau.
+  const pinned = [page.getByRole("columnheader", { name: "Annulation" }), ...(await page.locator("tr[data-order] td:last-child").all())];
+  for (const cell of pinned) {
+    await expectInView(cell);
+    await expect(cell).toHaveCSS("position", "sticky");
+  }
+});
+
 test("bureau (1280 px) : aucune position coupée, le tableau des trades tient dans sa région", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 });
   await mockTrading(page);

@@ -259,7 +259,7 @@ async def test_detail_derive_et_configuration_effective_datees_ou_inconnues(stac
         row = await s.get(Instance, inst.id)
         assert row is not None
         row.effective_config, row.effective_config_at = {"stoploss": "-0.05"}, at
-        row.drift = {"stoploss": {"expected": "-0.05", "observed": "-0.5"}}
+        row.drift = [{"key": "stoploss", "expected": "-0.05", "observed": "-0.5"}]
         row.deployment_fingerprint, row.config_hash = "fp", "ch"
     d = await get(c, f"{I}/{inst.id}")
     assert d["effective_config"]["value"] == {"stoploss": "-0.05"}
@@ -320,6 +320,12 @@ async def test_lectures_positions_ordres_trades(stack: Stack) -> None:
     by_account = (await get(c, f"/api/v1/orders?account_id={acct[1]}"))["items"]
     assert [o["intent"] for o in by_account] == ["entry"] and by_account[0]["decision_id"]
     assert by_account[0]["cancelable"] is True
+    assert by_account[0]["desired_mode"] == by_account[0]["mode"] == "paper"
+    assert by_account[0]["observed_mode"] == {
+        "value": "unknown",
+        "observed_at": None,
+        "stale": False,
+    }
     t = (await get(c, "/api/v1/trades"))["items"][0]
     assert (t["exit_cause"], t["pnl"], t["mode"]) == ("stop_loss", "-5", "paper")
     page = await get(c, "/api/v1/positions?limit=1")
@@ -350,12 +356,12 @@ async def test_annuler_un_ordre_seulement_si_c_est_une_entree(stack: Stack, inte
     order = await _row(stack, _order(inst, intent))
     r = await c.delete(f"/api/v1/orders/{order.id}", headers=_key())
     cmds = await _commands(stack, inst.id, "cancel_entry_order")
-    if intent in ("entry", "increase"):
+    if intent == "entry":  # les renforts sont désactivés en V1 : le worker les refuse aussi
         assert r.status_code == 202, r.text
         assert [x.args for x in cmds] == [{"order_id": order.client_order_id}]
         assert r.json()["command_id"] == str(cmds[0].id)
     else:
-        assert r.status_code == 409 and "augmente le risque" in r.json()["detail"]
+        assert r.status_code == 409 and "Seul un ordre d'entrée" in r.json()["detail"]
         assert cmds == []
 
 
@@ -421,3 +427,28 @@ async def test_openapi_sans_nom_de_moteur_ni_creation_d_ordre(stack: Stack) -> N
     assert not [
         p for p in spec["paths"] if p.startswith("/api/v1/orders/") and "post" in spec["paths"][p]
     ]
+
+
+async def test_lignes_portent_le_mode_voulu_et_le_mode_observe_distincts(stack: Stack) -> None:
+    c = await stack.client("viewer")
+    seen = stack.world.clock.now
+    inst = await _instance(stack, observed_mode="live", observed_at=seen)
+    await _row(stack, _position(inst, observed_at=seen))
+    await _row(stack, _order(inst, "entry"))
+    for path in ("positions", "orders"):
+        (row,) = (await get(c, f"/api/v1/{path}?instance_id={inst.id}"))["items"]
+        assert row["desired_mode"] == row["mode"] == "paper"
+        assert row["observed_mode"]["value"] == "live"
+        assert (
+            row["observed_mode"]["observed_at"] is not None
+            and row["observed_mode"]["stale"] is False
+        )
+
+
+async def test_cancelable_seulement_pour_une_entree_ouverte(stack: Stack) -> None:
+    c = await stack.client("viewer")
+    inst = await _instance(stack)
+    for intent in get_args(Intent):
+        await _row(stack, _order(inst, intent))
+    rows = (await get(c, f"/api/v1/orders?instance_id={inst.id}"))["items"]
+    assert {r["intent"] for r in rows if r["cancelable"]} == {"entry"}

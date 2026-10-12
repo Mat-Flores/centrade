@@ -69,7 +69,7 @@ def entry_refusals(
                 Refusal(
                     MODE,
                     f"Le mode effectif du moteur ({status.mode}) n'est pas celui de l'instance "
-                    f"({spec.mode}) (I3).",
+                    f"({spec.mode}).",
                 )
             )
     if effective is None or drifts is None:

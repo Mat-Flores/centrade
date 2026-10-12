@@ -144,14 +144,9 @@ async def list_instances(
 
 
 def _drift(raw: Any) -> list[DriftItem]:
-    """`instances.drift` : {clé: {expected, observed}}, ou déjà une liste de {key, ...}."""
+    """`instances.drift` : liste de {key, expected, observed}."""
     if not raw:
         return []
-    if isinstance(raw, dict):
-        return [
-            DriftItem(key=k, expected=v.get("expected"), observed=v.get("observed"))
-            for k, v in sorted(raw.items())
-        ]
     return [DriftItem.model_validate(x) for x in raw]
 
 

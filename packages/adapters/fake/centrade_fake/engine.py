@@ -432,14 +432,18 @@ class FakeEngine:
 
     def _close(self, inst: _Inst, pos: Position, cause: ExitCause) -> None:
         del inst.positions[pos.position_id]
-        inst.stops.pop(pos.position_id, None)
+        stop = inst.stops.pop(pos.position_id, None)
+        # Sortie au prix du stop, sinon un cran au-dessus de l'entrée : pnl et frais jamais nuls.
+        exit_price = pos.entry_price * Decimal("1.01")
+        if cause == "stop" and stop and stop.price is not None:
+            exit_price = stop.price
         exit_order = Order(
             order_id=str(self._new_id()),
             symbol=pos.symbol,
             side="sell",
             intent="exit",
             qty=pos.qty,
-            price=pos.entry_price,  # sortie au prix d'entrée : le simulateur ne gagne ni ne perd
+            price=exit_price,
             status="filled",
         )
         self._emit(inst, EventType.ORDER_FILLED, self._order_payload(inst, exit_order, None))
@@ -450,8 +454,9 @@ class FakeEngine:
                 side=pos.side,
                 qty=pos.qty,
                 entry_price=pos.entry_price,
-                exit_price=pos.entry_price,
-                pnl=Decimal(0),  # sortie au prix d'entrée
+                exit_price=exit_price,
+                pnl=(exit_price - pos.entry_price) * pos.qty,
+                fees=exit_price * pos.qty * Decimal("0.001"),
                 entry_cause="signal",
                 exit_cause=_F10_CAUSE[cause],
                 opened_at=pos.opened_at,
@@ -466,7 +471,7 @@ class FakeEngine:
                 symbol=pos.symbol,
                 exit_cause=cause,
                 qty=pos.qty,
-                exit_price=pos.entry_price,
+                exit_price=exit_price,
             ),
         )
         self._emit(

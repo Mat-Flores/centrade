@@ -91,7 +91,7 @@ def risk_increase_refusal(
     if observed_state not in ready:
         return f"État observé « {observed_state} » : {label} impossible."
     if command_type == "resume_entries" and observed_mode != mode:
-        return f"Le mode observé diffère du mode de l'instance (I3) : {label} refusé."
+        return f"Le mode observé diffère du mode de l'instance : {label} refusé."
     return None
 
 
