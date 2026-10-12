@@ -44,7 +44,7 @@ ENV_ALLOWED = frozenset({"TZ", "PYTHONUNBUFFERED"})  # jamais de secret en varia
 _ACTIVE = ("running", "created", "restarting", "paused")  # états qui occupent de la mémoire
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 _IMAGE = re.compile(r"[a-z0-9][a-z0-9._/-]*(:[A-Za-z0-9._-]+)?")
-_USER = re.compile(r"([1-9][0-9]*):([0-9]+)")
+_USER = re.compile(r"([1-9][0-9]*):([1-9][0-9]*)")  # ni uid 0 ni gid 0
 _T = TypeVar("_T")
 
 
@@ -60,7 +60,7 @@ class ContainerSpec:
     memory_bytes: int
     nano_cpus: int
     env: Mapping[str, str] = field(default_factory=dict)
-    user: str = "1000:1000"  # uid:gid numériques, uid non nul
+    user: str = "1000:1000"  # uid:gid numériques, non nuls
 
 
 @dataclass(frozen=True)
@@ -168,7 +168,7 @@ class DockerRunner:
                 "image ou digest mal formé (attendu dépôt[:tag] et sha256:64 hex)"
             )
         if not _USER.fullmatch(spec.user):
-            raise CommandRejected("utilisateur du conteneur : uid:gid numériques, uid non nul")
+            raise CommandRejected("utilisateur du conteneur : uid:gid numériques, non nuls")
         if spec.memory_bytes <= 0 or spec.nano_cpus <= 0:  # 0 = illimité pour Docker
             raise CommandRejected("plafonds de mémoire et de CPU obligatoires")
         if not spec.command or not spec.mode or not spec.fingerprint:

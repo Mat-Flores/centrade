@@ -69,6 +69,7 @@ async def main() -> None:
     # Profil engines seulement : sans socket proxy, aucun conteneur à rattacher.
     sessions = make_session_factory(db)
     runner = DockerRunner() if os.environ.get("DOCKER_HOST") else None
+    runtime: WorkerRuntime | None = None
     if runner is None:
         log.info("moteurs_a_conteneurs_absents", raison="DOCKER_HOST absent, seul le FakeEngine")
     else:
@@ -84,6 +85,9 @@ async def main() -> None:
         adapters=adapters,
         runner=runner,
         simulated=frozenset({FAKE}),
+        # Digest épinglé par l'adaptateur : une ligne `engines` modifiée en base est refusée.
+        pinned_digests={FREQTRADE: FREQTRADE_DIGEST},
+        cleanup=None if runtime is None else runtime.cleanup,
         sessions=sessions,
         redis=redis,
         bus=Bus(redis, GROUP, consumer=f"worker-{socket.gethostname()}"),

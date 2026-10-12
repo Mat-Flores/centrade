@@ -13,7 +13,7 @@ frais juste avant l'envoi, et n'est pas envoyé au moindre doute.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Collection, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -152,11 +152,16 @@ class Commands:
                 self._note("alert", alert.id)
                 log.warning("commande_expiree", command_id=str(cmd.id), type=cmd.type)
 
-    async def dispatch(self) -> None:
+    async def claim(
+        self, only: UUID | None = None, skip: Collection[UUID] = ()
+    ) -> dict[UUID, list[_Claimed]]:
         """Relève les commandes `requested` (une à la fois par instance, sauf celles qui
-        réduisent le risque), les marque `dispatched` AVANT d'appeler le moteur, puis appelle."""
+        réduisent le risque) et les marque `dispatched` AVANT tout appel au moteur. Rend, par
+        instance, la file à envoyer dans l'ordre : ce qui ne se retient jamais d'abord (I4).
+        `only` : cette instance seulement ; `skip` : instances dont un envoi est encore en cours,
+        leurs commandes restent `requested` (aucune échéance ne court sans envoi)."""
         now = self._clock()
-        claimed: list[_Claimed] = []
+        claimed: dict[UUID, list[_Claimed]] = {}
         async with self._sessions.begin() as s:
             busy = set(
                 await s.scalars(
@@ -165,17 +170,27 @@ class Commands:
                     )
                 )
             )
-            rows = (
-                await s.execute(
-                    select(Command, Instance, Engine.kind)
-                    .join(Instance, Instance.id == Command.instance_id)
-                    .join(Engine, Engine.id == Instance.engine_id)
-                    .where(Command.status == "requested")
-                    .with_for_update(of=Command, skip_locked=True)
-                )
-            ).all()
+            stmt = (
+                select(Command, Instance, Engine.kind)
+                .join(Instance, Instance.id == Command.instance_id)
+                .join(Engine, Engine.id == Instance.engine_id)
+                .where(Command.status == "requested")
+                .with_for_update(of=Command, skip_locked=True)
+            )
+            if only is not None:
+                stmt = stmt.where(Command.instance_id == only)
+            if skip:
+                stmt = stmt.where(Command.instance_id.not_in(skip))
             rows = sorted(
-                rows, key=lambda r: (r[0].type not in PRIORITY, r[0].requested_at, r[0].id)
+                (await s.execute(stmt)).all(),
+                key=lambda r: (
+                    r[0].type not in PRIORITY,
+                    # Fermeture et annulation d'entrée : jamais derrière la vérification d'une
+                    # reprise. `stop` garde son rang d'arrivée (une commande à la fois, F9).
+                    r[0].type not in _IMMEDIATE,
+                    r[0].requested_at,
+                    r[0].id,
+                ),
             )
             for cmd, inst, kind in rows:
                 if cmd.type not in _IMMEDIATE and cmd.instance_id in busy:
@@ -190,7 +205,7 @@ class Commands:
                 )
                 if await transition(s, cmd.id, "dispatched", now, deadline_at=deadline):
                     busy.add(cmd.instance_id)
-                    claimed.append(
+                    claimed.setdefault(inst.id, []).append(
                         _Claimed(
                             cmd.id,
                             cmd.type,
@@ -201,12 +216,29 @@ class Commands:
                             cmd.correlation_id,
                         )
                     )
+        return claimed
+
+    async def send(self, claimed: Sequence[_Claimed]) -> None:
+        """Envoie la file d'UNE instance, dans l'ordre, une commande à la fois (F9). Un échec
+        pour une commande n'empêche pas d'envoyer les suivantes."""
         failures: list[Exception] = []
-        for c in claimed:  # un échec pour une commande n'empêche pas d'envoyer les suivantes
+        for c in claimed:
             try:
                 await self._call(c)
             except Exception as exc:
                 log.exception("commande_non_suivie", command_id=str(c.id), type=c.type)
+                failures.append(exc)
+        if failures:
+            raise failures[0]
+
+    async def dispatch(self, only: UUID | None = None) -> None:
+        """Relève puis envoie, instance après instance. Le tour du worker envoie en parallèle
+        (`claim` puis une tâche par instance) ; ceci sert à une instance seule."""
+        failures: list[Exception] = []
+        for batch in (await self.claim(only)).values():
+            try:
+                await self.send(batch)
+            except Exception as exc:
                 failures.append(exc)
         if failures:
             raise failures[0]

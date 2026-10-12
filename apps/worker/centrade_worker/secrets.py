@@ -55,14 +55,14 @@ def delivery_refusal(instance: Instance, account: Account | None, secret: Secret
     if secret.usage != "trade":
         return "ce secret n'est jamais remis à un moteur"
     if instance.mode != "live":
-        return "une instance qui n'est pas live ne reçoit aucune clé de trading (I3)"
+        return "une instance qui n'est pas live ne reçoit aucune clé de trading"
     if (
         account is None
         or account.id != instance.account_id
         or account.type != "live"
         or account.secret_ref != secret.id
     ):
-        return "cette clé n'est pas celle du compte de l'instance (I12)"
+        return "cette clé n'est pas celle du compte de l'instance"
     return None
 
 

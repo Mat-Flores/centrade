@@ -157,3 +157,14 @@ async def test_nom_de_fichier_hors_du_dossier_de_l_instance_refuse(
     with pytest.raises(ValueError, match="invalide"):
         await rt.write_files(iid, {name: "x"}, {"k": "v"})
     assert not (tmp_path / str(iid)).exists() and os.listdir(tmp_path) == []
+
+
+def test_utilisateur_du_conteneur_explicite_et_jamais_dans_le_groupe_root(
+    session_factory: Sessions, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    rt = _runtime(session_factory, tmp_path)
+    monkeypatch.setattr(os, "getuid", lambda: 10001)
+    monkeypatch.setattr(os, "getgid", lambda: 0)  # image dont l'utilisateur n'a pas de groupe
+    assert rt.container_user() == "10001:10001"
+    monkeypatch.setattr(os, "getgid", lambda: 10002)
+    assert rt.container_user() == "10001:10002"

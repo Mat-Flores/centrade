@@ -216,9 +216,9 @@ async def test_i12_cle_remise_au_seul_moteur_de_l_instance_live_du_compte(
         assert (await s.get_one(Secret, trade)).last_used_at == NOW  # suivi du dernier usage
         # La clé d'un autre compte, même pour une instance live : refus, rien d'écrit.
         for secret_id, instance_id in ((other_trade, live), (trade, other_live)):
-            with pytest.raises(worker.SecretRefusedError, match="I12"):
+            with pytest.raises(worker.SecretRefusedError, match="compte de l'instance"):
                 await worker.reveal(s, KEY, secret_id=secret_id, instance_id=instance_id, now=NOW)
-            with pytest.raises(worker.SecretRefusedError, match="I12"):
+            with pytest.raises(worker.SecretRefusedError, match="compte de l'instance"):
                 await worker.write_instance_file(
                     s, tmp_path, instance_id=instance_id, secret_ids=[secret_id], content={}
                 )

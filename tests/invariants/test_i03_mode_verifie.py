@@ -57,10 +57,10 @@ async def test_i03_paper_et_backtest_sans_cle_de_trading(
     for mode in ("paper",):
         _, instance_id, trade, api = await keyed_instance(mode=mode)
         async with session_factory() as s:
-            with pytest.raises(worker.SecretRefusedError, match="I3"):
+            with pytest.raises(worker.SecretRefusedError, match="aucune clé de trading"):
                 await worker.reveal(s, key, secret_id=trade, instance_id=instance_id, now=now)
             for ids in ([trade], [api, trade]):
-                with pytest.raises(worker.SecretRefusedError, match="I3"):
+                with pytest.raises(worker.SecretRefusedError, match="aucune clé de trading"):
                     await worker.write_instance_file(
                         s, tmp_path, instance_id=instance_id, secret_ids=ids, content={"k": "v"}
                     )

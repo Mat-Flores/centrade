@@ -52,9 +52,10 @@ class WorkerRuntime:
         self._clock = clock
 
     def container_user(self) -> str:
-        # Fichiers en 0400 au nom du worker : le conteneur du moteur tourne sous ce même compte,
-        # sans privilège ni changement de propriétaire.
-        return f"{os.getuid()}:{os.getgid()}"
+        # Fichiers en 0400 au nom du worker : le conteneur du moteur tourne sous ce même uid,
+        # sans privilège ni changement de propriétaire. Le groupe ne sert à aucune lecture : il
+        # est toujours explicite et jamais 0 (groupe root), même si le worker a le gid 0.
+        return f"{os.getuid()}:{os.getgid() or os.getuid()}"
 
     async def issue_credentials(
         self, instance_id: UUID, names: tuple[str, ...]

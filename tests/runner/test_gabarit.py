@@ -219,8 +219,8 @@ async def test_digest_different_refuse_sans_telechargement(
         await runner.create(spec)
 
 
-@pytest.mark.parametrize("user", ["root", "0:0", "0:1000", "1000", "ftuser:ftuser", ""])
-async def test_utilisateur_root_ou_nom_refuse(
+@pytest.mark.parametrize("user", ["root", "0:0", "0:1000", "1000:0", "1000", "ftuser:ftuser", ""])
+async def test_utilisateur_ou_groupe_root_ou_nom_refuse(
     runner: DockerRunner, spec: ContainerSpec, user: str
 ) -> None:
     with pytest.raises(CommandRejected, match="utilisateur"):

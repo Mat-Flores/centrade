@@ -67,6 +67,8 @@ _RULE: dict[str, tuple[str, str | None]] = {
     FINGERPRINT: ("fingerprint_mismatch", "I10"),
 }
 REFUSED_RULE = "entries_refused"
+UNREADABLE_RULE = "config_unreadable"  # relecture impossible sur un moteur en marche (§13)
+HALTED_RULE = "engine_halted"  # état jamais demandé par la plateforme (F9)
 _VERIFIABLE = ("exits_only", "running")  # états où un moteur tourne et peut être relu
 
 
@@ -185,6 +187,8 @@ class Guard:
         every_s: float,
         pause_deadline_s: float,
         note: Note,
+        unreadable_after_s: float = 60.0,
+        pinned_digests: Mapping[str, str] | None = None,
     ) -> None:
         self._sessions = sessions
         self._adapters = adapters
@@ -196,7 +200,15 @@ class Guard:
         self._note = note
         # Dernière vérification par instance : (état, mode) observés, heure, motifs.
         self._last: dict[UUID, tuple[tuple[str, str | None], datetime, tuple[Refusal, ...]]] = {}
-        self.pause_requested = False  # une pause automatique attend son envoi
+        self._unreadable_after_s = unreadable_after_s
+        # Digest annoncé par l'adaptateur enregistré, par moteur : la table `engines` se modifie
+        # en base, pas ces constantes.
+        self._pinned = dict(pinned_digests or {})
+        # Dernière relecture réussie d'un moteur qui tourne (à défaut, première tentative).
+        self._read_at: dict[UUID, datetime] = {}
+        self._halted: set[UUID] = set()  # épisodes `halted` déjà signalés
+        # Instances dont une pause automatique attend son envoi (par la tâche de l'instance).
+        self.pause_requested: set[UUID] = set()
 
     async def target(self, instance_id: UUID) -> Target:
         async with self._sessions() as s:
@@ -219,6 +231,12 @@ class Guard:
         checked = self._adapters[t.spec.engine].check_source(t.spec.manifest, dep.code)
         if not checked.ok:
             raise CommandRejected("code de stratégie refusé : " + " ; ".join(checked.errors))
+        pinned = self._pinned.get(t.spec.engine)
+        if pinned is not None and dep.digest != pinned:
+            log.error("digest_modifie_en_base", instance_id=str(instance_id), engine=t.spec.engine)
+            raise CommandRejected(
+                "digest de l'image en base différent de celui de l'adaptateur : déploiement refusé"
+            )
         async with self._sessions.begin() as s:
             await s.execute(
                 update(Instance)
@@ -320,17 +338,72 @@ class Guard:
         """À chaque démarrage observé (premier relevé, changement d'état ou de mode), puis toutes
         les `every_s` secondes. Rend les derniers motifs connus ; None si rien ne tourne."""
         iid = ref.instance_id
+        now = self._clock()
+        if status.state == "halted":
+            await self._on_halted(iid, now)
+        else:
+            self._halted.discard(iid)
         if status.state not in _VERIFIABLE:
             self._last.pop(iid, None)  # le prochain démarrage observé sera revérifié
+            self._read_at.pop(iid, None)
             return None
-        now, sig = self._clock(), (status.state, status.mode)
+        sig = (status.state, status.mode)
         last = self._last.get(iid)
         if last and last[0] == sig and abs((now - last[1]).total_seconds()) < self._every_s:
             return last[2]
-        refusals, complete = await self._verify(ref, status, None)
-        if complete:  # sinon : nouvelle tentative au tour suivant
+        self._read_at.setdefault(iid, now)
+        try:
+            refusals, complete = await self._verify(ref, status, None)
+        except Exception:
+            await self._on_unreadable(iid, status, now)
+            raise
+        if complete:
             self._last[iid] = (sig, now, refusals)
+            self._read_at[iid] = now
+        else:  # nouvelle tentative au tour suivant ; au-delà du délai, alerte et pause
+            await self._on_unreadable(iid, status, now)
         return refusals
+
+    async def _on_unreadable(self, iid: UUID, status: InstanceStatus, now: datetime) -> None:
+        """Entrées ouvertes sur une configuration qu'on ne peut plus relire depuis
+        `unreadable_after_s` : on ne sait plus ce qui tourne (§13, I5). Alerte critique et pause."""
+        since = self._read_at.get(iid, now)
+        if status.state != "running" or (now - since).total_seconds() < self._unreadable_after_s:
+            return
+        async with self._sessions.begin() as s:
+            alert_id = await raise_alert(
+                s,
+                rule=UNREADABLE_RULE,
+                severity="critical",
+                message="La configuration effective d'un moteur en marche n'a pas pu être relue "
+                f"depuis {int(self._unreadable_after_s)} s : entrées mises en pause.",
+                target_id=iid,
+                invariant="I5",
+            )
+            await self._pause(s, iid, ["unreadable"], None, now)
+        if alert_id is not None:
+            self._note("alert", alert_id)
+
+    async def _on_halted(self, iid: UUID, now: datetime) -> None:
+        """F9 : `halted` observé => alerte et retour en sorties seules. Une fois par épisode : si
+        le moteur n'en sort pas, la commande expire et son alerte le dit, sans relance en boucle.
+        `pause_entries` est l'appel du contrat qui remet un moteur en sorties seules sans rien
+        vérifier ni attendre (I4) ; `start`, lui, augmente le risque et serait retenu au doute."""
+        if iid in self._halted:
+            return
+        async with self._sessions.begin() as s:
+            alert_id = await raise_alert(
+                s,
+                rule=HALTED_RULE,
+                severity="critical",
+                message="Moteur observé `halted` : sa boucle de trading est arrêtée, les "
+                "positions ne sont plus gérées. Retour en sorties seules demandé.",
+                target_id=iid,
+            )
+            await self._pause(s, iid, ["halted"], None, now)
+        self._halted.add(iid)
+        if alert_id is not None:
+            self._note("alert", alert_id)
 
     async def _record(
         self,
@@ -348,6 +421,10 @@ class Guard:
         if status.mode is not None and MODE not in codes:
             cleared.append(MODE)
         rules = [_RULE[c][0] for c in cleared]
+        if effective is not None:
+            rules.append(UNREADABLE_RULE)
+        if status.state in _VERIFIABLE:
+            rules.append(HALTED_RULE)
         if not refusals:  # la vérification passe de nouveau : le refus précédent est levé
             rules.append(REFUSED_RULE)
         now = self._clock()
@@ -460,5 +537,5 @@ class Guard:
             after={"command_id": str(cmd.id), "reasons": codes},
         )
         self._note("command", cmd.id)
-        self.pause_requested = True
+        self.pause_requested.add(instance_id)
         log.warning("pause_automatique", instance_id=str(instance_id), codes=codes)
