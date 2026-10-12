@@ -49,10 +49,15 @@ services:
   # app, data et edge de core.yml sont inchangés ; le répertoire d'exécution (tenu en mémoire sur
   # l'hôte) est monté au même chemin, car Docker résout les montages sur l'hôte. À préparer :
   # `sudo install -d -m 700 -o 10001 /run/centrade` (recréé à chaque redémarrage de l'hôte).
+  # Clé maître : par Docker secret (fichier, jamais variable), et dans ce profil seulement. Le
+  # worker en a besoin pour les identifiants de l'API native des moteurs (SecretStore, usage
+  # `engine_api`) ; sans moteur à conteneurs, core.yml ne la lui donne pas.
   worker:
     environment:
       DOCKER_HOST: tcp://docker-socket-proxy:2375
       ENGINE_RUNTIME_DIR: ${ENGINE_RUNTIME_DIR:-/run/centrade}
+      CENTRADE_MASTER_KEY_FILE: /run/secrets/master_key
+    secrets: [master_key]
     volumes:
       - ${ENGINE_RUNTIME_DIR:-/run/centrade}:${ENGINE_RUNTIME_DIR:-/run/centrade}
     networks: [docker, engines]

@@ -52,6 +52,11 @@ class World:
         self.sessions: async_sessionmaker[AsyncSession] = make_session_factory(self.db)
         self.redis: Redis = Redis.from_url(self._redis_url, decode_responses=True)
         await self.redis.flushdb()
+        # La base est partagée par toute la session de tests : un worker relève toutes les
+        # commandes et toutes les instances. Chaque monde repart donc sans celles des autres.
+        async with self.sessions.begin() as s:
+            await s.execute(text("TRUNCATE instances CASCADE"))
+            await s.execute(text("TRUNCATE alerts"))
         self.clock = Clock()
         self.fake = FakeEngine(clock=self.clock, seed=3, new_id=uuid7, allow_failure_injection=True)
         self.bus = Bus(self.redis, "worker", self._consumer)

@@ -49,7 +49,8 @@ class Instance(Base):
     config_hash: Mapped[str | None]  # hash de la configuration générée
     effective_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # relue (F9)
     effective_config_at: Mapped[datetime | None]
-    drift: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # dérive constatée
+    # Dérive constatée : liste de {key, expected, observed}, écrite par le worker (F9).
+    drift: Mapped[list[dict[str, Any]] | dict[str, Any] | None] = mapped_column(JSONB)
     paper_origin_id: Mapped[UUID | None] = mapped_column(ForeignKey("instances.id"))
     created_at: Mapped[datetime] = now_col()
     updated_at: Mapped[datetime] = updated_at()

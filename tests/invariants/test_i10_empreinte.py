@@ -74,3 +74,158 @@ def test_i10_parametres_differents_empreintes_differentes(
     fa = deployment_fingerprint(**{**BASE, "params": a})
     fb = deployment_fingerprint(**{**BASE, "params": b})
     assert (fa == fb) == (a == b)
+
+
+# --- au déploiement et à la vérification de F9 (worker) -----------------------------------------
+
+
+def _rows() -> tuple[Any, Any, Any]:
+    from centrade_core.ids import uuid7
+    from centrade_core.models.trading import Engine, Instance, StrategyVersion
+
+    manifest = {
+        "name": "s",
+        "engine": "fake",
+        "version": 1,
+        "entrypoint": "s.py",
+        "asset_classes": ["crypto"],
+        "trading_mode": "spot",
+        "timeframes": ["5m"],
+        "modes": ["paper", "live"],
+        "sizing": {"stake_amount": "50", "max_open_positions": 3},
+        "exits": {"stoploss": "-0.05", "stop_on_venue": True},
+    }
+    engine = Engine(
+        id=uuid7(), kind="fake", image="img:1", version="1", digest="sha256:" + "a" * 64
+    )
+    version = StrategyVersion(
+        id=uuid7(), manifest=manifest, code="pass", code_hash="c" * 64, exits=manifest["exits"]
+    )
+    inst = Instance(
+        id=uuid7(),
+        engine_id=engine.id,
+        name="i",
+        mode="paper",
+        params={"fast": 10},
+        account_id=None,
+    )
+    return inst, engine, version
+
+
+def _fake() -> Any:
+    from centrade_core.ids import uuid7
+    from centrade_fake.engine import FakeEngine
+    from centrade_worker.testing import T0
+
+    return FakeEngine(clock=lambda: T0, seed=1, new_id=uuid7)
+
+
+# Ce qui change le comportement : un autre code, une autre image, une autre configuration.
+CHANGES: dict[str, Any] = {
+    "code": lambda i, e, v: setattr(v, "code_hash", "d" * 64),
+    "image": lambda i, e, v: setattr(e, "image", "img:2"),
+    "digest": lambda i, e, v: setattr(e, "digest", "sha256:" + "b" * 64),
+    "paramètres": lambda i, e, v: setattr(i, "params", {"fast": 11}),
+    "politique de sortie": lambda i, e, v: setattr(v, "exits", {"stoploss": "-0.04"}),
+    "configuration générée": lambda i, e, v: setattr(
+        v, "manifest", {**v.manifest, "sizing": {"stake_amount": "60", "max_open_positions": 3}}
+    ),
+}
+
+
+@given(names=st.lists(st.sampled_from(sorted(CHANGES)), min_size=1, unique=True))
+def test_i10_image_code_ou_configuration_differents_refusent_les_entrees(names: list[str]) -> None:
+    from centrade_core.engine.types import EffectiveConfig, InstanceStatus
+    from centrade_core.engine.verification import FINGERPRINT, entry_refusals
+    from centrade_worker.guard import spec_for
+    from centrade_worker.testing import T0
+
+    fake = _fake()
+    deployed, _ = spec_for(*_rows(), fake)
+    assert deployed.deployment is not None
+    recorded = (
+        deployed.deployment.fingerprint
+    )  # enregistrée au déploiement, portée par ce qui tourne
+
+    def codes(spec: Any) -> set[str]:
+        return {
+            r.code
+            for r in entry_refusals(
+                spec=spec,
+                status=InstanceStatus(state="exits_only", mode="paper", observed_at=T0),
+                effective=EffectiveConfig(
+                    values={}, observed_at=T0, fingerprint=recorded, engine_version="1"
+                ),
+                drifts=(),
+                recorded_fingerprint=recorded,
+                now=T0,
+                stale_after_s=30,
+            )
+        }
+
+    assert codes(deployed) == set()  # rien n'a changé : les entrées peuvent s'ouvrir
+    rows = _rows()
+    for name in names:
+        CHANGES[name](*rows)
+    changed, _ = spec_for(*rows, fake)
+    assert changed.deployment is not None
+    assert changed.deployment.fingerprint != recorded
+    assert codes(changed) == {FINGERPRINT}
+
+
+def test_i10_champs_propres_au_mode_exclus_de_la_comparaison() -> None:
+    from centrade_core.ids import uuid7
+    from centrade_worker.guard import spec_for
+
+    fake = _fake()
+    base, generated = spec_for(*_rows(), fake)
+    inst, engine, version = _rows()
+    inst.id, inst.name, inst.account_id = uuid7(), "autre", uuid7()  # autre instance, autre compte
+    other, other_generated = spec_for(inst, engine, version, fake)
+    assert base.deployment is not None and other.deployment is not None
+    assert generated.values != other_generated.values  # la configuration diffère bien…
+    assert other.deployment.fingerprint == base.deployment.fingerprint  # … pas l'empreinte
+
+
+async def test_i10_empreinte_enregistree_au_deploiement_est_celle_de_ce_qui_tourne(
+    stack: Any,
+) -> None:
+    from centrade_api.testing import act, create_instance, get, ref_of
+    from centrade_core.models.trading import Engine
+    from sqlalchemy import update
+    from worker_support import alerts, commands, instance, spy
+
+    w = stack.world
+    c = await stack.client("operator")
+    iid = str((await create_instance(c))["id"])
+    assert (await instance(w, iid)).deployment_fingerprint is None  # rien n'est encore déployé
+    await w.worker.run_once()
+
+    row = await instance(w, iid)
+    running = await w.fake.effective_config(ref_of(iid))
+    assert row.deployment_fingerprint and row.deployment_fingerprint == running.fingerprint
+    generated = (await w.worker.guard.target(row.id)).generated
+    assert row.config_hash == config_hash(generated.values, exclude=generated.mode_keys)
+    assert (await commands(w, iid, "deploy"))[0].status == "verified"
+    detail = await get(c, f"/api/v1/instances/{iid}")
+    assert detail["deployment_fingerprint"] == row.deployment_fingerprint
+
+    # L'image du moteur change dans la table `engines` : ce qui tourne n'est plus ce que le
+    # registre décrit. La reprise est refusée et rien ne part vers le moteur.
+    calls = spy(w.fake)
+    r = await act(c, iid, "resume-entries")
+    assert r.status_code == 202
+    async with w.sessions() as s:
+        image = (await s.get_one(Engine, row.engine_id)).image
+    try:
+        async with w.sessions.begin() as s:
+            await s.execute(update(Engine).where(Engine.id == row.engine_id).values(image="autre"))
+        await w.worker.run_once()
+    finally:  # la ligne `engines` est partagée entre les tests
+        async with w.sessions.begin() as s:
+            await s.execute(update(Engine).where(Engine.id == row.engine_id).values(image=image))
+    cmd = await get(c, f"/api/v1/commands/{r.json()['command_id']}")
+    assert cmd["status"] == "failed", cmd
+    assert {x["code"] for x in cmd["result"]["reasons"]} == {"fingerprint"}
+    assert calls == [] and (await w.fake.status(ref_of(iid))).state == "exits_only"
+    assert [a.rule for a in await alerts(w, iid)] == ["fingerprint_mismatch", "entries_refused"]

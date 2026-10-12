@@ -9,6 +9,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Literal
+from uuid import UUID
 
 from centrade_core.events import CanonicalEvent, EventType, OrderPayload
 from centrade_core.models.trading import Event, Order
@@ -32,6 +33,7 @@ _RANK = {"open": 0, "unknown": 1, "filled": 2, "canceled": 2, "rejected": 2}
 class Ingested:
     new: bool
     anomaly: Anomaly | None
+    order_id: UUID | None = None  # ligne d'ordre créée ou modifiée, à annoncer au flux
 
 
 async def ingest(
@@ -68,33 +70,35 @@ async def ingest(
             )
             .on_conflict_do_nothing()
         )
-        if ev.type in _ORDER_STATUS:
-            await _track_order(s, ev)
-    return Ingested(new=True, anomaly=anomaly)
+        order_id = await _track_order(s, ev) if ev.type in _ORDER_STATUS else None
+    return Ingested(new=True, anomaly=anomaly, order_id=order_id)
 
 
-async def _track_order(s: AsyncSession, ev: CanonicalEvent) -> None:
+async def _track_order(s: AsyncSession, ev: CanonicalEvent) -> UUID | None:
     p = ev.payload
     if not isinstance(p, OrderPayload):  # PAYLOAD_MODELS l'exclut pour ces quatre types
-        return
+        return None
     status = _ORDER_STATUS[ev.type]
     order = await s.scalar(select(Order).where(Order.client_order_id == str(p.client_order_id)))
     if order is None:
-        s.add(
-            Order(
-                instance_id=ev.instance_id,
-                client_order_id=str(p.client_order_id),
-                instrument=p.symbol,
-                side=p.side,
-                intent=p.intent,
-                status=status,
-                quantity=p.qty,
-                price=p.price,
-                currency=p.currency,
-                decision_id=p.decision_id,
-                observed_at=ev.ts,
-            )
+        order = Order(
+            instance_id=ev.instance_id,
+            client_order_id=str(p.client_order_id),
+            instrument=p.symbol,
+            side=p.side,
+            intent=p.intent,
+            status=status,
+            quantity=p.qty,
+            price=p.price,
+            currency=p.currency,
+            decision_id=p.decision_id,
+            observed_at=ev.ts,
         )
+        s.add(order)
+        await s.flush()  # l'identifiant de la ligne, pour l'annonce
     elif _RANK[status] > _RANK[order.status]:
         order.status = status
         order.observed_at = ev.ts
+    else:
+        return None
+    return order.id

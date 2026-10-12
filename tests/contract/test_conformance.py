@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import pytest
-from centrade_core.engine.contract import EngineUnreachable, observe_status
+from centrade_core.engine.contract import EngineUnreachable, observe_status, owned_drifts
 from centrade_core.events import CanonicalEvent
 
 from .conftest import Harness
@@ -106,6 +106,31 @@ async def test_effective_config_drift_is_detectable(harness: Harness) -> None:
     harness.make_drift(ref)
     eff = await harness.adapter.effective_config(ref)
     assert eff.values != harness.adapter.render_config(spec).values
+
+
+async def test_config_drift_is_empty_after_deploy_and_names_the_changed_key(
+    harness: Harness,
+) -> None:
+    spec = make_spec()
+    generated = harness.adapter.render_config(spec)
+    ref = await harness.adapter.deploy(spec)
+    eff = await harness.adapter.effective_config(ref)
+    assert harness.adapter.config_drift(generated, eff) == ()
+    assert owned_drifts(generated, eff, ()) == ()  # chaque clé possédée est relue ou déclarée
+    harness.make_drift(ref)
+    eff = await harness.adapter.effective_config(ref)
+    drifts = owned_drifts(generated, eff, harness.adapter.config_drift(generated, eff))
+    assert drifts and {d.key for d in drifts} <= set(generated.values)
+    assert all(d.expected != d.observed for d in drifts)
+
+
+async def test_declared_keys_are_owned_keys(harness: Harness) -> None:
+    generated = harness.adapter.render_config(make_spec())
+    assert generated.unreadable <= set(generated.values)
+    assert generated.mode_keys <= set(generated.values)
+    # Le mode effectif se relit dans le statut, jamais dans la demande.
+    ref = await harness.adapter.deploy(make_spec())
+    assert (await harness.adapter.status(ref)).mode == "paper"
 
 
 async def test_clean_stream_has_unique_ids_and_seq(harness: Harness) -> None:

@@ -26,9 +26,9 @@ Convention : un invariant `In` a son module `tests/invariants/test_iNN_<slug>.py
 - Énoncé : mode fixé à la création ; mode effectif relu à chaque démarrage ; écart = entrées interdites et alerte critique ; paper et backtest ne reçoivent aucune clé de trading (§1.2, F6).
 - Jalon : M2
 - Module : `tests/invariants/test_i03_mode_verifie.py`
-- Tests prévus : `test_i03_mode_immuable_apres_creation`, `test_i03_ecart_de_mode_interdit_les_entrees_et_alerte`, `test_i03_paper_et_backtest_sans_cle_de_trading`
+- Tests (livrés, verts) : `test_i03_mode_immuable_apres_creation`, `test_i03_ecart_de_mode_interdit_les_entrees_et_alerte`, `test_i03_mode_relu_a_chaque_demarrage`, `test_i03_paper_et_backtest_sans_cle_de_trading`, `test_i03_cle_de_trading_remise_seulement_si_tout_concorde`
 - Scénarios : S7
-- État : prévu
+- État : testé (M2)
 
 ### I4 — Jamais d'obstacle à une sortie
 - Énoncé : aucune panne, limite, décision de risque ni kill switch ne bloque une sortie, un stop ou une réduction (§1.2, §10).
@@ -78,6 +78,7 @@ Convention : un invariant `In` a son module `tests/invariants/test_iNN_<slug>.py
 - Module : `tests/invariants/test_i09_independance_plateforme.py`
 - Tests prévus : `test_i09_redemarrage_plateforme_ne_redemarre_aucune_instance`, `test_i09_aucune_entree_pendant_la_panne`, `test_i09_sorties_passees_pendant_la_panne_resynchronisees_sans_doublon`
 - Scénarios : S5
+- Livrés à M2 (verts) : `test_i09_arret_du_worker_ne_touche_aucun_conteneur` et `test_i09_adoption_sans_redemarrage` (Docker local), `test_i09_arret_du_worker_sans_effet_sur_les_instances`, `test_i09_redemarrage_plateforme_ne_redemarre_aucune_instance`, `test_i09_sorties_passees_pendant_la_panne_resynchronisees_sans_doublon`, `test_i09_conteneur_orphelin_signale_et_intact`, `test_i09_empreinte_d_etiquette_differente_et_conteneur_manquant_signales`. Reste `test_i09_aucune_entree_pendant_la_panne` : il tient au contrôle d'entrée du moteur quand le Risk service ne répond pas (M3, S11).
 - État : prévu
 
 ### I10 — Empreinte de déploiement
@@ -86,6 +87,7 @@ Convention : un invariant `In` a son module `tests/invariants/test_iNN_<slug>.py
 - Module : `tests/invariants/test_i10_empreinte.py`
 - Tests prévus : `test_i10_empreinte_change_si_un_composant_change`, `test_i10_promotion_refusee_si_empreinte_differente`, `test_i10_champs_propres_au_mode_exclus_de_la_comparaison`
 - Scénarios : S1, S8
+- Livrés à M2 (verts) : `test_i10_meme_entree_meme_empreinte`, `test_i10_chaque_champ_change_l_empreinte`, `test_i10_le_mode_n_entre_pas_dans_l_empreinte`, `test_i10_independant_de_l_ordre_des_cles`, `test_i10_parametres_differents_empreintes_differentes`, `test_i10_image_code_ou_configuration_differents_refusent_les_entrees`, `test_i10_champs_propres_au_mode_exclus_de_la_comparaison`, `test_i10_empreinte_enregistree_au_deploiement_est_celle_de_ce_qui_tourne`. Reste `test_i10_promotion_refusee_si_empreinte_differente` : la promotion arrive à M7.
 - État : prévu
 
 ### I11 — Aucun ordre émis par la plateforme
@@ -127,14 +129,14 @@ Tests de bout en bout sur FakeEngine sauf mention (§14). Fichiers sous `tests/s
 
 | N° | Jalon | Fichier prévu | Objet | État |
 | --- | --- | --- | --- | --- |
-| S1 | M2 | `tests/scenarios/test_s01_deploiement_paper.py` | Déploiement en paper, sorties seules puis entrées ouvertes | prévu |
+| S1 | M2 | `tests/scenarios/test_s01_deploiement_paper.py` | Déploiement en paper, sorties seules puis entrées ouvertes | testé (M2) : `test_s01_deploiement_paper_de_bout_en_bout` |
 | S2 | M3 | `tests/scenarios/test_s02_limite_depassee.py` | Limite dépassée : entrée refusée, raison visible | prévu |
 | S3 | M3 | `tests/scenarios/test_s03_kill_switch_global.py` | Kill switch global sur 20 instances | prévu |
 | S4 | M3 | `tests/scenarios/test_s04_moteur_plante_position_ouverte.py` | Moteur planté avec position ouverte | prévu |
-| S5 | M2 | `tests/scenarios/test_s05_plateforme_arretee_5_min.py` | Plateforme arrêtée 5 minutes puis relancée | prévu |
+| S5 | M2 | `tests/scenarios/test_s05_plateforme_arretee.py` | Plateforme arrêtée 5 minutes puis relancée | testé (M2) : `test_s05_plateforme_arretee_5_minutes_puis_relancee` ; « aucune entrée pendant la panne » tient au contrôle d'entrée du moteur (M3) |
 | S6 | M3 | `tests/scenarios/test_s06_moteur_hors_de_controle.py` | Entrée sans décision, pause, arrêt du conteneur | prévu |
-| S7 | M2 | `tests/scenarios/test_s07_ecart_de_mode.py` | Moteur live déclaré pour une instance paper | prévu |
-| S8 | M2 | `tests/scenarios/test_s08_derive_de_configuration.py` | Configuration modifiée hors plateforme, détectée en 60 s | prévu |
+| S7 | M2 | `tests/scenarios/test_s07_ecart_de_mode.py` | Moteur live déclaré pour une instance paper | testé (M2) : `test_s07_ecart_de_mode_entrees_jamais_ouvertes` |
+| S8 | M2 | `tests/scenarios/test_s08_derive_de_configuration.py` | Configuration modifiée hors plateforme, détectée en 60 s | testé (M2) : `test_s08_derive_detectee_en_60_s_sorties_seules_alerte_critique`, `test_s08_cle_possedee_absente_de_la_relecture_est_une_derive` |
 | S9 | M1 | `tests/scenarios/test_s09_evenements_degrades.py` | Événements dupliqués, désordonnés ou perdus | testé (M1) : `test_s09_projections_exactes_apres_resynchronisation`, `test_s09_modes_enchaines_sur_une_meme_instance` |
 | S10 | M1 | `tests/scenarios/test_s10_commande_sans_reponse.py` | Commande sans réponse : `timed_out` | testé (M1) : `test_s10_commande_sans_reponse_timed_out_visible_jamais_verified` |
 | S11 | M3 | `tests/scenarios/test_s11_hook_en_erreur.py` | Hook en erreur (Freqtrade dry-run) : aucune entrée | prévu |

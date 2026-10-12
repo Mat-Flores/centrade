@@ -25,7 +25,7 @@ from uuid import UUID
 
 import structlog
 from centrade_core.bus import EVENTS_STREAM, HEARTBEAT_KEY, Bus, notify
-from centrade_core.engine.contract import EngineAdapter, EngineUnreachable
+from centrade_core.engine.contract import CommandRejected, EngineAdapter, EngineUnreachable
 from centrade_core.engine.types import InstanceRef
 from centrade_core.events import CanonicalEvent
 from centrade_core.ids import uuid7
@@ -285,7 +285,7 @@ class Worker:
                 async with asyncio.timeout(self._cfg.engine_silent_after_s):
                     async for ev in self._adapters[ref.engine].events(ref):
                         await self._bus.publish(EVENTS_STREAM, ev.model_dump_json())
-            except (EngineUnreachable, TimeoutError):
+            except (EngineUnreachable, CommandRejected, TimeoutError):
                 # Rien n'est inventé ; le relevé du tour dira `unknown`.
                 tour.warning("evenements_indisponibles", instance_id=str(iid))
 
@@ -302,6 +302,8 @@ class Worker:
                     continue
                 if res.anomaly:
                     self._anomalies[ev.instance_id] = res.anomaly
+                if res.order_id is not None:
+                    self._notes.append(("order", res.order_id))
                 tour.info(
                     "evenement_ingere",
                     instance_id=str(ev.instance_id),
@@ -320,7 +322,8 @@ class Worker:
             async with asyncio.timeout(self._cfg.engine_silent_after_s):
                 status = await adapter.status(ref)
                 snap = await adapter.snapshot(ref)
-        except (EngineUnreachable, TimeoutError):
+        except (EngineUnreachable, CommandRejected, TimeoutError):
+            # Un moteur qui ne connaît pas l'instance ne dit rien de son état : inconnu aussi.
             async with self._sessions.begin() as s:
                 unknown = await mark_unknown(s, ref.instance_id, self._clock())
             if unknown.alert_id is not None:
@@ -331,21 +334,25 @@ class Worker:
             )
             return None
         async with self._sessions.begin() as s:
-            resolved = await apply_observation(s, ref.instance_id, status, snap)
-        self._notes.extend(("alert", a) for a in resolved)
-        self._note_instance(
-            ref.instance_id, (status.state, status.mode, len(snap.positions), len(snap.orders))
-        )
+            written = await apply_observation(s, ref.instance_id, status, snap)
+        self._notes.extend(n for n in written if n[0] == "alert")
+        # Positions et ordres : annoncés quand le relevé change, puis à la cadence de l'instance
+        # (leur date d'observation avance) ; jamais à chaque tour.
+        sig = (status.state, status.mode, snap.positions, snap.orders, snap.stops)
+        if self._note_instance(ref.instance_id, sig):
+            self._notes.extend(n for n in written if n[0] != "alert")
         tour.info("resynchronisation", reason=reason, state=status.state)
         return Observation(status, snap)
 
-    def _note_instance(self, iid: UUID, sig: tuple[object, ...]) -> None:
+    def _note_instance(self, iid: UUID, sig: tuple[object, ...]) -> bool:
         now = self._clock()
         last = self._last_sig.get(iid)
         age = None if last is None else (now - last[1]).total_seconds()
         if last is None or last[0] != sig or (age or 0) >= self._cfg.refresh_notify_s:
             self._notes.append(("instance", iid))
             self._last_sig[iid] = (sig, now)
+            return True
+        return False
 
 
 def install_stop_signals(stop: asyncio.Event) -> None:

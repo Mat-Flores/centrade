@@ -347,6 +347,9 @@ class Guard:
         cleared = [c for c in (DRIFT, FINGERPRINT) if effective is not None and c not in codes]
         if status.mode is not None and MODE not in codes:
             cleared.append(MODE)
+        rules = [_RULE[c][0] for c in cleared]
+        if not refusals:  # la vérification passe de nouveau : le refus précédent est levé
+            rules.append(REFUSED_RULE)
         now = self._clock()
         async with self._sessions.begin() as s:
             if effective is not None:  # la ligne d'instance d'abord, l'audit ensuite
@@ -356,11 +359,7 @@ class Guard:
                     .values(
                         effective_config=effective.values,
                         effective_config_at=effective.observed_at,
-                        drift={
-                            d.key: {"expected": d.expected, "observed": d.observed}
-                            for d in drifts or ()
-                        }
-                        or None,
+                        drift=[d.model_dump() for d in drifts or ()],
                     )
                 )
             for r in found:
@@ -380,7 +379,7 @@ class Guard:
                 await s.scalars(
                     update(Alert)
                     .where(
-                        Alert.rule.in_([_RULE[c][0] for c in cleared]),
+                        Alert.rule.in_(rules),
                         Alert.target_id == instance_id,
                         Alert.status != "resolved",
                     )

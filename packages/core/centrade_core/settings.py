@@ -40,7 +40,8 @@ class Settings(BaseSettings):
     public_origin: str = Field(default="https://localhost:8443", pattern=r"^https://[^/\s]+$")
     # Chemins de Docker secrets (/run/secrets/…), jamais les valeurs.
     postgres_password_file: Path
-    # Seule l'API la reçoit (moindre privilège) : sans elle, `master_key()` échoue.
+    # L'API la reçoit toujours ; le worker seulement avec le profil engines (identifiants de
+    # l'API native des moteurs). Sans elle, `master_key()` échoue.
     master_key_file: Path | None = None
     # Fichier de configuration Redis du secret (`requirepass <valeur>`) : si présent, son mot de
     # passe est inséré dans `redis_url` en mémoire seulement (jamais en variable d'environnement).
