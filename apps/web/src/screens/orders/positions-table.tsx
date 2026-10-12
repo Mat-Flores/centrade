@@ -9,6 +9,9 @@ import type { Position } from "@/lib/trading";
 import { InstanceCell, num, Ts } from "./cells";
 
 const t = fr.orders.positions;
+// L'état de protection et la fermeture ne sortent jamais du champ : ces colonnes restent collées à droite quand le tableau défile.
+const PIN = "sticky z-[1] bg-card";
+const PROT = `${PIN} min-w-44 border-l`;
 
 function Protection({ p, nowIso }: { p: Position; nowIso: string }) {
   // Une position non protégée s'affiche toujours : l'alarme n'est jamais estompée ni masquée par l'âge.
@@ -85,16 +88,16 @@ export function PositionsTable({
   onClose: (p: Position) => void;
 }) {
   return (
-    <TableShell label={t.list} dimmed={dimmed} minWidth="min-w-[60rem]">
+    <TableShell label={t.list} dimmed={dimmed} minWidth="min-w-[46rem]">
       <thead className={THEAD}>
         <tr>
           <th scope="col" className={TH}>{t.columns.instance}</th>
           <th scope="col" className={TH}>{t.columns.instrument}</th>
           <th scope="col" className={THR}>{t.columns.quantity}</th>
           <th scope="col" className={THR}>{t.columns.entry}</th>
-          <th scope="col" className={`${TH} min-w-40`}>{t.columns.stop}</th>
-          <th scope="col" className={TH}>{t.columns.protection}</th>
-          {canAct && <th scope="col" className={TH}>{t.columns.action}</th>}
+          <th scope="col" className={`${TH} min-w-32`}>{t.columns.stop}</th>
+          <th scope="col" className={`${TH} ${PROT} ${canAct ? "right-28" : "right-0"}`}>{t.columns.protection}</th>
+          {canAct && <th scope="col" className={`${TH} ${PIN} right-0 w-28`}>{t.columns.action}</th>}
         </tr>
       </thead>
       <tbody className="divide-y">
@@ -103,7 +106,7 @@ export function PositionsTable({
           return (
             <tr key={p.id} data-position={p.instrument} data-protection={p.protection_state}>
               <td className={TD}>
-                <InstanceCell id={p.instance_id} mode={p.mode} instances={instances} />
+                <InstanceCell id={p.instance_id} nowIso={nowIso} instances={instances} />
               </td>
               <td className={TD}>
                 <span className="font-mono">{p.instrument}</span>
@@ -118,11 +121,11 @@ export function PositionsTable({
               <td className={TD}>
                 <Stop p={p} nowIso={nowIso} />
               </td>
-              <td className={TD}>
+              <td className={`${TD} ${PROT} ${canAct ? "right-28" : "right-0"}`}>
                 <Protection p={p} nowIso={nowIso} />
               </td>
               {canAct && (
-                <td className={TD}>
+                <td className={`${TD} ${PIN} right-0 w-28`}>
                   <Button type="button" variant="outline" aria-label={t.closeLabel(p.instrument, name)} onClick={() => onClose(p)}>
                     {t.close}
                   </Button>

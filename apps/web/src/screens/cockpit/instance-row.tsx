@@ -12,6 +12,7 @@ import {
   currentCommand,
   describeCommand,
   ENGINE_STALE_MS,
+  shownMode,
   stateView,
   unseenProblems,
   VERIFIED_SHOWN_MS,
@@ -73,7 +74,7 @@ export function InstanceRow({ instance, commands, nowIso, degraded, canAct, isAd
                 {fr.cockpit.modeMismatchDetail(fr.bar.modes[instance.desired_mode], modeLabel)}
               </span>
             )}
-            {instance.desired_mode === "paper" && (
+            {shownMode(instance, nowIso) === "paper" && !instance.mode_mismatch && (
               <span className="text-sm text-muted-foreground" title={fr.cockpit.simulatedHint}>
                 {fr.cockpit.simulated}
               </span>

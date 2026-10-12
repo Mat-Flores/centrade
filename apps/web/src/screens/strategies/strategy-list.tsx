@@ -54,7 +54,7 @@ function CreateStrategy({ onDone }: { onDone: (message: string) => void }) {
         </Alert>
       )}
       <div>
-        <Button type="submit" disabled={create.isPending}>
+        <Button type="submit" variant="outline" disabled={create.isPending}>
           {create.isPending && <Spinner data-icon="inline-start" />}
           {create.isPending ? t.create.pending : t.create.submit}
         </Button>

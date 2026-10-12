@@ -2,7 +2,7 @@ import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 import { command, emit, sseEvent, stopBeats, T0, world } from "./cockpit-support";
-import { expectNoViolation } from "./support";
+import { expectInView, expectNoViolation } from "./support";
 import { ID, mockTrading } from "./trading-support";
 
 const CAPTURES = path.resolve(import.meta.dirname, "../../../docs/captures/m2");
@@ -241,4 +241,38 @@ test("regroupement par compte : un sous-titre par compte, les lignes sans compte
   await expect(page.getByRole("heading", { level: 3, name: "Bac paper" })).toHaveCount(3); // positions, ordres, trades
   await expect(page.getByRole("heading", { level: 3, name: "Sans compte" })).toHaveCount(2); // positions et trades live
   await expect(posRow(page, "BTC/USDT", "alpha")).toBeVisible();
+});
+
+test("mode présenté d'après l'observé : voulu PAPER observé LIVE n'est pas « simulé » ; périmé et inconnu non plus", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1600 });
+  await mockTrading(page);
+  await page.goto("/orders");
+  // La ligne de delta porte mode « paper » côté API (mode voulu) ; l'instance est observée LIVE.
+  await expect(posRow(page, "SOL/USDT").getByText("simulé")).toHaveCount(0); // bravo : observé périmé
+  await expect(posRow(page, "ADA/USDT").getByText("simulé")).toHaveCount(0); // charlie : inconnu
+  await expect(posRow(page, "ADA/USDT").getByText("inconnu").first()).toBeVisible();
+  await expect(posRow(page, "BTC/USDT", "alpha").getByText("simulé")).toBeVisible(); // alpha : paper frais
+});
+
+test("tablette (820 px) : protection, NON PROTÉGÉE et Fermer restent dans le champ visible", async ({ page }) => {
+  await page.setViewportSize({ width: 820, height: 1180 });
+  await mockTrading(page);
+  await page.goto("/orders");
+  const eth = posRow(page, "ETH/USDT");
+  await expectInView(eth.getByText("NON PROTÉGÉE"));
+  await expectInView(eth.getByRole("button", { name: /Fermer/ }));
+  await expectInView(posRow(page, "BTC/USDT", "alpha").getByText("Protégée"));
+});
+
+test("bureau (1280 px) : aucune position coupée, le tableau des trades tient dans sa région", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockTrading(page);
+  await page.goto("/orders");
+  const regions = page.locator('[role="region"]');
+  for (const region of await regions.all()) {
+    const m = await region.evaluate((el) => ({ cut: el.scrollHeight - el.clientHeight }));
+    expect(m.cut, "lignes coupées en hauteur").toBeLessThanOrEqual(0);
+  }
+  const trades = page.locator('[role="region"]').filter({ has: page.locator("tr[data-trade]") });
+  expect(await trades.first().evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
 });

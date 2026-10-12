@@ -13,9 +13,21 @@ import { cn } from "@/lib/utils";
 
 const t = fr.strategies.deposit;
 const AREA = "min-h-40 w-full rounded-lg border border-input bg-background p-3 font-mono text-sm outline-none focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-60 aria-invalid:border-foreground";
-const FILE = "block min-h-11 w-full text-sm file:mr-3 file:min-h-11 file:rounded-lg file:border file:border-input file:bg-background file:px-4 file:text-base file:font-medium";
 
 type Failure = { kind: "reasons"; reasons: string[] } | { kind: "local"; message: string } | { kind: "error"; message: string };
+
+/** Sélecteur de fichier : bouton de la maison (français) qui ouvre le sélecteur du navigateur ; l'entrée native reste cachée. */
+function FilePick({ label, accept, disabled, onChange }: { label: string; accept: string; disabled: boolean; onChange: (event: ChangeEvent<HTMLInputElement>) => void }) {
+  const input = useRef<HTMLInputElement>(null);
+  return (
+    <div>
+      <input ref={input} type="file" hidden accept={accept} aria-label={label} disabled={disabled} onChange={onChange} />
+      <Button type="button" variant="outline" disabled={disabled} onClick={() => input.current?.click()}>
+        {label}
+      </Button>
+    </div>
+  );
+}
 
 /** Lit un fichier local dans la zone de saisie : le contenu reste modifiable avant le dépôt. */
 async function readInto(event: ChangeEvent<HTMLInputElement>, area: HTMLTextAreaElement | null, onError: () => void) {
@@ -76,20 +88,23 @@ export function DepositDialog({ strategyId, strategyName, onClose, onDone }: { s
       <p id={`${id}-desc`} className="text-sm text-muted-foreground">
         {t.body}
       </p>
-      <form onSubmit={onSubmit} noValidate className="flex max-h-[60dvh] flex-col gap-5 overflow-y-auto" aria-label={t.title}>
+      <form onSubmit={onSubmit} noValidate className="flex flex-col gap-5" aria-label={t.title}>
+        {/* Seuls les champs défilent : le pied (Déposer, Annuler) reste visible. */}
+        <div className="max-h-[50dvh] overflow-y-auto px-1 py-1">
         <FieldGroup>
           <Field>
             <FieldLabel htmlFor={`${id}-manifest`}>{t.manifest}</FieldLabel>
             <textarea id={`${id}-manifest`} ref={manifest} className={AREA} spellCheck={false} data-autofocus disabled={pending} aria-invalid={local || undefined} />
-            <input type="file" accept=".json,application/json" aria-label={t.manifestFile} className={FILE} disabled={pending} onChange={(e) => void readInto(e, manifest.current, fileError)} />
+            <FilePick label={t.manifestFile} accept=".json,application/json" disabled={pending} onChange={(e) => void readInto(e, manifest.current, fileError)} />
           </Field>
           <Field>
             <FieldLabel htmlFor={`${id}-code`}>{t.code}</FieldLabel>
             <textarea id={`${id}-code`} ref={code} className={cn(AREA, "min-h-56")} spellCheck={false} disabled={pending} />
-            <input type="file" accept=".py,text/x-python,text/plain" aria-label={t.codeFile} className={FILE} disabled={pending} onChange={(e) => void readInto(e, code.current, fileError)} />
+            <FilePick label={t.codeFile} accept=".py,text/x-python,text/plain" disabled={pending} onChange={(e) => void readInto(e, code.current, fileError)} />
             <FieldDescription>{t.body}</FieldDescription>
           </Field>
         </FieldGroup>
+        </div>
 
         {failure?.kind === "reasons" && (
           <Alert role="alert">

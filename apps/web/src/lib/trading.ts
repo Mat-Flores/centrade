@@ -156,8 +156,10 @@ export function sortPositions(positions: readonly Position[]): Position[] {
   return positions.map((p, i) => [p, i] as const).sort(([a, i], [b, j]) => RANK[a.protection_state] - RANK[b.protection_state] || i - j).map(([p]) => p);
 }
 
+const MODE_ORDER: Total["mode"][] = ["live", "paper", "unknown"];
+
 export interface Total {
-  mode: TradingMode;
+  mode: TradingMode | "unknown";
   currency: string;
   pnl: string;
   fees: string;
@@ -166,17 +168,17 @@ export interface Total {
 
 /**
  * Totaux par mode ET par devise : jamais de somme entre paper et live, ni entre devises (SPEC §9).
- * Live d'abord, puis paper ; devises dans l'ordre alphabétique.
+ * Le mode est celui que `modeOf` présente (observé, jamais celui de la ligne). Live, paper, puis inconnu ; devises dans l'ordre alphabétique.
  */
-export function totalsByModeCurrency(trades: readonly Trade[]): Total[] {
+export function totalsByModeCurrency(trades: readonly Trade[], modeOf: (t: Trade) => Total["mode"]): Total[] {
   const groups = new Map<string, Trade[]>();
   for (const t of trades) {
-    const key = `${t.mode}|${t.currency}`;
+    const key = `${modeOf(t)}|${t.currency}`;
     groups.set(key, [...(groups.get(key) ?? []), t]);
   }
   return [...groups.values()]
-    .map((g) => ({ mode: g[0]!.mode, currency: g[0]!.currency, pnl: sumDecimals(g.map((t) => t.pnl)), fees: sumDecimals(g.map((t) => t.fees)), count: g.length }))
-    .sort((a, b) => (a.mode === b.mode ? a.currency.localeCompare(b.currency) : a.mode === "live" ? -1 : 1));
+    .map((g) => ({ mode: modeOf(g[0]!), currency: g[0]!.currency, pnl: sumDecimals(g.map((t) => t.pnl)), fees: sumDecimals(g.map((t) => t.fees)), count: g.length }))
+    .sort((a, b) => MODE_ORDER.indexOf(a.mode) - MODE_ORDER.indexOf(b.mode) || a.currency.localeCompare(b.currency));
 }
 
 export interface Breakdown {

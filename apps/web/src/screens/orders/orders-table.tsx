@@ -50,7 +50,7 @@ export function OrdersTable({
           return (
             <tr key={o.id} data-order={o.client_order_id} data-intent={o.intent}>
               <td className={TD}>
-                <InstanceCell id={o.instance_id} mode={o.mode} instances={instances} />
+                <InstanceCell id={o.instance_id} nowIso={nowIso} instances={instances} />
               </td>
               <td className={TD}>
                 <span className="font-mono">{o.instrument}</span>

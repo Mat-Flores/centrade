@@ -3,10 +3,18 @@ import { TableShell, TD, TH, THEAD } from "@/components/data-table";
 import { Badge } from "@/components/ui/badge";
 import { fr } from "@/i18n/fr";
 import { ENGINE_STALE_MS } from "@/lib/cockpit";
+import { formatDecimalText } from "@/lib/format";
+import { attempt } from "@/screens/accounts/cells";
 import { shortHash, type InstanceDetail } from "@/lib/strategies";
 
 const t = fr.strategies.running;
-const show = (v: unknown): string => (v === undefined ? t.missing : typeof v === "string" ? v : JSON.stringify(v));
+const DECIMAL = /^[+-]?\d+(\.\d+)?$/;
+/** Un nombre (ou une chaîne décimale) s'écrit en fr-CA ; toute autre valeur reste telle quelle. */
+const show = (v: unknown): string => {
+  if (v === undefined) return t.missing;
+  if (typeof v === "number" || (typeof v === "string" && DECIMAL.test(v))) return attempt(() => formatDecimalText(String(v))) ?? String(v);
+  return typeof v === "string" ? v : JSON.stringify(v);
+};
 
 function Item({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -35,7 +43,7 @@ export function RunningPanel({ detail, nowIso, dimmed }: { detail: InstanceDetai
   const common = { serverTime: nowIso, staleAfterMs: ENGINE_STALE_MS } as const;
 
   return (
-    <section aria-labelledby={`running-${detail.id}`} data-running={detail.name} data-dimmed={dimmed || undefined} className="flex flex-col gap-4 rounded-lg border bg-background p-4">
+    <section aria-labelledby={`running-${detail.id}`} data-running={detail.name} data-dimmed={dimmed || undefined} className="flex flex-col gap-4 border-t pt-4">
       <div>
         <h4 id={`running-${detail.id}`} className="text-base font-semibold">{t.title}</h4>
         <p className="text-sm text-muted-foreground">{t.intro}</p>
@@ -125,7 +133,7 @@ export function RunningPanel({ detail, nowIso, dimmed }: { detail: InstanceDetai
             <p className="text-sm">
               <ObservedValue value={fr.observed.observedAt} observedAt={eff.observed_at} {...common} />
             </p>
-            <TableShell label={t.effective} minWidth="min-w-[28rem]" dimmed={dimmed}>
+            <TableShell label={t.effective} minWidth="min-w-[28rem]" dimmed={dimmed} bare>
               <thead className={THEAD}>
                 <tr>
                   <th scope="col" className={TH}>{t.columns.key}</th>

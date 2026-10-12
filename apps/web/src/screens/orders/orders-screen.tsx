@@ -151,8 +151,8 @@ export function OrdersScreen({ canAct, degraded, nowIso, instances }: OrdersScre
             ))}
           </Select>
         </Field>
-        <label className="flex items-center gap-2 text-sm sm:col-span-2">
-          <input type="checkbox" checked={byAccount} onChange={(e) => setByAccount(e.target.checked)} />
+        <label className="flex min-h-11 w-fit cursor-pointer items-center gap-3 text-base sm:col-span-2">
+          <input type="checkbox" className="size-5 accent-primary" checked={byAccount} onChange={(e) => setByAccount(e.target.checked)} />
           {t.filters.groupByAccount}
         </label>
       </form>
@@ -202,7 +202,7 @@ export function OrdersScreen({ canAct, degraded, nowIso, instances }: OrdersScre
       <Section id="trades-title" title={t.trades.title} load={trades} empty={t.trades.empty}>
         {(items) => (
           <Grouped rows={items} on={byAccount}>
-            {(rows) => <TradesSection trades={rows} instances={byId} dimmed={degraded} />}
+            {(rows) => <TradesSection trades={rows} instances={byId} nowIso={nowIso} dimmed={degraded} />}
           </Grouped>
         )}
       </Section>

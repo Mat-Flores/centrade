@@ -57,7 +57,7 @@ function StrategyView({ strategy, versionNumber, canAct, isAdmin, degraded, nowI
             {t.versions.title(strategy.name)}
           </h2>
           {canAct && (
-            <Button type="button" onClick={() => setDepositing(true)}>
+            <Button type="button" variant="outline" onClick={() => setDepositing(true)}>
               {t.versions.deposit}
             </Button>
           )}
@@ -136,7 +136,7 @@ export function StrategiesScreen({ canAct, isAdmin, degraded, nowIso }: Strategi
       {strategies.isPending && <Skeleton role="status" aria-label={t.loading} className="h-32 w-full" />}
       {strategies.isError && <Failure title={t.loadError.title} body={t.loadError.body} onRetry={() => void strategies.refetch()} />}
       {strategies.data && (
-        <div className="grid gap-8 xl:grid-cols-[18rem_minmax(0,1fr)]">
+        <div className="grid gap-8 2xl:grid-cols-[18rem_minmax(0,1fr)]">
           <section aria-labelledby="strategies-title" className="flex flex-col gap-3">
             <h2 id="strategies-title" className="text-xl font-semibold tracking-tight">
               {t.list.title}

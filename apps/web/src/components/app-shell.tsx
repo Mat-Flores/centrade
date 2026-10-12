@@ -102,9 +102,9 @@ export function AppShell({ me, theme, onToggleTheme, bar, children }: AppShellPr
         }
       />
 
-      <div className="flex flex-1 flex-col md:flex-row">
-        <nav aria-label={fr.nav.label} className="border-b md:w-60 md:shrink-0 md:border-r md:border-b-0">
-          <ul className="flex gap-1 overflow-x-auto p-2 md:flex-col md:overflow-visible md:p-3">
+      <div className="flex flex-1 flex-col lg:flex-row">
+        <nav aria-label={fr.nav.label} className="border-b lg:w-60 lg:shrink-0 lg:border-r lg:border-b-0">
+          <ul className="flex gap-1 overflow-x-auto p-2 lg:flex-col lg:overflow-visible lg:p-3">
             {SCREENS.map((id) => (
               <li key={id} className="shrink-0">
                 {isRouted(id) ? (

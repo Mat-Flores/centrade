@@ -179,6 +179,18 @@ export function deriveMode(instances: Instance[] | undefined): Mode {
   return "unknown";
 }
 
+export type ShownMode = Mode;
+
+/**
+ * Mode à présenter pour une instance : l'observé s'il est frais, sinon « inconnu ». Jamais le mode voulu,
+ * ni un observé périmé (SPEC §9, I1) : « simulé » ne s'écrit que pour un mode paper observé et frais.
+ */
+export function shownMode(instance: Instance | undefined, nowIso: string): ShownMode {
+  const m = instance?.observed_mode;
+  if (!m || m.value === "unknown") return "unknown";
+  return freshness({ observedAt: m.observed_at, serverTime: nowIso, staleAfterMs: ENGINE_STALE_MS }).state === "fresh" ? m.value : "unknown";
+}
+
 /** Moteurs : d'après les états observés des instances, jamais d'après l'état voulu. */
 export function deriveEngines(instances: Instance[] | undefined, nowMs: number): Health {
   if (!instances || instances.length === 0) return "unknown";

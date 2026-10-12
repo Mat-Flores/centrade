@@ -7,7 +7,7 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Spinner } from "@/components/ui/spinner";
 import { fr } from "@/i18n/fr";
 import { ApiError } from "@/lib/api";
-import { applyStreamMessage, ENGINE_STALE_MS, stateView } from "@/lib/cockpit";
+import { applyStreamMessage, ENGINE_STALE_MS, shownMode, stateView } from "@/lib/cockpit";
 import { formatAge } from "@/lib/format";
 import type { Instance } from "@/lib/instances";
 import { cancelOrder, closePosition, tradingKey, type Order, type Position } from "@/lib/trading";
@@ -56,9 +56,9 @@ export function TradeActionDialog({ action, instance, nowIso, onClose }: { actio
   const error = mutation.error;
   const reason = error instanceof ApiError && error.kind === "problem" ? (error.problem?.detail ?? t.close.errorFallback) : t.close.errorFallback;
   const isClose = action.kind === "close";
-  const subject = isClose ? action.position : action.order;
   const title = isClose ? t.close.title(action.position.instrument) : t.ordersList.dialogTitle(action.order.instrument);
-  const mode = t.modes[subject.mode] + (subject.mode === "paper" ? ` ${t.simulated}` : "");
+  const shown = shownMode(instance, nowIso);
+  const mode = t.modes[shown] + (shown === "paper" ? ` ${t.simulated}` : "");
 
   return (
     <ConfirmDialog titleId="trade-title" descriptionId="trade-description" busy={mutation.isPending} onClose={onClose}>

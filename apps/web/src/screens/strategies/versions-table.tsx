@@ -29,7 +29,7 @@ export function VersionsTable({
   onAdvance: (v: Version) => void;
 }) {
   return (
-    <TableShell label={t.list} minWidth="min-w-[38rem]">
+    <TableShell label={t.list} minWidth="min-w-[40rem]">
       <thead className={THEAD}>
         <tr>
           <th scope="col" className={TH}>{t.columns.version}</th>
@@ -60,7 +60,7 @@ export function VersionsTable({
                 <Ts iso={v.created_at} serverTime={serverTime} />
               </td>
               <td className={TD}>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-nowrap gap-2">
                   <AppLink
                     to={pathWith(SCREEN_PATHS.strategies, { s: strategyId, v: v.version })}
                     aria-label={t.detailsLabel(v.version)}

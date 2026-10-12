@@ -107,11 +107,11 @@ export function StaticChecks({ checks, serverTime }: { checks: Raw; serverTime: 
 
 export function CodeView({ code }: { code: string }) {
   return (
-    <details className="rounded-lg border">
+    <details className="overflow-hidden rounded-lg bg-muted">
       <summary className="flex min-h-11 cursor-pointer items-center px-3 text-base font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
         {t.code.title} <span className="ml-2 text-sm font-normal text-muted-foreground">({t.code.lines(code.split("\n").length)})</span>
       </summary>
-      <pre tabIndex={0} aria-label={t.code.title} className="max-h-96 overflow-auto border-t bg-muted p-3 font-mono text-sm">
+      <pre tabIndex={0} aria-label={t.code.title} className="max-h-96 overflow-auto border-t p-3 font-mono text-sm">
         {code}
       </pre>
     </details>

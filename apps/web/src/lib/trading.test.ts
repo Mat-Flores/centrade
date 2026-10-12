@@ -18,17 +18,21 @@ describe("totaux", () => {
       trade({ pnl: "-0.5" }),
       trade({ mode: "live", pnl: "3" }),
       trade({ currency: "EUR", pnl: "7" }),
-    ]);
+    ], (t) => t.mode);
     expect(totals.map((t) => [t.mode, t.currency, t.pnl, t.count])).toEqual([
       ["live", "USDT", "3", 1],
       ["paper", "EUR", "7", 1],
       ["paper", "USDT", "10.0", 2],
     ]);
   });
-  it("somme exacte des frais, sans flottant", () => {
-    expect(totalsByModeCurrency([trade({ fees: "0.1" }), trade({ fees: "0.2" })])[0]!.fees).toBe("0.3");
+  it("groupe par le mode présenté (observé), pas par le mode voulu porté par la ligne", () => {
+    const totals = totalsByModeCurrency([trade({ pnl: "1" }), trade({ pnl: "2" }), trade({ pnl: "4" })], (t) => (t.pnl === "4" ? "unknown" : "live"));
+    expect(totals.map((t) => [t.mode, t.pnl, t.count])).toEqual([["live", "3", 2], ["unknown", "4", 1]]);
   });
-  it("aucun trade : aucun total", () => expect(totalsByModeCurrency([])).toEqual([]));
+  it("somme exacte des frais, sans flottant", () => {
+    expect(totalsByModeCurrency([trade({ fees: "0.1" }), trade({ fees: "0.2" })], (t) => t.mode)[0]!.fees).toBe("0.3");
+  });
+  it("aucun trade : aucun total", () => expect(totalsByModeCurrency([], (t) => t.mode)).toEqual([]));
 });
 
 describe("positions", () => {

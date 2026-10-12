@@ -118,6 +118,16 @@
   --radius-xl: calc(var(--radius) * 1.5);
 }
 
+/* Ombre de défilement horizontal : visible seulement du côté où le contenu continue (technique « local / scroll »). */
+@utility scroll-shadow {
+  background:
+    linear-gradient(to right, var(--card) 30%, transparent) left center / 2rem 100% no-repeat local,
+    linear-gradient(to left, var(--card) 30%, transparent) right center / 2rem 100% no-repeat local,
+    linear-gradient(to right, color-mix(in oklch, var(--foreground) 22%, transparent), transparent) left center / 0.75rem 100% no-repeat scroll,
+    linear-gradient(to left, color-mix(in oklch, var(--foreground) 22%, transparent), transparent) right center / 0.75rem 100% no-repeat scroll,
+    var(--card);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring;

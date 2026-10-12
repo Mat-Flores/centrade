@@ -1,5 +1,6 @@
 import { TableShell, TD, TDR, TH, THEAD, THR } from "@/components/data-table";
 import { fr } from "@/i18n/fr";
+import { shownMode } from "@/lib/cockpit";
 import { formatPnl, formatTimestamp } from "@/lib/format";
 import type { Instance } from "@/lib/instances";
 import { exitBreakdown, totalsByModeCurrency, type Breakdown, type Trade } from "@/lib/trading";
@@ -12,8 +13,8 @@ const causeLabel = (c: string) => t.causes[c] ?? c;
 const pnl = (amount: string, currency: string) => attempt(() => formatPnl(amount, currency)) ?? fr.orders.unreadable;
 
 /** Totaux par (mode, devise) : une ligne chacun, jamais de somme entre deux d'entre eux. */
-function Totals({ trades }: { trades: Trade[] }) {
-  const totals = totalsByModeCurrency(trades);
+function Totals({ trades, instances, nowIso }: { trades: Trade[]; instances: ReadonlyMap<string, Instance>; nowIso: string }) {
+  const totals = totalsByModeCurrency(trades, (x) => shownMode(instances.get(x.instance_id), nowIso));
   return (
     <section aria-labelledby="totals-title" className="flex flex-col gap-2">
       <h3 id="totals-title" className="text-base font-semibold">{t.totalsTitle}</h3>
@@ -39,9 +40,8 @@ function Totals({ trades }: { trades: Trade[] }) {
  * quantité, le libellé direct porte l'identité : aucune couleur à distinguer). Le détail chiffré est écrit
  * à droite de chaque barre, donc la figure se lit aussi sans la voir.
  */
-function Breakdowns({ trades, instances }: { trades: Trade[]; instances: ReadonlyMap<string, Instance> }) {
+function Breakdowns({ trades, instances, nowIso }: { trades: Trade[]; instances: ReadonlyMap<string, Instance>; nowIso: string }) {
   const groups = exitBreakdown(trades);
-  const modeOf = new Map(trades.map((x) => [x.instance_id, x.mode]));
   return (
     <section aria-labelledby="breakdown-title" className="flex flex-col gap-3">
       <h3 id="breakdown-title" className="text-base font-semibold">{t.breakdownTitle}</h3>
@@ -53,7 +53,7 @@ function Breakdowns({ trades, instances }: { trades: Trade[]; instances: Readonl
             <figure key={g.instanceId} data-breakdown={name} className="flex flex-col gap-2 rounded-lg border p-3">
               <figcaption className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <span className="font-mono font-semibold">{name}</span>
-                {modeOf.get(g.instanceId) && <ModeMark mode={modeOf.get(g.instanceId)!} />}
+                <ModeMark mode={shownMode(instances.get(g.instanceId), nowIso)} />
                 <span className="text-sm text-muted-foreground">{t.breakdownTotal(g.total)}</span>
               </figcaption>
               <ul className="flex flex-col gap-1.5">
@@ -82,11 +82,11 @@ function when(iso: string): string {
   return attempt(() => formatTimestamp(iso)) ?? fr.orders.unreadable;
 }
 
-export function TradesSection({ trades, instances, dimmed }: { trades: Trade[]; instances: ReadonlyMap<string, Instance>; dimmed: boolean }) {
+export function TradesSection({ trades, instances, nowIso, dimmed }: { trades: Trade[]; instances: ReadonlyMap<string, Instance>; nowIso: string; dimmed: boolean }) {
   return (
     <div className="flex flex-col gap-6" data-dimmed={dimmed || undefined}>
-      <Totals trades={trades} />
-      <Breakdowns trades={trades} instances={instances} />
+      <Totals trades={trades} instances={instances} nowIso={nowIso} />
+      <Breakdowns trades={trades} instances={instances} nowIso={nowIso} />
       <TableShell label={t.list} dimmed={dimmed} minWidth="min-w-[58rem]">
         <thead className={THEAD}>
           <tr>
@@ -104,7 +104,7 @@ export function TradesSection({ trades, instances, dimmed }: { trades: Trade[]; 
           {trades.map((x) => (
             <tr key={x.id} data-trade={x.instrument} data-exit-cause={x.exit_cause}>
               <td className={TD}>
-                <InstanceCell id={x.instance_id} mode={x.mode} instances={instances} />
+                <InstanceCell id={x.instance_id} nowIso={nowIso} instances={instances} />
               </td>
               <td className={`${TD} font-mono`}>{x.instrument}</td>
               <td className={TDR}>{num(x.quantity)}</td>
@@ -116,7 +116,7 @@ export function TradesSection({ trades, instances, dimmed }: { trades: Trade[]; 
               <td className={TDR}>
                 {num(x.fees)}&nbsp;{x.currency}
               </td>
-              <td className={`${TD} font-mono whitespace-nowrap`}>{when(x.closed_at)}</td>
+              <td className={`${TD} font-mono`}>{when(x.closed_at)}</td>
             </tr>
           ))}
         </tbody>

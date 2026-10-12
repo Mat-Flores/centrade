@@ -2,6 +2,25 @@ import { useEffect, useRef, type ReactNode } from "react"
 
 import { cn } from "@/lib/utils"
 
+const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]):not([hidden]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])'
+
+/** Tab au bout de la fenêtre revient au début (et Maj+Tab à la fin) : sans cela le focus sort vers le document puis la barre du navigateur. */
+function wrapTab(event: React.KeyboardEvent<HTMLDialogElement>) {
+  if (event.key !== "Tab") return
+  const items = [...event.currentTarget.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((el) => el.offsetParent !== null)
+  const first = items[0]
+  const last = items[items.length - 1]
+  if (!first || !last) return
+  const active = document.activeElement
+  if (event.shiftKey && (active === first || active === event.currentTarget)) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
+
 /**
  * Fenêtre de confirmation sur l'élément natif <dialog> (showModal) : focus piégé, fond inerte, Échap,
  * retour du focus à l'élément d'origine. Pas de Radix ici : son verrou de défilement injecte une
@@ -42,6 +61,7 @@ export function ConfirmDialog({
       role="alertdialog"
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
+      onKeyDown={wrapTab}
       onCancel={(event) => {
         event.preventDefault()
         if (!busy) onClose()

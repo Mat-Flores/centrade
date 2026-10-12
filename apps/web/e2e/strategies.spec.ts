@@ -2,7 +2,7 @@ import path from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 
 import { command, emit, sseEvent, T0, world } from "./cockpit-support";
-import { expectNoViolation } from "./support";
+import { expectInView, expectNoViolation } from "./support";
 import { ID } from "./trading-support";
 import { mockRegistry, S1 } from "./strategies-support";
 
@@ -172,15 +172,15 @@ test("« Ce qui tourne réellement » : empreinte, version du moteur, configurat
   await expect(panel).toContainText("ffffffffffffffff"); // empreinte de déploiement (16 premiers caractères)
   await expect(panel).toContainText("2026.9");
   await expect(panel).toContainText("Aucun écart constaté");
-  await expect(panel.locator('[data-config-key="stoploss"]')).toContainText("-0.05");
+  await expect(panel.locator('[data-config-key="stoploss"]')).toContainText("-0,05");
   await panel.locator('[data-state="fresh"]').first().hover();
   await expect(page.getByRole("tooltip")).toContainText("Observé il y a");
 
   const bravo = inst(page, "bravo").locator("[data-running]");
   await expect(bravo.locator("[data-drift]")).toContainText("ÉCART");
   const drift = bravo.locator('[data-drift-key="stoploss"]');
-  await expect(drift).toContainText("Attendu : -0.05");
-  await expect(drift).toContainText("Observé : -0.10");
+  await expect(drift).toContainText("Attendu : -0,05");
+  await expect(drift).toContainText("Observé : -0,10");
   await expect(bravo.locator('[data-drift-row="true"]')).toHaveCount(1);
   await expect(bravo.getByText(/périmé depuis/).first()).toBeVisible();
 
@@ -346,3 +346,57 @@ for (const scheme of ["light", "dark"] as const) {
     });
   }
 }
+
+test("bureau (1280 px) : les actions d'une version sont dans le champ visible, sur une seule ligne", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockRegistry(page);
+  await page.goto(OPEN);
+  const row = page.locator('tr[data-version="2"]');
+  await expect(row).toBeVisible();
+  await expectInView(row.getByRole("link", { name: "Voir la version 2" }));
+  const draft = page.locator('tr[data-version="1"]');
+  await expectInView(draft.getByRole("button", { name: /Approuver la version 1/ }));
+  expect((await draft.boundingBox())!.height).toBeLessThan(80);
+});
+
+test("dépôt : le pied reste visible à 1280×800, sélecteur de fichier en français, Tab boucle dans la fenêtre", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await mockRegistry(page);
+  await page.goto(OPEN);
+  await page.getByRole("button", { name: "Déposer une version" }).click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog.getByRole("button", { name: "Déposer la version" })).toBeInViewport({ ratio: 1 });
+  await expect(dialog.getByRole("button", { name: "Annuler" })).toBeInViewport({ ratio: 1 });
+  await expect(dialog.getByRole("button", { name: "Charger un manifest depuis un fichier" })).toBeVisible();
+  await expect(dialog).not.toContainText("Choose File");
+  // Piège de focus : le focus ne sort jamais de la fenêtre (jamais sur BODY).
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press("Tab");
+    expect(await page.evaluate(() => document.activeElement?.closest("dialog") !== null)).toBe(true);
+  }
+  await page.keyboard.press("Shift+Tab");
+  expect(await page.evaluate(() => document.activeElement?.closest("dialog") !== null)).toBe(true);
+});
+
+test("un seul bouton plein par vue ; aucune carte dans une carte", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 1600 });
+  const w = world(T0);
+  await mockRegistry(page, { now: () => T0, data: { instances: w.instances, alerts: w.alerts } });
+  await page.goto(`${OPEN}&v=2`);
+  await expect(page.getByRole("form", { name: "Déployer en paper" })).toBeVisible();
+  const filled = await page.locator("main").getByRole("button").evaluateAll((bs) => bs.filter((b) => (b as HTMLElement).dataset.variant === "default").length);
+  expect(filled).toBe(1);
+  // Un élément avec cadre (bordure + rayon) n'a aucun ancêtre avec cadre dans `main`.
+  const nested = await page.locator("main").evaluate((m) => {
+    const framed = (el: Element) => {
+      const c = getComputedStyle(el);
+      return c.borderTopStyle !== "none" && c.borderTopWidth !== "0px" && c.borderTopLeftRadius !== "0px";
+    };
+    return [...m.querySelectorAll("*")].filter((el) => {
+      if (!["SECTION", "UL", "DIV", "DETAILS", "FIGURE"].includes(el.tagName) || !framed(el)) return false;
+      for (let p = el.parentElement; p && p !== m; p = p.parentElement) if (framed(p)) return true;
+      return false;
+    }).map((el) => `${el.tagName}.${String(el.className).slice(0, 50)}`);
+  });
+  expect(nested).toEqual([]);
+});

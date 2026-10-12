@@ -9,6 +9,7 @@ import {
   degradation,
   deriveEngines,
   deriveMode,
+  shownMode,
   describeCommand,
   stateView,
   unseenProblems,
@@ -273,5 +274,19 @@ describe("flux : application des messages au cache", () => {
     const qc = new QueryClient();
     applyStreamMessage(qc, { event: "instance", server_time: iso(0), instance: instance() });
     expect(qc.getQueryData(instancesKey)).toBeUndefined();
+  });
+});
+
+describe("shownMode : le mode présenté vient du mode observé, jamais du voulu (I1)", () => {
+  const nowIso = new Date(NOW).toISOString();
+  it("voulu PAPER, observé LIVE frais : live", () => {
+    const i = instance({ desired_mode: "paper", mode_mismatch: true, observed_mode: { value: "live", observed_at: iso(2), stale: false } });
+    expect(shownMode(i, nowIso)).toBe("live");
+  });
+  it("observé paper frais : paper", () => expect(shownMode(instance(), nowIso)).toBe("paper"));
+  it("observé périmé : inconnu, même si le voulu est paper", () => expect(shownMode(instance({ age: 95 }), nowIso)).toBe("unknown"));
+  it("observé inconnu ou instance absente : inconnu", () => {
+    expect(shownMode(instance({ age: null }), nowIso)).toBe("unknown");
+    expect(shownMode(undefined, nowIso)).toBe("unknown");
   });
 });
