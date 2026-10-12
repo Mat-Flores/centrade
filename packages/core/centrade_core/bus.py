@@ -74,7 +74,8 @@ NOTIFY_CHANNEL = "notify"  # Pub/Sub : quelque chose a changé, l'API relit la b
 
 
 async def notify(redis: Redis, kind: str, ident: object) -> None:
-    """Prévient les flux SSE (`instance`, `command`, `alert`). Au mieux : la base fait foi."""
+    """Prévient les flux SSE (`instance`, `command`, `alert`, `order`, `position`, `trade`).
+    Au mieux : la base fait foi."""
     try:
         await redis.publish(NOTIFY_CHANNEL, json.dumps({"kind": kind, "id": str(ident)}))
     except Exception:

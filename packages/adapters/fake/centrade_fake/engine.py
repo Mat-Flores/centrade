@@ -22,6 +22,8 @@ from centrade_core.engine.types import (
     BacktestSpec,
     Balance,
     Capabilities,
+    ClosedTrade,
+    Drift,
     EffectiveConfig,
     EngineConfig,
     InstanceRef,
@@ -50,6 +52,14 @@ from centrade_core.events import (
 
 ENGINE = "fake"
 SYMBOL = "crypto:fake:BTC/USDT"
+# Causes d'événement -> énumération de F10 (la liquidation d'urgence est une sortie manuelle ici).
+_F10_CAUSE = {
+    "manual": "manual",
+    "flatten": "manual",
+    "stop": "stop_loss",
+    "take_profit": "take_profit",
+    "signal": "signal",
+}
 SLOW_LAG = timedelta(seconds=60)  # `slow` : les relevés arrivent vieillis, donc périmés (I1)
 
 
@@ -78,6 +88,7 @@ class _Inst:
     orders: dict[str, Order] = field(default_factory=dict)  # ordres ouverts seulement
     decisions: dict[str, UUID | None] = field(default_factory=dict)
     stops: dict[str, Stop] = field(default_factory=dict)
+    closed: list[ClosedTrade] = field(default_factory=list)
     failures: set[Failure] = field(default_factory=set)
 
 
@@ -157,6 +168,9 @@ class FakeEngine:
         errors = tuple(f"paramètre inconnu : {k}" for k in sorted(set(params) - known))
         return ValidationResult(ok=not errors, errors=errors)
 
+    def check_source(self, manifest: Manifest, source: str) -> ValidationResult:
+        return ValidationResult(ok=True)  # le faux moteur n'exécute aucun code
+
     def render_config(self, spec: InstanceSpec) -> EngineConfig:
         m = spec.manifest
         return EngineConfig(
@@ -168,7 +182,8 @@ class FakeEngine:
                 "stoploss": str(m.exits.stoploss),
                 "stop_on_venue": str(m.exits.stop_on_venue).lower(),
                 "command_interface": "disabled",
-            }
+            },
+            mode_keys=frozenset({"mode", "account_id"}),
         )
 
     async def deploy(self, spec: InstanceSpec) -> InstanceRef:
@@ -236,7 +251,22 @@ class FakeEngine:
         values = dict(inst.config)
         if Failure.DRIFT in inst.failures:
             values["max_open_positions"] = "999"
-        return EffectiveConfig(values=values, observed_at=self._observed_at(inst))
+        dep = inst.spec.deployment  # le simulateur « tourne » ce qu'on lui a déployé
+        return EffectiveConfig(
+            values=values,
+            observed_at=self._observed_at(inst),
+            fingerprint=None if dep is None else dep.fingerprint,
+            engine_version=None if dep is None else dep.engine_version,
+        )
+
+    def config_drift(
+        self, generated: EngineConfig, effective: EffectiveConfig
+    ) -> tuple[Drift, ...]:
+        return tuple(
+            Drift(key=k, expected=generated.values.get(k), observed=v)
+            for k, v in sorted(effective.values.items())
+            if generated.values.get(k) != v
+        )
 
     async def snapshot(self, ref: InstanceRef) -> Snapshot:
         inst = self._live(ref)
@@ -247,6 +277,7 @@ class FakeEngine:
             balances=(Balance(currency="USDT", free=total, total=total),),
             stops=tuple(inst.stops.values()),
             observed_at=self._observed_at(inst),
+            closed=tuple(inst.closed),
         )
 
     async def events(self, ref: InstanceRef) -> AsyncIterator[CanonicalEvent]:
@@ -401,17 +432,37 @@ class FakeEngine:
 
     def _close(self, inst: _Inst, pos: Position, cause: ExitCause) -> None:
         del inst.positions[pos.position_id]
-        inst.stops.pop(pos.position_id, None)
+        stop = inst.stops.pop(pos.position_id, None)
+        # Sortie au prix du stop, sinon un cran au-dessus de l'entrée : pnl et frais jamais nuls.
+        exit_price = pos.entry_price * Decimal("1.01")
+        if cause == "stop" and stop and stop.price is not None:
+            exit_price = stop.price
         exit_order = Order(
             order_id=str(self._new_id()),
             symbol=pos.symbol,
             side="sell",
             intent="exit",
             qty=pos.qty,
-            price=pos.entry_price,  # sortie au prix d'entrée : le simulateur ne gagne ni ne perd
+            price=exit_price,
             status="filled",
         )
         self._emit(inst, EventType.ORDER_FILLED, self._order_payload(inst, exit_order, None))
+        inst.closed.append(
+            ClosedTrade(
+                position_id=pos.position_id,
+                symbol=pos.symbol,
+                side=pos.side,
+                qty=pos.qty,
+                entry_price=pos.entry_price,
+                exit_price=exit_price,
+                pnl=(exit_price - pos.entry_price) * pos.qty,
+                fees=exit_price * pos.qty * Decimal("0.001"),
+                entry_cause="signal",
+                exit_cause=_F10_CAUSE[cause],
+                opened_at=pos.opened_at,
+                closed_at=self._clock(),
+            )
+        )
         self._emit(
             inst,
             EventType.POSITION_CLOSED,
@@ -420,7 +471,7 @@ class FakeEngine:
                 symbol=pos.symbol,
                 exit_cause=cause,
                 qty=pos.qty,
-                exit_price=pos.entry_price,
+                exit_price=exit_price,
             ),
         )
         self._emit(

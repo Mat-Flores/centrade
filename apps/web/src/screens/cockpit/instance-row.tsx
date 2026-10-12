@@ -1,4 +1,5 @@
 import { CircleAlertIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { ObservedValue } from "@/components/observed-value";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +12,7 @@ import {
   currentCommand,
   describeCommand,
   ENGINE_STALE_MS,
+  shownMode,
   stateView,
   unseenProblems,
   VERIFIED_SHOWN_MS,
@@ -32,11 +34,13 @@ export interface InstanceRowProps {
   seen: ReadonlySet<string>;
   onSeen: (commandId: string) => void;
   onAction: (instance: Instance, action: ActionType) => void;
+  /** Contenu propre à l'écran hôte (écran Stratégies : « Ce qui tourne réellement »), sous les actions. */
+  children?: ReactNode;
 }
 
 const typeLabel = (type: string) => fr.cockpit.command.types[type] ?? type;
 
-export function InstanceRow({ instance, commands, nowIso, degraded, canAct, isAdmin, seen, onSeen, onAction }: InstanceRowProps) {
+export function InstanceRow({ instance, commands, nowIso, degraded, canAct, isAdmin, seen, onSeen, onAction, children }: InstanceRowProps) {
   const nowMs = Date.parse(nowIso);
   const view = stateView(instance, nowMs);
   const mode = instance.observed_mode;
@@ -70,7 +74,7 @@ export function InstanceRow({ instance, commands, nowIso, degraded, canAct, isAd
                 {fr.cockpit.modeMismatchDetail(fr.bar.modes[instance.desired_mode], modeLabel)}
               </span>
             )}
-            {instance.desired_mode === "paper" && (
+            {shownMode(instance, nowIso) === "paper" && !instance.mode_mismatch && (
               <span className="text-sm text-muted-foreground" title={fr.cockpit.simulatedHint}>
                 {fr.cockpit.simulated}
               </span>
@@ -106,6 +110,7 @@ export function InstanceRow({ instance, commands, nowIso, degraded, canAct, isAd
       {latest && !problems.some((p) => p.id === latest.id) && <CommandLine command={latest} nowMs={nowMs} />}
 
       {canAct && <Actions instance={instance} degraded={degraded} role={isAdmin ? "admin" : "operator"} nowMs={nowMs} onAction={onAction} />}
+      {children}
     </li>
   );
 }

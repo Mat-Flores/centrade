@@ -132,7 +132,12 @@ async def test_moteur_injoignable_unknown_et_valeurs_non_rafraichies(
             inst = await s.get(Instance, ref.instance_id)
             assert inst is not None and inst.observed_state == "running"
             assert inst.observed_at == T0
-            obs = {p.external_id: p.observed_at for p in await s.scalars(select(Position))}
+            obs = {  # les positions de cette instance : la base est partagée entre les tests
+                p.external_id: p.observed_at
+                for p in await s.scalars(
+                    select(Position).where(Position.instance_id == ref.instance_id)
+                )
+            }
         assert set(obs.values()) == {T0}
 
         w.fake.set_failure(ref, Failure.SILENT)

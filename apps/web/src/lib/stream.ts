@@ -13,6 +13,9 @@ const SCHEMAS = {
   instance: z.object({ ...timed, instance: InstanceSchema }),
   command: z.object({ ...timed, command: CommandSchema }),
   alert: z.object({ ...timed, alert: AlertSchema }),
+  order: z.object(timed),
+  position: z.object(timed),
+  trade: z.object(timed),
 } as const;
 const EVENTS = Object.keys(SCHEMAS) as (keyof typeof SCHEMAS)[];
 
@@ -30,7 +33,7 @@ export function parseStreamMessage(event: keyof typeof SCHEMAS, data: string): S
 
 /** À l'ouverture et à la reconnexion : relecture complète des listes (rien n'est supposé d'avant la coupure). */
 function reload(qc: QueryClient): void {
-  for (const key of [instancesKey, commandsKey, alertsKey]) void qc.refetchQueries({ queryKey: key });
+  for (const key of [instancesKey, commandsKey, alertsKey, ["trading"], ["instance-detail"]]) void qc.refetchQueries({ queryKey: key });
 }
 
 /**

@@ -168,7 +168,8 @@ async def test_rbac_viewer_ne_peut_rien_commander_et_audit_reserve_a_l_admin(sta
 async def test_aucune_route_ni_schema_ne_nomme_un_moteur(stack: Stack) -> None:
     spec = json.dumps(stack.app.openapi()).lower()
     assert "fake" not in spec and "freqtrade" not in spec
-    assert not [p for p in stack.app.openapi()["paths"] if "order" in p]  # aucune création d'ordre
+    paths = stack.app.openapi()["paths"]  # aucune création d'ordre ; l'annulation d'entrée existe
+    assert not [p for p in paths if "order" in p and "post" in paths[p]]
 
 
 async def test_le_worker_recharge_les_instances_en_sorties_seules(stack: Stack) -> None:

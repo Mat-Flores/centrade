@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatAge, formatMoney, formatPnl, formatTimestamp, freshness } from "./format";
+import { formatAge, formatDecimalText, formatMoney, formatPnl, formatTimestamp, freshness } from "./format";
 
 const SERVER = "2026-10-10T18:32:05Z";
 const NBSP = /\u00a0/;
@@ -79,5 +79,23 @@ describe("formatMoney", () => {
   it("refuse un nombre à virgule flottante ou une notation exponentielle", () => {
     expect(() => formatMoney("1e3", "USD")).toThrow(RangeError);
     expect(() => formatMoney("abc", "USD")).toThrow(RangeError);
+  });
+});
+
+const sp = (text: string) => text.replace(/\s/g, " "); // le séparateur de milliers fr-CA est insécable
+
+describe("décimaux de l'affichage (formatDecimalText)", () => {
+  it("garde toutes les décimales et ne passe jamais par un flottant", () => {
+    expect(formatDecimalText("0.1000000000000000055511151231257827")).toBe("0,1000000000000000055511151231257827");
+    expect(sp(formatDecimalText("60000.50"))).toBe("60 000,50");
+    expect(sp(formatDecimalText("12345678901234567890.123456789"))).toBe("12 345 678 901 234 567 890,123456789");
+  });
+  it("une perte reste visible : signe, et aucune décimale arrondie à zéro", () => {
+    expect(formatDecimalText("-0.00000001", true)).toMatch(/^[-−]0,00000001$/);
+    expect(formatDecimalText("5.0001", true)).toBe("+5,0001");
+    expect(formatPnl("-0.00000001", "USDT")).toMatch(/^[-−]0,00000001\u00a0USDT$/);
+  });
+  it("refuse un texte qui n'est pas un décimal", () => {
+    expect(() => formatDecimalText("1e5")).toThrow(RangeError);
   });
 });

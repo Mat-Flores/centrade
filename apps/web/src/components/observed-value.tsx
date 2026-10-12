@@ -43,7 +43,7 @@ export function ObservedValue({ value, observedAt, serverTime, staleAfterMs, cla
   const hint = `${fr.observed.observedAt} ${formatAge(f.ageMs)} · ${formatTimestamp(observedAt as string)}`;
   return (
     <Hint text={hint}>
-      <span data-state={f.state} tabIndex={0} className={cn("inline-flex items-baseline gap-2 rounded-sm", className)}>
+      <span data-state={f.state} tabIndex={0} className={cn("inline-flex flex-wrap items-baseline gap-x-2 rounded-sm", className)}>
         <span className={cn(mono && "font-mono", f.state === "stale" && "text-[color-mix(in_oklch,var(--foreground)_70%,var(--background))]")}>{value}</span>
         {f.state === "stale" && (
           <span className="text-xs text-muted-foreground">{fr.observed.staleSince(formatAge(f.staleForMs))}</span>

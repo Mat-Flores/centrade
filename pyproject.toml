@@ -8,11 +8,13 @@ dependencies = [
     "argon2-cffi>=25.1.0",
     "asyncpg>=0.32.0",
     "cryptography>=50.0.2",
+    "docker>=7.2.0",
     "fastapi>=0.143.0",
     "pydantic>=2.14.0",
     "pydantic-settings>=2.15.0",
     "pyotp>=2.10.0",
     "redis>=8.1.0",
+    "requests>=2.34.2",
     "sqlalchemy[asyncio]>=2.1.4",
     "structlog>=26.1.0",
     "uvicorn>=0.54.0",
@@ -36,13 +38,14 @@ select = ["E", "F", "I", "UP", "B", "S", "ASYNC", "RUF"]
 
 [tool.mypy]
 python_version = "3.12"
-mypy_path = ["apps/api", "packages/core", "packages/adapters/fake", "apps/worker"]
+mypy_path = ["apps/api", "packages/core", "packages/adapters/fake", "packages/adapters/freqtrade", "apps/worker", "tests"]
 files = [
     "apps/api/centrade_api",
     "apps/api/tests",
     "packages/core/centrade_core",
     "packages/core/alembic",
     "packages/adapters/fake/centrade_fake",
+    "packages/adapters/freqtrade/centrade_freqtrade",
     "apps/worker/centrade_worker",
     "tests",
 ]
@@ -50,9 +53,22 @@ explicit_package_bases = true
 strict = true
 plugins = ["pydantic.mypy"]
 
+# Freqtrade n'existe que dans l'image du moteur, pas dans cet environnement.
+[[tool.mypy.overrides]]
+module = ["freqtrade", "freqtrade.*"]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "centrade_freqtrade.control_plane"
+disallow_subclassing_any = false
+
 [tool.pytest.ini_options]
 testpaths = ["apps/api/tests", "tests"]
-pythonpath = ["apps/api", "packages/core", "packages/adapters/fake", "apps/worker"]
+pythonpath = ["apps/api", "packages/core", "packages/adapters/fake", "packages/adapters/freqtrade", "apps/worker", "tests"]
+markers = [
+    "docker: exige un Docker local (sautée si absent)",
+    "network: exige un accès réseau aux données publiques d'une venue (sautée si absent)",
+]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"

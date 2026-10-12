@@ -90,11 +90,31 @@ async def test_i14_toute_action_ecrit_une_ligne_d_audit_avec_auteur(stack: Stack
         (m, p)
         for ctx in iter_route_contexts(stack.app.routes)
         for m in (ctx.methods or set()) - {"GET", "HEAD", "OPTIONS"}
-        if (p := ctx.path) and not p.startswith("/api/v1/auth/")
+        if (p := ctx.path)
     }
     actions = ("start", "stop", "pause-entries", "resume-entries", "flatten")
     # Une route qui change un état et qui n'est pas parcourue ici fait échouer ce test.
-    assert changing == {("POST", "/api/v1/instances")} | {
+    registre = {
+        ("POST", "/api/v1/strategies"),
+        ("POST", "/api/v1/strategies/{strategy_id}/versions"),
+        ("PATCH", "/api/v1/strategies/{strategy_id}/versions/{version}"),
+    }
+    # Comptes et clés : auditées dans tests/scenarios/test_comptes_et_cles.py.
+    comptes = {
+        ("POST", "/api/v1/accounts"),
+        ("PUT", "/api/v1/accounts/{account_id}/secret"),
+        ("POST", "/api/v1/accounts/{account_id}/test"),
+        ("POST", "/api/v1/accounts/{account_id}/rotate"),
+    }
+    # Fermeture et annulation d'entrée : auditées dans tests/scenarios/test_instances_trading.py.
+    trading = {
+        ("POST", "/api/v1/positions/{position_id}/close"),
+        ("DELETE", "/api/v1/orders/{order_id}"),
+    }
+    # Authentification : auditée dans apps/api/tests/auth/ (test_logs_audit, test_totp_confirm).
+    auth = {("POST", f"/api/v1/auth/{p}") for p in ("login", "totp", "totp/confirm", "logout")}
+    assert changing >= registre | comptes | trading | auth
+    assert changing - registre - comptes - trading - auth == {("POST", "/api/v1/instances")} | {
         ("POST", f"/api/v1/instances/{{instance_id}}/{a}") for a in actions
     }
 

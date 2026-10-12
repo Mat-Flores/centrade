@@ -1,4 +1,5 @@
-"""Flux temps réel (SSE) : battement, puis `instance`, `command`, `alert` relayés depuis Redis.
+"""Flux temps réel (SSE) : battement, puis `instance`, `command`, `alert`, `order`, `position`
+et `trade` relayés depuis Redis.
 
 Le worker et l'API publient sur `notify` seulement l'identité de ce qui a changé ; ce flux relit
 la base et envoie l'objet complet. La session est revérifiée en lecture seule (le flux ne repousse
@@ -30,6 +31,7 @@ from centrade_api.auth.deps import SESSION_IDLE
 from centrade_api.deps import get_redis, get_session_factory, utcnow
 from centrade_api.instances import instance_out
 from centrade_api.schemas import AlertOut, CommandOut
+from centrade_api.trading import trading_out
 
 log = structlog.get_logger()
 router = APIRouter(prefix="/api/v1", tags=["flux"])
@@ -66,6 +68,9 @@ async def _message(
         elif kind == "alert":
             alert = await s.get(Alert, ident)
             payload = {} if alert is None else {"alert": AlertOut.of(alert).model_dump(mode="json")}
+        elif kind in ("order", "position", "trade"):
+            out = await trading_out(s, kind, ident, now, cfg)
+            payload = {} if out is None else {kind: out.model_dump(mode="json")}
         else:
             return None
     if not payload:

@@ -7,9 +7,12 @@ const ProblemSchema = z.object({
   type: z.string().optional(),
   title: z.string().optional(),
   status: z.number().optional(),
-  detail: z.string().optional(),
+  // Une liste de motifs (refus d'un dépôt de version, 422) ou un texte.
+  detail: z.union([z.string(), z.array(z.string())]).optional(),
 });
-export type Problem = z.infer<typeof ProblemSchema>;
+type RawProblem = z.infer<typeof ProblemSchema>;
+/** `detail` est toujours un texte ; `reasons` garde la liste des motifs quand l'API en donne une. */
+export type Problem = Omit<RawProblem, "detail"> & { detail?: string; reasons?: string[] };
 
 export type ApiErrorKind = "network" | "problem" | "invalid-response";
 
@@ -34,7 +37,7 @@ export function setUnauthorizedHandler(handler: (() => void) | null): void {
 }
 
 export interface ApiRequest {
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   body?: unknown;
   /** En-têtes en plus des défauts (ex. `Idempotency-Key` d'une commande). */
   headers?: Record<string, string>;
@@ -48,7 +51,9 @@ async function readProblem(response: Response): Promise<Problem | null> {
   if (!(response.headers.get("content-type") ?? "").includes("json")) return null;
   try {
     const parsed = ProblemSchema.safeParse(await response.json());
-    return parsed.success ? parsed.data : null;
+    if (!parsed.success) return null;
+    const { detail, ...rest } = parsed.data;
+    return Array.isArray(detail) ? { ...rest, detail: detail.join(" ; "), reasons: detail } : { ...rest, detail };
   } catch {
     return null;
   }

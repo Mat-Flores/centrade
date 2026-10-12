@@ -10,8 +10,8 @@ from datetime import datetime
 from uuid import UUID
 
 from centrade_core.audit import SYSTEM_WORKER, write_audit
-from centrade_core.engine.types import InstanceStatus, Snapshot
-from centrade_core.models.trading import Alert, Instance, Order, Position
+from centrade_core.engine.types import EXIT_CAUSES, InstanceStatus, Snapshot
+from centrade_core.models.trading import Alert, Instance, Order, Position, Trade
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,8 +25,10 @@ def _currency(symbol: str) -> str:
 
 async def apply_observation(
     s: AsyncSession, instance_id: UUID, status: InstanceStatus, snap: Snapshot
-) -> list[UUID]:
-    """Remplace les projections par le relevé. Rend les alertes résolues (déjà auditées)."""
+) -> list[tuple[str, UUID]]:
+    """Remplace les projections par le relevé. Rend ce qui est à annoncer au flux : alertes
+    résolues (déjà auditées), positions et ordres écrits."""
+    notes: list[tuple[str, UUID]] = []
     await s.execute(
         update(Instance)
         .where(Instance.id == instance_id)
@@ -51,17 +53,44 @@ async def apply_observation(
             "currency": _currency(p.symbol),
             "observed_at": snap.observed_at,
         }
-        await s.execute(
+        written = await s.scalars(
             insert(Position)
             .values(instance_id=instance_id, external_id=p.position_id, **row)
             .on_conflict_do_update(
                 index_elements=["instance_id", "external_id"],
                 set_={**row, "updated_at": func.now()},
             )
+            .returning(Position.id)
         )
+        notes.extend(("position", i) for i in written)
+    for c in snap.closed:
+        # Le trade clos vient du relevé (les événements ne font qu'indiquer de relire). Une ligne
+        # déjà écrite n'est pas annoncée de nouveau ; une cause hors de F10 devient `unknown`.
+        written = await s.scalars(
+            insert(Trade)
+            .values(
+                instance_id=instance_id,
+                external_id=c.position_id,
+                instrument=c.symbol,
+                quantity=c.qty,
+                entry_price=c.entry_price,
+                exit_price=c.exit_price,
+                entry_cause=c.entry_cause or "unknown",
+                exit_cause=c.exit_cause if c.exit_cause in EXIT_CAUSES else "unknown",
+                pnl=c.pnl,
+                fees=c.fees,
+                currency=_currency(c.symbol),
+                opened_at=c.opened_at,
+                closed_at=c.closed_at,
+                duration_s=max(0, int((c.closed_at - c.opened_at).total_seconds())),
+            )
+            .on_conflict_do_nothing(index_elements=["instance_id", "external_id"])
+            .returning(Trade.id)
+        )
+        notes.extend(("trade", i) for i in written)
     open_ids = [o.order_id for o in snap.orders]
     # Un ordre local encore ouvert que le moteur ne connaît plus : issue inconnue, jamais inventée.
-    await s.execute(
+    lost = await s.scalars(
         update(Order)
         .where(
             Order.instance_id == instance_id,
@@ -69,7 +98,9 @@ async def apply_observation(
             Order.client_order_id.not_in(open_ids),
         )
         .values(status="unknown")
+        .returning(Order.id)
     )
+    notes.extend(("order", i) for i in lost)
     for o in snap.orders:
         row = {
             "instrument": o.symbol,
@@ -81,13 +112,15 @@ async def apply_observation(
             "currency": _currency(o.symbol),
             "observed_at": snap.observed_at,
         }
-        await s.execute(
+        written = await s.scalars(
             insert(Order)
             .values(instance_id=instance_id, client_order_id=o.order_id, **row)
             .on_conflict_do_update(
                 index_elements=["client_order_id"], set_={**row, "updated_at": func.now()}
             )
+            .returning(Order.id)
         )
+        notes.extend(("order", i) for i in written)
     resolved = (  # le moteur répond de nouveau : l'alerte se résout
         await s.scalars(
             update(Alert)
@@ -109,7 +142,7 @@ async def apply_observation(
             before={"status": "open"},
             after={"status": "resolved"},
         )
-    return list(resolved)
+    return [("alert", a) for a in resolved] + notes
 
 
 @dataclass(frozen=True)

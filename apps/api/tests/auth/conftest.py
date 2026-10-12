@@ -5,7 +5,9 @@ Valeurs sentinelles uniquement : aucun vrai secret.
 
 import base64
 import importlib.util
-from collections.abc import AsyncIterator, Awaitable, Callable
+import io
+import logging
+from collections.abc import AsyncIterator, Awaitable, Callable, Iterator
 from contextlib import AsyncExitStack
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -16,6 +18,7 @@ import httpx
 import pyotp
 import pytest
 import pytest_asyncio
+import structlog
 from centrade_api.auth import (
     Principal,
     current_user,
@@ -27,6 +30,7 @@ from centrade_api.auth import (
 from centrade_api.deps import get_db, utcnow
 from centrade_api.main import create_app
 from centrade_core.ids import uuid7
+from centrade_core.logging import configure_logging
 from centrade_core.models import User
 from centrade_core.settings import Settings, get_settings
 from fastapi import Depends, FastAPI
@@ -76,6 +80,16 @@ class Account:
 @pytest.fixture
 def clock() -> FakeClock:
     return FakeClock()
+
+
+@pytest.fixture
+def logs(monkeypatch: pytest.MonkeyPatch) -> Iterator[io.StringIO]:
+    monkeypatch.setenv("CENTRADE_LOG_LEVEL", "DEBUG")  # le niveau le plus bavard
+    buffer = io.StringIO()
+    configure_logging(stream=buffer)
+    yield buffer
+    structlog.reset_defaults()
+    logging.getLogger().handlers.clear()
 
 
 @pytest.fixture

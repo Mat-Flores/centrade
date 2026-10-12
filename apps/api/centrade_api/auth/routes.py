@@ -1,5 +1,7 @@
 """Routes d'authentification : mot de passe, puis TOTP ou code de récupération (SPEC §8, §13).
 
+Une session ouverte re-confirme son TOTP avant une action dangereuse (SPEC §9).
+
 Chaque route tient en une transaction : l'état, la session et la ligne d'audit sont validés
 ensemble, ou pas du tout. La réponse n'est décidée qu'après le `commit`.
 """
@@ -18,7 +20,7 @@ from centrade_core.settings import Settings, get_settings
 from cryptography.exceptions import InvalidTag
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, Field, SecretStr
-from sqlalchemy import delete, or_, select
+from sqlalchemy import delete, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from centrade_api.auth import security
@@ -43,6 +45,10 @@ ANONYMOUS = "anonymous"  # auteur d'une tentative dont l'identité n'est pas pro
 LOCK_THRESHOLD = 5
 LOCK_BASE = timedelta(minutes=1)
 LOCK_MAX = timedelta(minutes=15)
+# Clé maître absente ou fausse, ligne altérée : panne de notre côté, pas un échec de l'utilisateur.
+_SECRET_UNREADABLE = (InvalidTag, ValueError, OSError)
+# Échecs dont l'auteur est prouvé (pré-session ou session) ; tout autre échec reste anonyme.
+_ATTRIBUTED_FAILURES = ("auth.totp.failed", "auth.totp_confirm.failed")
 
 
 def lock_duration(failed_attempts: int) -> timedelta | None:
@@ -126,7 +132,7 @@ async def _record_failure(
     Auteur : `anonymous` tant que rien n'est prouvé (mot de passe), l'utilisateur ensuite (TOTP).
     """
     target = f"user:{user.id}"
-    actor = target if action == "auth.totp.failed" else ANONYMOUS
+    actor = target if action in _ATTRIBUTED_FAILURES else ANONYMOUS
     user.failed_attempts += 1
     log.warning(action.replace(".", "_"), reason=reason, user_id=str(user.id), ip=ip)
     await write_audit(db, actor=actor, action=action, target=target, ip=ip)
@@ -224,13 +230,14 @@ async def login(
     return LoginOut(totp_required=True)
 
 
-def _second_factor(user: User, code: str, now: datetime, master_key: bytes) -> str | None:
-    """Vérifie et consomme le second facteur. Renvoie `totp`, `recovery`, ou None s'il est refusé.
+def _totp_accepted(user: User, code: str, now: datetime, master_key: bytes) -> bool:
+    """Vérifie un code TOTP et consomme son pas. Le seul chemin de vérification du TOTP.
 
-    Lève `InvalidTag` si le secret TOTP est illisible (clé maître ou ligne altérée).
+    Ne lit ni ne consomme les codes de récupération. Lève `InvalidTag` si le secret TOTP est
+    illisible (clé maître ou ligne altérée).
     """
     if user.totp_secret_enc is None or user.totp_nonce is None:
-        return None
+        return False
     step = security.totp_step(
         security.decrypt_totp_secret(
             master_key=master_key,
@@ -241,11 +248,24 @@ def _second_factor(user: User, code: str, now: datetime, master_key: bytes) -> s
         code,
         now,
     )
-    if step is not None:
-        if user.totp_last_step is not None and step <= user.totp_last_step:
-            return None  # code déjà accepté, ou plus ancien que le dernier accepté : rejeu
-        user.totp_last_step = step
+    # Pas déjà accepté, ou plus ancien que le dernier accepté : rejeu.
+    if step is None or (user.totp_last_step is not None and step <= user.totp_last_step):
+        return False
+    user.totp_last_step = step
+    return True
+
+
+def _second_factor(user: User, code: str, now: datetime, master_key: bytes) -> str | None:
+    """Vérifie et consomme le second facteur. Renvoie `totp`, `recovery`, ou None s'il est refusé.
+
+    Lève `InvalidTag` si le secret TOTP est illisible (clé maître ou ligne altérée).
+    """
+    if user.totp_secret_enc is None or user.totp_nonce is None:
+        return None
+    if _totp_accepted(user, code, now, master_key):
         return "totp"
+    if security.is_totp_code(code):
+        return None  # six chiffres refusés (faux ou rejoués) : jamais un code de récupération
     used = security.matching_hash(user.recovery_code_hashes, security.recovery_code_hash(code))
     if used is None:
         return None
@@ -294,9 +314,8 @@ async def totp(
                 factor = _second_factor(
                     user, body.code.get_secret_value().strip(), now, settings.master_key()
                 )
-            except (InvalidTag, ValueError, OSError):
-                # Clé maître absente ou fausse, ligne altérée : panne de notre côté, pas un échec
-                # de l'utilisateur. Aucune session, et le compteur d'échecs ne bouge pas.
+            except _SECRET_UNREADABLE:
+                # Aucune session, et le compteur d'échecs ne bouge pas.
                 log.error("auth_totp_secret_unreadable", user_id=str(user.id), ip=ip)
                 failure = HTTPException(503, "Service d'authentification indisponible.")
             else:
@@ -358,6 +377,79 @@ async def _open_session(
         )
     await write_audit(db, actor=actor, action="auth.login.succeeded", target=actor, ip=ip)
     return token, Me(id=user.id, email=user.username, role=user.role)
+
+
+@router.post("/totp/confirm", status_code=204, dependencies=[Depends(throttle)])
+async def confirm_totp(
+    body: TotpIn,
+    request: Request,
+    db: Annotated[AsyncSession, Depends(get_db)],
+    now: Annotated[datetime, Depends(utcnow)],
+    settings: Annotated[Settings, Depends(get_settings)],
+    principal: Annotated[Principal, Depends(current_user)],
+) -> None:
+    """Ré-authentification d'une session ouverte : rafraîchit le TOTP de cette session, lui seul.
+
+    Code TOTP seul : un code de récupération rend un accès, il n'autorise pas une action
+    dangereuse. Un refus ne ferme pas la session et ne dit pas si le code est faux ou rejoué.
+    """
+    ip = client_ip(request)
+    actor = principal.actor
+    failure: HTTPException | None = HTTPException(403, "Code refusé.")
+    async with db.begin():
+        user = (
+            await db.execute(
+                select(User)
+                .where(User.id == principal.user_id)
+                .with_for_update()
+                # `current_user` a déjà chargé cette ligne : si l'objet vit encore, le dernier
+                # pas accepté et le verrou dateraient d'avant le `FOR UPDATE` (rejeu simultané).
+                .execution_options(populate_existing=True)
+            )
+        ).scalar_one_or_none()
+        if user is None:
+            failure = unauthorized()
+        elif _locked(user, now):
+            # Ni compté ni évalué : un verrou ne se prolonge pas. Audité quand même (I14).
+            log.warning("auth_totp_confirm_failed", reason="locked", user_id=str(user.id), ip=ip)
+            await write_audit(
+                db, actor=actor, action="auth.totp_confirm.failed", target=actor, ip=ip
+            )
+            failure = HTTPException(423, "Compte temporairement verrouillé.")
+        else:
+            try:
+                accepted = _totp_accepted(
+                    user, body.code.get_secret_value().strip(), now, settings.master_key()
+                )
+            except _SECRET_UNREADABLE:
+                log.error("auth_totp_secret_unreadable", user_id=str(user.id), ip=ip)
+                failure = HTTPException(503, "Service d'authentification indisponible.")
+            else:
+                if not accepted:
+                    if await _record_failure(
+                        db, user, now, ip, "auth.totp_confirm.failed", "bad_code"
+                    ):
+                        failure = HTTPException(423, "Compte temporairement verrouillé.")
+                elif not (
+                    await db.execute(
+                        # Cette session seulement, et seulement sa date de TOTP : ni l'échéance
+                        # absolue ni une autre session du même utilisateur ne bougent.
+                        update(Session)
+                        .where(Session.id == principal.session_id, Session.stage == "full")
+                        .values(totp_verified_at=now)
+                        .returning(Session.id)
+                    )
+                ).first():
+                    failure = unauthorized()  # session fermée entre-temps : rien à rafraîchir
+                else:
+                    await write_audit(
+                        db, actor=actor, action="auth.totp_confirm.succeeded", target=actor, ip=ip
+                    )
+                    failure = None
+    if failure is not None:
+        raise failure
+    # Après le commit : on n'annonce une confirmation que lorsqu'elle est enregistrée.
+    log.info("auth_totp_confirm_succeeded", user_id=str(principal.user_id), ip=ip)
 
 
 @router.post("/logout", status_code=204)

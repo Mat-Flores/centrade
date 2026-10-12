@@ -30,6 +30,10 @@ test("grille : fraîche, périmée, inconnue, mode incohérent ; voulu à côté
   const delta = row(page, "delta");
   await expect(delta.getByText("MODE INCOHÉRENT")).toBeVisible();
   await expect(delta.getByText("voulu PAPER, observé LIVE")).toBeVisible();
+  // Voulu PAPER mais observé LIVE : jamais « simulé ». Périmé ou inconnu : pas davantage.
+  await expect(delta.getByText("simulé")).toHaveCount(0);
+  await expect(bravo.getByText("simulé")).toHaveCount(0);
+  await expect(charlie.getByText("simulé")).toHaveCount(0);
 
   const echo = row(page, "echo");
   await expect(echo.getByText("État voulu")).toHaveCount(0); // voulu = observé frais : rien à ajouter

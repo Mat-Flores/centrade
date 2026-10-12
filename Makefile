@@ -1,4 +1,4 @@
-.PHONY: help secrets bootstrap-admin up down test lint insecure-sweep e2e-live
+.PHONY: help secrets bootstrap-admin up down engines-up engines-pull test lint insecure-sweep e2e-live
 
 help: ## Liste les cibles
 	@grep -E '^[a-z-]+:.*##' $(MAKEFILE_LIST) | sed 's/:.*##/ :/'
@@ -34,6 +34,20 @@ up: secrets ## Démarre le profil core (reconstruit les images)
 
 down: ## Arrête le profil core (jamais -v)
 	$(COMPOSE) down
+
+# Profil engines : socket proxy et réseaux des moteurs, par-dessus core. Les conteneurs de moteurs
+# ne sont pas des services Compose : `make down` ne les arrête pas (I9).
+COMPOSE_ENGINES = docker compose $(if $(wildcard .env),--env-file .env) -f deploy/compose/core.yml -f deploy/compose/engines.yml --profile core --profile engines
+
+engines-up: secrets ## Démarre core et le socket proxy des moteurs
+	$(COMPOSE_ENGINES) up -d --wait --build
+
+# Image des moteurs : tag et digest épinglés dans le code de l'adaptateur. Le runner ne télécharge
+# jamais rien à l'exécution ; `docker pull dépôt:tag@sha256:…` échoue si le digest ne correspond pas.
+ENGINE_REF ?= $(shell PYTHONPATH=packages/adapters/freqtrade uv run python -c "from centrade_freqtrade.image import FREQTRADE_REF; print(FREQTRADE_REF)")
+
+engines-pull: ## Télécharge l'image des moteurs (tag et digest épinglés)
+	docker pull $(ENGINE_REF)
 
 # Sur l'hôte. `run` lance un conteneur neuf de l'API (terminal interactif), après migrate. Mot de passe saisi sans écho ; URI TOTP et codes de récupération
 # affichés une seule fois. Refuse s'il existe déjà un administrateur (SPEC §13).

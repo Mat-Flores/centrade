@@ -19,10 +19,11 @@ COPY apps/api/centrade_api /app/apps/api/centrade_api
 COPY apps/worker/centrade_worker /app/apps/worker/centrade_worker
 COPY packages/core /app/packages/core
 COPY packages/adapters/fake/centrade_fake /app/packages/adapters/fake/centrade_fake
+COPY packages/adapters/freqtrade/centrade_freqtrade /app/packages/adapters/freqtrade/centrade_freqtrade
 COPY alembic.ini /app/alembic.ini
 COPY deploy/db /app/deploy/db
 ENV PATH=/opt/venv/bin:$PATH PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 \
-    PYTHONPATH=/app/apps/api:/app/apps/worker:/app/packages/core:/app/packages/adapters/fake
+    PYTHONPATH=/app/apps/api:/app/apps/worker:/app/packages/core:/app/packages/adapters/fake:/app/packages/adapters/freqtrade
 WORKDIR /app
 USER 10001
 EXPOSE 8000

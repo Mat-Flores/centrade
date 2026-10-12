@@ -81,3 +81,8 @@ export function formatMoney(amount: string, currency: string): string {
 export function formatPnl(amount: string, currency: string): string {
   return withCurrency(formatDecimal(amount, "always"), currency);
 }
+
+/** Nombre décimal sans devise (ratio, quantité, prix), toutes les décimales de la chaîne conservées. */
+export function formatDecimalText(amount: string, signed = false): string {
+  return formatDecimal(amount, signed ? "always" : "auto");
+}

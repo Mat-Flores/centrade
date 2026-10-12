@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import pytest
-from centrade_core.engine.contract import EngineUnreachable, observe_status
+from centrade_core.engine.contract import EngineUnreachable, observe_status, owned_drifts
 from centrade_core.events import CanonicalEvent
 
 from .conftest import Harness
-from .contract_support import make_spec
 
 
 async def _events(h: Harness, ref) -> list[CanonicalEvent]:  # type: ignore[no-untyped-def]
@@ -15,15 +14,17 @@ async def _events(h: Harness, ref) -> list[CanonicalEvent]:  # type: ignore[no-u
 
 
 async def _deploy(h: Harness):  # type: ignore[no-untyped-def]
-    return await h.adapter.deploy(make_spec())
+    return await h.adapter.deploy(h.spec())
 
 
 async def test_deploy_boots_exits_only_with_matching_config(harness: Harness) -> None:
-    spec = make_spec()
+    spec = harness.spec()
     ref = await harness.adapter.deploy(spec)
     assert (await harness.adapter.status(ref)).state == "exits_only"
     eff = await harness.adapter.effective_config(ref)
-    assert eff.values == harness.adapter.render_config(spec).values
+    gen = harness.adapter.render_config(spec)
+    # Une clé que le moteur ne sait pas faire relire est déclarée, pas comparée (F9).
+    assert eff.values == {k: v for k, v in gen.values.items() if k not in gen.unreadable}
 
 
 async def test_start_is_idempotent(harness: Harness) -> None:
@@ -94,18 +95,43 @@ async def test_unreachable_engine_is_unknown_never_running(harness: Harness) -> 
 
 
 async def test_render_config_is_pure(harness: Harness) -> None:
-    spec = make_spec()
+    spec = harness.spec()
     before = spec.model_dump()
     assert harness.adapter.render_config(spec) == harness.adapter.render_config(spec)
     assert spec.model_dump() == before
 
 
 async def test_effective_config_drift_is_detectable(harness: Harness) -> None:
-    spec = make_spec()
+    spec = harness.spec()
     ref = await harness.adapter.deploy(spec)
     harness.make_drift(ref)
     eff = await harness.adapter.effective_config(ref)
     assert eff.values != harness.adapter.render_config(spec).values
+
+
+async def test_config_drift_is_empty_after_deploy_and_names_the_changed_key(
+    harness: Harness,
+) -> None:
+    spec = harness.spec()
+    generated = harness.adapter.render_config(spec)
+    ref = await harness.adapter.deploy(spec)
+    eff = await harness.adapter.effective_config(ref)
+    assert harness.adapter.config_drift(generated, eff) == ()
+    assert owned_drifts(generated, eff, ()) == ()  # chaque clé possédée est relue ou déclarée
+    harness.make_drift(ref)
+    eff = await harness.adapter.effective_config(ref)
+    drifts = owned_drifts(generated, eff, harness.adapter.config_drift(generated, eff))
+    assert drifts and {d.key for d in drifts} <= set(generated.values)
+    assert all(d.expected != d.observed for d in drifts)
+
+
+async def test_declared_keys_are_owned_keys(harness: Harness) -> None:
+    generated = harness.adapter.render_config(harness.spec())
+    assert generated.unreadable <= set(generated.values)
+    assert generated.mode_keys <= set(generated.values)
+    # Le mode effectif se relit dans le statut, jamais dans la demande.
+    ref = await harness.adapter.deploy(harness.spec())
+    assert (await harness.adapter.status(ref)).mode == "paper"
 
 
 async def test_clean_stream_has_unique_ids_and_seq(harness: Harness) -> None:

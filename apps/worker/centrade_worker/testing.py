@@ -4,13 +4,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from decimal import Decimal
 from types import TracebackType
 from typing import Any
 
 from centrade_core.bus import EVENTS_STREAM, Bus
 from centrade_core.db import make_engine, make_session_factory
-from centrade_core.engine.types import Exits, InstanceRef, InstanceSpec, Manifest, Sizing
+from centrade_core.engine.types import InstanceRef
 from centrade_core.events import CanonicalEvent
 from centrade_core.ids import uuid7
 from centrade_fake.engine import FakeEngine
@@ -19,25 +18,6 @@ from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
 from centrade_worker.worker import Worker, WorkerConfig
-
-
-def make_spec() -> InstanceSpec:
-    manifest = Manifest(
-        name="demo",
-        engine="fake",
-        version=1,
-        entrypoint="demo.py",
-        asset_classes=("crypto",),
-        trading_mode="spot",
-        timeframes=("5m",),
-        modes=("backtest", "paper", "live"),
-        sizing=Sizing(stake_amount=Decimal("50"), max_open_positions=3),
-        exits=Exits(stoploss=Decimal("-0.05"), stop_on_venue=True),
-    )
-    return InstanceSpec(
-        instance_id=uuid7(), engine="fake", mode="paper", account_id="acc", manifest=manifest
-    )
-
 
 T0 = datetime(2026, 10, 10, 12, 0, tzinfo=UTC)
 
@@ -59,6 +39,7 @@ class Projection:
     open_orders: frozenset[tuple[Any, ...]]
     n_events: int
     orders: frozenset[tuple[str, str]] = frozenset()  # (client_order_id, status), tous statuts
+    trades: frozenset[tuple[Any, ...]] = frozenset()  # (external_id, exit_cause, pnl)
 
 
 class World:
@@ -72,6 +53,11 @@ class World:
         self.sessions: async_sessionmaker[AsyncSession] = make_session_factory(self.db)
         self.redis: Redis = Redis.from_url(self._redis_url, decode_responses=True)
         await self.redis.flushdb()
+        # La base est partagée par toute la session de tests : un worker relève toutes les
+        # commandes et toutes les instances. Chaque monde repart donc sans celles des autres.
+        async with self.sessions.begin() as s:
+            await s.execute(text("TRUNCATE instances CASCADE"))
+            await s.execute(text("TRUNCATE alerts"))
         self.clock = Clock()
         self.fake = FakeEngine(clock=self.clock, seed=3, new_id=uuid7, allow_failure_injection=True)
         self.bus = Bus(self.redis, "worker", self._consumer)
@@ -92,6 +78,7 @@ class World:
             bus=Bus(self.redis, "worker", consumer),
             clock=self.clock,
             config=WorkerConfig(),
+            simulated=frozenset({"fake"}),
         )
 
     async def new_instance(self, seed: int | None = None) -> InstanceRef:
@@ -101,9 +88,7 @@ class World:
                 clock=self.clock, seed=seed, new_id=uuid7, allow_failure_injection=True
             )
             self.worker = self.make_worker(self._consumer)
-        spec = make_spec()
-        ref = await self.fake.deploy(spec)
-        await self.fake.resume_entries(ref)
+        instance_id = uuid7()
         engine_id = uuid7()
         async with self.sessions.begin() as s:
             await s.execute(
@@ -117,8 +102,11 @@ class World:
                     "INSERT INTO instances (id, engine_id, name, mode, desired_state) "
                     "VALUES (:i, :e, :n, 'paper', 'running')"
                 ),
-                {"i": ref.instance_id, "e": engine_id, "n": str(ref.instance_id)},
+                {"i": instance_id, "e": engine_id, "n": str(instance_id)},
             )
+        # Même chemin qu'une commande `deploy` : empreinte enregistrée, puis entrées ouvertes.
+        ref = await self.fake.deploy(await self.worker.guard.deployment(instance_id))
+        await self.fake.resume_entries(ref)
         self.worker.register(ref)
         return ref
 
@@ -135,16 +123,16 @@ class World:
 
     async def wipe(self, ref: InstanceRef) -> None:
         """Remet les lignes dérivées de l'instance à zéro (entre deux passes d'une propriété)."""
-        from centrade_core.models.trading import Alert, Event, Order, Position
+        from centrade_core.models.trading import Alert, Event, Order, Position, Trade
 
         async with self.sessions.begin() as s:
-            for model in (Event, Position, Order):
+            for model in (Event, Position, Order, Trade):
                 await s.execute(delete(model).where(model.instance_id == ref.instance_id))
             await s.execute(delete(Alert).where(Alert.target_id == ref.instance_id))
         await self.redis.flushdb()
 
     async def projection(self, ref: InstanceRef) -> Projection:
-        from centrade_core.models.trading import Event, Order, Position
+        from centrade_core.models.trading import Event, Order, Position, Trade
 
         async with self.sessions() as s:
             pos = (
@@ -154,6 +142,9 @@ class World:
                 await s.scalars(select(Order).where(Order.instance_id == ref.instance_id))
             ).all()
             ords = [o for o in every if o.status == "open"]
+            trades = (
+                await s.scalars(select(Trade).where(Trade.instance_id == ref.instance_id))
+            ).all()
             n = len(
                 (
                     await s.scalars(select(Event.id).where(Event.instance_id == ref.instance_id))
@@ -169,6 +160,7 @@ class World:
             ),
             n,
             frozenset((o.client_order_id, o.status) for o in every),
+            frozenset((t.external_id, t.exit_cause, t.pnl) for t in trades),
         )
 
     async def expected(self, ref: InstanceRef) -> Projection:
@@ -191,4 +183,5 @@ class World:
                 if o.status == "open"
             ),
             0,
+            trades=frozenset((c.position_id, c.exit_cause, c.pnl) for c in snap.closed),
         )

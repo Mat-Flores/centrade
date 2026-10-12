@@ -15,3 +15,5 @@ Source : SPEC §13 (gates de sécurité, exposition, sorties réseau des moteurs
 | Constat | Justification | Propriétaire | Date d'acceptation | Date d'expiration |
 | --- | --- | --- | --- | --- |
 | *(aucun risque accepté au 2026-10-10)* | | | | |
+| X9 : socket proxy filtrant méthode et chemin, pas le corps (un worker compromis pourrait créer un conteneur privilégié) | Aucun live à M2 ; risque borné au paper et au dry-run. Durcissement prévu à M7 (plugin d'autorisation Docker ou démon sans privilèges dédié). ADR 0009, point 14 | Opérateur (nom à inscrire) | **Proposé le 2026-10-12, décision de l'opérateur en attente** | Avant toute promotion en live (M7) |
+| X20 : frontière de déchiffrement (I12) tenue par le code et un test d'import, pas par la cryptographie ; rotation de la clé maître impossible | Aucune clé de venue n'est remise à M2. Chiffrement à clé publique et rotation à faire avant le live. ADR 0009, point 13 | Opérateur (nom à inscrire) | **Proposé le 2026-10-12, décision de l'opérateur en attente** | Avant toute promotion en live (M7) |

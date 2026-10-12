@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     deadline_stop_s: float = 60.0
     deadline_start_s: float = 60.0
     deadline_deploy_s: float = 60.0
+    deadline_close_position_s: float = 60.0
+    deadline_cancel_entry_order_s: float = 30.0
     # Injection de pannes dans un moteur simulé par les paramètres d'une instance : jamais hors
     # des tests et de la pile e2e jetable.
     engine_failure_injection: bool = False
@@ -38,11 +40,17 @@ class Settings(BaseSettings):
     public_origin: str = Field(default="https://localhost:8443", pattern=r"^https://[^/\s]+$")
     # Chemins de Docker secrets (/run/secrets/…), jamais les valeurs.
     postgres_password_file: Path
-    # Seule l'API la reçoit (moindre privilège) : sans elle, `master_key()` échoue.
+    # L'API la reçoit toujours ; le worker seulement avec le profil engines (identifiants de
+    # l'API native des moteurs). Sans elle, `master_key()` échoue.
     master_key_file: Path | None = None
     # Fichier de configuration Redis du secret (`requirepass <valeur>`) : si présent, son mot de
     # passe est inséré dans `redis_url` en mémoire seulement (jamais en variable d'environnement).
     redis_conf_file: Path | None = None
+    # Répertoire en mémoire (tmpfs) des fichiers remis aux moteurs, un sous-dossier par instance.
+    # Même nom de variable que le runner : `ENGINE_RUNTIME_DIR`, sans préfixe.
+    engine_runtime_dir: Path = Field(
+        default=Path("/run/centrade"), validation_alias="ENGINE_RUNTIME_DIR"
+    )
 
     @model_validator(mode="before")
     @classmethod

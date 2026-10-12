@@ -36,3 +36,14 @@ export async function expectNoViolation(page: Page) {
     .analyze();
   expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`)).toEqual([]);
 }
+
+/** L'élément est entièrement dans le champ visible de sa zone défilable et de la fenêtre : rien n'est caché à droite. */
+export async function expectInView(locator: import("@playwright/test").Locator) {
+  const ok = await locator.evaluate((el) => {
+    const r = el.getBoundingClientRect();
+    const region = el.closest('[role="region"]')?.getBoundingClientRect();
+    const right = Math.min(window.innerWidth, region?.right ?? Infinity);
+    return r.width > 0 && r.left >= (region?.left ?? 0) - 1 && r.right <= right + 1;
+  });
+  expect(ok, "élément hors du champ visible").toBe(true);
+}

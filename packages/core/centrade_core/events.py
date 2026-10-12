@@ -26,7 +26,7 @@ class EventType(StrEnum):
     ENGINE_ERROR = "engine.error"
 
 
-ExitCause = Literal["manual", "flatten", "stop", "take_profit", "signal"]
+ExitCause = Literal["manual", "flatten", "stop", "take_profit", "signal", "unknown"]
 
 
 class _Payload(BaseModel):

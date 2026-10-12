@@ -89,6 +89,19 @@ class ValidationResult(Model):
     errors: tuple[str, ...] = ()
 
 
+class Deployment(Model):
+    """Ce que le worker fixe au déploiement, depuis le registre et la table `engines` (I10)."""
+
+    fingerprint: str = Field(min_length=1)  # à porter sur ce qui tourne (étiquette du conteneur)
+    config_hash: str
+    code: str  # source de la version de stratégie ; vide pour une instance simulée
+    image: str
+    digest: str
+    engine_version: str
+    memory_mb: int | None = None  # réservations de `engines` ; None : défaut de l'adaptateur
+    cpus: Dec | None = None
+
+
 class InstanceSpec(Model):
     instance_id: UUID
     engine: str
@@ -96,6 +109,8 @@ class InstanceSpec(Model):
     account_id: str
     manifest: Manifest
     params: dict[str, Any] = Field(default_factory=dict)
+    # Toujours renseigné par le worker ; None (tests de contrat) : la vérification de F9 refuse.
+    deployment: Deployment | None = None
 
 
 class InstanceRef(Model):
@@ -107,11 +122,27 @@ class EngineConfig(Model):
     """Clés possédées par la plateforme, valeurs en chaînes (comparaison exacte)."""
 
     values: dict[str, str]
+    # Clés propres au mode ou à l'instance : hors du hash de configuration (I10).
+    mode_keys: frozenset[str] = frozenset()
+    # Clés que le moteur ne sait pas faire relire. Déclarées ici, jamais ignorées en silence :
+    # une clé possédée absente de la relecture et absente de cette liste est une dérive (F9).
+    unreadable: frozenset[str] = frozenset()
 
 
 class EffectiveConfig(Model):
+    """Ce qui tourne réellement, relu dans le moteur (F9). `values` porte les mêmes noms de clés
+    que `EngineConfig.values` ; leur forme reste celle du moteur (`config_drift` la compare)."""
+
     values: dict[str, str]
     observed_at: AwareDatetime
+    fingerprint: str | None = None  # empreinte portée par ce qui tourne ; None : illisible
+    engine_version: str | None = None  # version que le moteur déclare ; None : illisible
+
+
+class Drift(Model):
+    key: str
+    expected: str | None  # None : clé non générée
+    observed: str | None  # None : absente de la relecture
 
 
 class InstanceStatus(Model):
@@ -151,12 +182,46 @@ class Stop(Model):
     held_by: Literal["engine", "venue"]
 
 
+# Énumération canonique des causes de sortie (SPEC F10). Toute autre valeur est lue `unknown`.
+EXIT_CAUSES = (
+    "stop_loss",
+    "trailing_stop",
+    "take_profit",
+    "signal",
+    "timeout",
+    "manual",
+    "kill_switch",
+    "engine_protection",
+    "liquidation",
+    "unknown",
+)
+
+
+class ClosedTrade(Model):
+    """Position close, relue dans le moteur. `position_id` identifie le trade (unique par instance).
+    Cause absente ou hors de `EXIT_CAUSES` : le worker écrit `unknown`, il ne devine rien."""
+
+    position_id: str
+    symbol: Symbol
+    side: Side
+    qty: Dec
+    entry_price: Dec
+    exit_price: Dec
+    pnl: Dec
+    fees: Dec = Decimal(0)
+    entry_cause: str | None = None
+    exit_cause: str | None = None
+    opened_at: AwareDatetime
+    closed_at: AwareDatetime
+
+
 class Snapshot(Model):
     positions: tuple[Position, ...]
     orders: tuple[Order, ...]
     balances: tuple[Balance, ...]
     stops: tuple[Stop, ...]
     observed_at: AwareDatetime
+    closed: tuple[ClosedTrade, ...] = ()  # trades clos que le moteur relit encore
 
 
 class BacktestSpec(Model):

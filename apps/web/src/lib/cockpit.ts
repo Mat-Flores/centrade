@@ -6,6 +6,7 @@ import { freshness } from "@/lib/format";
 import {
   alertsKey,
   commandsKey,
+  instanceDetailKey,
   instancesKey,
   type ActionType,
   type Alert,
@@ -178,6 +179,18 @@ export function deriveMode(instances: Instance[] | undefined): Mode {
   return "unknown";
 }
 
+export type ShownMode = Mode;
+
+/**
+ * Mode à présenter pour une instance : l'observé s'il est frais, sinon « inconnu ». Jamais le mode voulu,
+ * ni un observé périmé (SPEC §9, I1) : « simulé » ne s'écrit que pour un mode paper observé et frais.
+ */
+export function shownMode(instance: Instance | undefined, nowIso: string): ShownMode {
+  const m = instance?.observed_mode;
+  if (!m || m.value === "unknown") return "unknown";
+  return freshness({ observedAt: m.observed_at, serverTime: nowIso, staleAfterMs: ENGINE_STALE_MS }).state === "fresh" ? m.value : "unknown";
+}
+
 /** Moteurs : d'après les états observés des instances, jamais d'après l'état voulu. */
 export function deriveEngines(instances: Instance[] | undefined, nowMs: number): Health {
   if (!instances || instances.length === 0) return "unknown";
@@ -210,7 +223,8 @@ export type StreamMessage =
   | { event: "heartbeat"; server_time: string }
   | { event: "instance"; server_time: string; instance: Instance }
   | { event: "command"; server_time: string; command: Command }
-  | { event: "alert"; server_time: string; alert: Alert };
+  | { event: "alert"; server_time: string; alert: Alert }
+  | { event: "order" | "position" | "trade"; server_time: string };
 
 const byCreated = (a: Instance, b: Instance) =>
   Date.parse(b.created_at) - Date.parse(a.created_at) || (a.id < b.id ? 1 : -1);
@@ -224,6 +238,9 @@ export function applyStreamMessage(qc: QueryClient, msg: StreamMessage): void {
   switch (msg.event) {
     case "instance": {
       const inst = msg.instance;
+      if (!qc.getQueryData<Page<Instance>>(instancesKey)?.items.some((i) => i.id === inst.id)) {
+        void qc.invalidateQueries({ queryKey: [...instancesKey, "strategy"] }); // nouvelle instance : listes par stratégie relues
+      }
       qc.setQueryData<Page<Instance>>(instancesKey, (page) => {
         if (!page) return undefined;
         const known = page.items.find((i) => i.id === inst.id);
@@ -231,8 +248,16 @@ export function applyStreamMessage(qc: QueryClient, msg: StreamMessage): void {
         const items = [inst, ...page.items.filter((i) => i.id !== inst.id)].sort(byCreated);
         return { ...page, items };
       });
+      // Le détail (empreinte, configuration effective, dérive) est relu : le message ne le porte pas.
+      void qc.invalidateQueries({ queryKey: instanceDetailKey(inst.id) });
       break;
     }
+    case "order":
+    case "position":
+    case "trade":
+      // Le message ne porte que la ligne ; les listes filtrées sont relues (jamais d'état supposé).
+      void qc.invalidateQueries({ queryKey: ["trading", `${msg.event}s`] });
+      break;
     case "command": {
       qc.setQueryData<Page<Command>>(commandsKey, (page) =>
         page ? { ...page, items: upsertCommand(page.items, msg.command) } : undefined,

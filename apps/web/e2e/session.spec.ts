@@ -35,9 +35,9 @@ test("mot de passe, puis code, puis coquille", async ({ page }) => {
 
   const nav = page.getByRole("navigation", { name: "Écrans" });
   await expect(nav.getByRole("listitem")).toHaveCount(10);
-  await expect(nav.getByRole("button", { name: "Cockpit" })).toHaveAttribute("aria-current", "page");
+  await expect(nav.getByRole("link", { name: "Cockpit" })).toHaveAttribute("aria-current", "page");
   const disabled = nav.getByRole("button", { disabled: true });
-  await expect(disabled).toHaveCount(9);
+  await expect(disabled).toHaveCount(6);
   await expect(disabled.first()).toContainText("à venir");
   for (const target of [kill, ...(await disabled.all())]) {
     expect((await target.boundingBox())?.height).toBeGreaterThanOrEqual(44);

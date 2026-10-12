@@ -6,14 +6,17 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { fr } from "@/i18n/fr";
 import { meQuery } from "@/lib/session";
+import { screenAt, usePathname } from "@/lib/router";
 import { useTheme } from "@/lib/theme";
 import { CockpitPage } from "@/screens/cockpit/cockpit-page";
 import { LoginScreen } from "@/screens/login-screen";
+import { ScreenPage } from "@/screens/routes";
 
 /** Garde de route : la coquille n'existe que si `/auth/me` confirme une session ; sinon, le login. */
 export function App() {
   const { theme, toggle } = useTheme();
   const me = useQuery(meQuery);
+  const screen = screenAt(usePathname());
 
   if (me.isPending) {
     return (
@@ -40,5 +43,6 @@ export function App() {
     );
   }
   if (me.data === null) return <LoginScreen />;
-  return <CockpitPage me={me.data} theme={theme} onToggleTheme={toggle} />;
+  if (screen === "cockpit") return <CockpitPage me={me.data} theme={theme} onToggleTheme={toggle} />;
+  return <ScreenPage me={me.data} theme={theme} onToggleTheme={toggle} screen={screen} />;
 }
