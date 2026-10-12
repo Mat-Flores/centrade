@@ -80,7 +80,7 @@ def docker_stack(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Stack]:
     try:
         raw.images.get(f"busybox@{BUSYBOX_DIGEST}")
     except DockerException:
-        raw.images.pull("busybox", tag=f"1.37.0@{BUSYBOX_DIGEST}")
+        raw.images.pull(f"busybox@{BUSYBOX_DIGEST}")
     net = raw.networks.create(f"centrade-test-engines-{tag}", internal=True)
     svc = engines_service()
     image = svc["image"]
