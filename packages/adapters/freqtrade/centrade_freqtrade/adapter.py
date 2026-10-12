@@ -8,7 +8,9 @@ identifiants propres à l'instance. Moteur muet, lent ou incohérent : EngineUnr
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator, Callable, Mapping
+import asyncio
+from collections.abc import AsyncIterator, Callable, Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -64,8 +66,14 @@ CONFIG_FILE = "config.json"
 BASE_FILE = "control_plane.py"
 FILES_DIR = "/run/centrade"  # point de montage fixé par le runner
 CRED_NAMES = ("username", "password", "jwt_secret_key", "ws_token")
-CLOSED_WINDOW = 50  # trades clos relus à chaque tour : les plus récents (voir le rapport de D2)
+# Trades clos (`GET /trades`, `limit` et `offset`, tri par date de clôture décroissante : tag
+# 2026.9). Premier relevé d'un processus : tout l'historique, par pages. Ensuite : les pages
+# récentes, jusqu'à recouper un trade déjà relu.
+HISTORY_PAGE = 200
+RECENT_PAGE = 50
+HISTORY_CAP = 50_000  # au-delà : ClosedHistoryOverflow, jamais une perte silencieuse
 HEALTH_STALE_S = 120.0  # boucle du moteur muette plus longtemps : `error`
+STOP_GRACE_S = 10.0  # pause et annulation des entrées avant l'arrêt : au mieux, pas plus
 _NS = uuid5(NAMESPACE_URL, "https://centrade.invalid/freqtrade")
 
 # Raison de sortie du moteur (ExitType, tag 2026.9) -> énumération de F10. Hors table : unknown.
@@ -95,6 +103,27 @@ class EngineRunner(Protocol):
     async def start(self, instance_id: UUID) -> Any: ...
     async def stop(self, instance_id: UUID, timeout_s: int = 30) -> None: ...
     async def inspect(self, instance_id: UUID) -> Any: ...
+
+
+class ClosedHistoryOverflow(EngineUnreachable):
+    """L'historique des trades clos dépasse HISTORY_CAP : le relevé est refusé plutôt que rendu
+    incomplet. Le worker le voit comme un moteur illisible, avec ce nom dans son journal."""
+
+
+# Ce qu'une réponse du moteur mal formée fait lever en la lisant : clé absente, mauvais type,
+# valeur non décimale, date hors bornes, modèle refusé par pydantic (ValueError).
+_MALFORMED = (LookupError, TypeError, ValueError, ArithmeticError, AttributeError, OSError,
+              RecursionError)  # fmt: skip
+
+
+@contextmanager
+def _engine_answers() -> Iterator[None]:
+    """Seul endroit où une réponse illisible devient EngineUnreachable : l'état de cette instance
+    est alors `unknown`, et le tour du worker continue pour les autres."""
+    try:
+        yield
+    except _MALFORMED as exc:
+        raise EngineUnreachable(f"réponse du moteur malformée : {type(exc).__name__}") from exc
 
 
 def default_address(instance_id: UUID) -> str:
@@ -131,7 +160,7 @@ def _stage(order: Mapping[str, Any]) -> str:
     return "rejected" if order["status"] == "rejected" else "canceled"
 
 
-def _open_entry_orders(trade: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+def _open_orders(trade: Mapping[str, Any]) -> list[Mapping[str, Any]]:
     return [o for o in trade["orders"] if o["is_open"]]
 
 
@@ -145,6 +174,7 @@ class _Track:
     positions: dict[str, tuple[Decimal, Decimal]] = field(default_factory=dict)
     stops: dict[str, Decimal | None] = field(default_factory=dict)
     closed: set[str] = field(default_factory=set)
+    history: bool = False  # l'historique entier des trades clos a été annoncé par ce processus
 
 
 class FreqtradeAdapter:
@@ -164,6 +194,8 @@ class FreqtradeAdapter:
         self._address = address
         self._creds: dict[UUID, tuple[str, str]] = {}
         self._tracks: dict[UUID, _Track] = {}
+        self._snap_closed: dict[UUID, set[str]] = {}  # trades clos déjà rendus par `snapshot`
+        self._overflow: set[UUID] = set()
 
     # --- contrôles purs ---------------------------------------------------------------------
     def capabilities(self) -> Capabilities:
@@ -262,23 +294,59 @@ class FreqtradeAdapter:
         await self._runner.start(ref.instance_id)
 
     async def stop(self, ref: InstanceRef) -> None:
+        """F9 : pause, annulation des ordres d'entrée, arrêt du conteneur. Les deux premières
+        sont tentées au mieux, dans un délai court ; le conteneur est arrêté dans tous les cas,
+        et leur échec remonte ensuite."""
         iid = ref.instance_id
+        failed: Exception | None = None
         c = await self._runner.inspect(iid)
         if c is not None and c.status == "running":
-            await self._pause_and_cancel_entries(ref)
+            try:
+                async with asyncio.timeout(STOP_GRACE_S):
+                    failed = await self._reduce_entries(ref)
+            except TimeoutError:
+                failed = EngineUnreachable("API du moteur muette avant l'arrêt")
+                log.warning("arret_sans_pause_confirmee", instance_id=str(iid))
             await self._runner.stop(iid)
         await self._runtime.cleanup(iid)
         self._creds.pop(iid, None)
         log.info("moteur_arrete", instance_id=str(iid))
+        if failed is not None:
+            raise failed
 
     async def pause_entries(self, ref: InstanceRef) -> None:
-        await self._pause_and_cancel_entries(ref)
+        failed = await self._reduce_entries(ref)
+        if failed is not None:
+            raise failed
 
-    async def _pause_and_cancel_entries(self, ref: InstanceRef) -> None:
+    async def _reduce_entries(self, ref: InstanceRef) -> Exception | None:
+        """Pause, puis annulation des ordres d'entrée ouverts : chacune est tentée même si
+        l'autre échoue. La première erreur est rendue, pas levée : l'appelant fait d'abord passer
+        ce qui ne doit jamais attendre (une sortie, l'arrêt du conteneur)."""
+        first: Exception | None = None
+        for step in (self._pause, self._cancel_entries):
+            try:
+                with _engine_answers():
+                    await step(ref)
+            except (EngineUnreachable, CommandRejected) as exc:
+                log.warning(
+                    "reduction_des_entrees_incomplete",
+                    instance_id=str(ref.instance_id),
+                    step=step.__name__,
+                    error=str(exc),
+                )
+                first = first or exc
+        return first
+
+    async def _pause(self, ref: InstanceRef) -> None:
         await self._post(ref, "pause")  # depuis `stopped`, démarre le moteur en pause
+
+    async def _cancel_entries(self, ref: InstanceRef) -> None:
         api = await self._api(ref)
         for trade in await self._open_trades(api):
-            orders = _open_entry_orders(trade)
+            orders = _open_orders(trade)
+            # La route annule tous les ordres ouverts du trade (ADR 0008) : dès qu'un ordre de
+            # sortie ou de stop est ouvert, rien n'est annulé.
             if orders and all(_intent(o) == "entry" for o in orders):
                 await _cancel_open(api, trade["trade_id"])
 
@@ -290,33 +358,43 @@ class FreqtradeAdapter:
             raise CommandRejected(f"reprise des entrées impossible depuis l'état {state}")
 
     async def flatten(self, ref: InstanceRef) -> None:
-        if await self._engine_state(ref) == "stopped":
-            await self._post(ref, "pause")  # forceexit refuse un moteur arrêté
-        await self._pause_and_cancel_entries(ref)
+        """I4 : la sortie de tout part quoi qu'il arrive à la pause et à l'annulation des
+        entrées ; leur échec est journalisé et remonte après. La pause réveille aussi un moteur
+        arrêté, que `forceexit` refuserait. Sans trade ouvert, `forceexit` ne fait rien."""
+        failed = await self._reduce_entries(ref)
         api = await self._api(ref)
-        if await self._open_trades(api):
-            await api.call("POST", "forceexit", {"tradeid": "all"}, read_s=EXIT_TIMEOUT_S)
+        await api.call("POST", "forceexit", {"tradeid": "all"}, read_s=EXIT_TIMEOUT_S)
+        if failed is not None:
+            raise failed
 
     async def close_position(self, ref: InstanceRef, position_id: str) -> None:
         api = await self._api(ref)
-        if not any(str(t["trade_id"]) == position_id for t in await self._open_trades(api)):
-            return  # déjà fermée
-        if await self._engine_state(ref) == "stopped":
-            await self._post(ref, "pause")
+        try:  # lectures préalables au mieux : illisibles, elles ne retiennent pas la sortie (I4)
+            with _engine_answers():
+                if not any(str(t["trade_id"]) == position_id for t in await self._open_trades(api)):
+                    return  # déjà fermée
+                if await self._engine_state(ref) == "stopped":
+                    await self._post(ref, "pause")  # forceexit refuse un moteur arrêté
+        except (EngineUnreachable, CommandRejected) as exc:
+            log.warning("lecture_avant_sortie_en_echec", instance_id=str(ref.instance_id),
+                        error=str(exc))  # fmt: skip
         await api.call("POST", "forceexit", {"tradeid": position_id}, read_s=EXIT_TIMEOUT_S)
 
     async def cancel_entry_order(self, ref: InstanceRef, order_id: str) -> None:
         api = await self._api(ref)
         iid = ref.instance_id
-        for trade in await self._open_trades(api):
-            orders = _open_entry_orders(trade)
-            if not any(str(_cid(iid, o["order_id"])) == order_id for o in orders):
-                continue
-            # La route annule tous les ordres ouverts du trade (ADR 0008) : sortie ou stop, jamais.
-            if any(_intent(o) != "entry" for o in orders):
-                raise CommandRejected("le trade a un ordre de sortie ou de stop ouvert")
-            await _cancel_open(api, trade["trade_id"])
-            return
+        with _engine_answers():
+            for trade in await self._open_trades(api):
+                orders = _open_orders(trade)
+                if not any(str(_cid(iid, o["order_id"])) == order_id for o in orders):
+                    continue
+                # La route annule tous les ordres ouverts du trade (ADR 0008) : sortie ou stop,
+                # jamais. Entre cette lecture et l'appel, un ordre de sortie peut naître : limite
+                # de la route du moteur, consignée dans l'ADR 0008, à lever avant le live.
+                if any(_intent(o) != "entry" for o in orders):
+                    raise CommandRejected("le trade a un ordre de sortie ou de stop ouvert")
+                await _cancel_open(api, trade["trade_id"])
+                return
 
     # --- observation ------------------------------------------------------------------------
     async def status(self, ref: InstanceRef) -> InstanceStatus:
@@ -336,10 +414,16 @@ class FreqtradeAdapter:
         state = _STATES.get(str(cfg.get("state")))
         if state is None:
             raise EngineUnreachable("état du moteur inconnu")
-        beat = health.get("last_process_ts")
-        if isinstance(beat, int) and now.timestamp() - beat > HEALTH_STALE_S:
-            state = "error"  # le processus répond, sa boucle ne tourne plus
-        return InstanceStatus(state=state, mode=config.effective_mode(cfg), observed_at=now)
+        # Le battement ne vaut que pour une boucle censée tourner : arrêté ou en rechargement, le
+        # moteur ne met pas `last_process` à jour (`process_stopped`, tag 2026.9).
+        if state in ("running", "exits_only"):
+            beat = health.get("last_process_ts")
+            if isinstance(beat, bool) or not isinstance(beat, int):
+                raise EngineUnreachable("battement du moteur absent ou illisible")
+            if now.timestamp() - beat > HEALTH_STALE_S:
+                state = "error"  # le processus répond, sa boucle ne tourne plus
+        with _engine_answers():
+            return InstanceStatus(state=state, mode=config.effective_mode(cfg), observed_at=now)
 
     async def effective_config(self, ref: InstanceRef) -> EffectiveConfig:
         c = await self._runner.inspect(ref.instance_id)
@@ -354,16 +438,23 @@ class FreqtradeAdapter:
         if not isinstance(pairs, list):
             raise EngineUnreachable("liste blanche illisible")
         version = cfg.get("version")
-        return EffectiveConfig(
-            values=config.observed_values(cfg, pairs),
-            observed_at=self._clock(),
-            fingerprint=c.fingerprint or None,
-            engine_version=version if isinstance(version, str) else None,
-        )
+        with _engine_answers():
+            return EffectiveConfig(
+                values=config.observed_values(cfg, pairs),
+                observed_at=self._clock(),
+                fingerprint=c.fingerprint or None,
+                engine_version=version if isinstance(version, str) else None,
+            )
 
     async def snapshot(self, ref: InstanceRef) -> Snapshot:
-        raw = await self._read(ref)
         iid = ref.instance_id
+        with _engine_answers():
+            raw = await self._read(ref, self._snap_closed.get(iid))
+            snap = self._snapshot(iid, raw)
+        self._snap_closed.setdefault(iid, set()).update(c.position_id for c in snap.closed)
+        return snap
+
+    def _snapshot(self, iid: UUID, raw: Mapping[str, Any]) -> Snapshot:
         venue, dry = raw["venue"], raw["dry_run"]
         positions: list[Position] = []
         orders: list[Order] = []
@@ -423,25 +514,34 @@ class FreqtradeAdapter:
         if tr.seq is None:  # départ après les séquences d'un worker précédent (hors trou répété)
             tr.seq = int(self._clock().timestamp())
         c = await self._runner.inspect(iid)
-        if c is None or c.status != "running":
-            # Conteneur arrêté : pas d'API à lire, mais l'arrêt lui-même s'annonce une fois.
-            raw: dict[str, Any] = {"state": ("stopped", None), "open": [], "closed": []}
-            new = _diff(iid, raw, tr, self._clock())
-        else:
-            raw = await self._read(ref)
-            new = _diff(iid, raw, tr, self._clock())
-        for when, key, kind, payload in new:
-            tr.seq += 1
-            yield CanonicalEvent(
-                id=_eid(iid, *key),
-                ts=when or self._clock(),
-                seq=tr.seq,
-                type=kind,
-                engine=ENGINE,
-                instance_id=iid,
-                payload=payload,
-            )
+        with _engine_answers():
+            if c is None or c.status != "running":
+                # Conteneur arrêté : pas d'API à lire, mais l'arrêt lui-même s'annonce une fois.
+                raw: dict[str, Any] = {"state": ("stopped", None), "open": [], "closed": []}
+                whole = tr.history
+            else:
+                raw = await self._read(ref, tr.closed if tr.history else None)
+                whole = True
+            out: list[CanonicalEvent] = []
+            seq = tr.seq
+            for when, key, kind, payload in _diff(iid, raw, tr, self._clock()):
+                seq += 1
+                out.append(
+                    CanonicalEvent(
+                        id=_eid(iid, *key),
+                        ts=when or self._clock(),
+                        seq=seq,
+                        type=kind,
+                        engine=ENGINE,
+                        instance_id=iid,
+                        payload=payload,
+                    )
+                )
+        for ev in out:
+            tr.seq = ev.seq
+            yield ev
         _commit(raw, tr)
+        tr.history = whole
 
     async def backtest(self, spec: BacktestSpec) -> BacktestResult:
         raise CommandRejected("backtest : non disponible à ce jalon")
@@ -476,20 +576,48 @@ class FreqtradeAdapter:
             raise EngineUnreachable("réponse inattendue du moteur sur /status")
         return trades
 
-    async def _read(self, ref: InstanceRef) -> dict[str, Any]:
+    async def _closed_trades(
+        self, iid: UUID, api: EngineApi, seen: set[str] | None
+    ) -> list[dict[str, Any]]:
+        """Trades clos, du plus ancien au plus récent. `seen` vaut None au premier relevé d'un
+        processus : tout l'historique est relu (I9, S5). Sinon : les pages récentes, jusqu'à
+        celle qui recoupe `seen` ; tout ce qui est plus ancien a déjà été rendu."""
+        if iid in self._overflow:
+            raise ClosedHistoryOverflow(f"plus de {HISTORY_CAP} trades clos : relevé refusé")
+        size = HISTORY_PAGE if seen is None else RECENT_PAGE
+        found: dict[str, dict[str, Any]] = {}  # une clôture entre deux pages décale : doublons
+        offset = 0
+        while True:
+            page = await api.get(
+                "trades", {"limit": size, "offset": offset, "order_by_id": "false"}
+            )
+            trades = page["trades"]
+            if not isinstance(trades, list):
+                raise EngineUnreachable("réponse inattendue du moteur sur /trades")
+            for t in trades:
+                found.setdefault(str(t["trade_id"]), t)
+            offset += len(trades)
+            if len(trades) < size or (seen is not None and not seen.isdisjoint(found)):
+                return list(reversed(found.values()))
+            if offset >= HISTORY_CAP:
+                self._overflow.add(iid)
+                log.error("historique_des_trades_clos_trop_long", instance_id=str(iid))
+                raise ClosedHistoryOverflow(f"plus de {HISTORY_CAP} trades clos : relevé refusé")
+
+    async def _read(self, ref: InstanceRef, seen: set[str] | None) -> dict[str, Any]:
         api = await self._api(ref)
         cfg = await api.get("show_config")
         open_ = await self._open_trades(api)
-        closed = await api.get("trades", {"limit": CLOSED_WINDOW, "order_by_id": "false"})
+        closed = await self._closed_trades(ref.instance_id, api, seen)
         bal = await api.get("balance")
-        if not (isinstance(cfg, dict) and isinstance(closed, dict) and isinstance(bal, dict)):
+        if not (isinstance(cfg, dict) and isinstance(bal, dict)):
             raise EngineUnreachable("réponse inattendue du moteur")
         return {
             "venue": cfg["exchange"],
             "dry_run": cfg["dry_run"] is True,
             "state": (_STATES.get(str(cfg.get("state"))), config.effective_mode(cfg)),
             "open": open_,
-            "closed": list(reversed(closed["trades"])),  # du plus ancien au plus récent
+            "closed": closed,
             "balances": tuple(
                 Balance(
                     currency=b["currency"], free=Decimal(b["free"]), total=Decimal(b["balance"])

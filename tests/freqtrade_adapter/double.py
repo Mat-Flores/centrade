@@ -5,8 +5,10 @@ et du runtime du worker. Rien ne sort du processus : un transport `requests` en 
 from __future__ import annotations
 
 import base64
+import io
 import json
 import re
+import time
 from collections.abc import Callable
 from datetime import UTC, datetime
 from decimal import Decimal
@@ -131,6 +133,7 @@ class FakeFreqtrade(HTTPAdapter):
         super().__init__()
         self.clock = clock
         self.calls: list[tuple[str, str]] = []
+        self.queries: list[dict[str, list[str]]] = []
         self.unreachable = False
         self.auth_source: Callable[[], tuple[str, str] | None] = lambda: None
         self.cfg: dict[str, Any] = {}
@@ -141,6 +144,11 @@ class FakeFreqtrade(HTTPAdapter):
         self._ids = 0
         self._tick = 0
         self.exit_reason = "roi"
+        # Pannes ciblées : (méthode, chemin) -> (code, corps), ou None pour une connexion coupée.
+        self.fail: dict[tuple[str, str], tuple[int, Any] | None] = {}
+        self.override: dict[str, Any] = {}  # chemin GET -> corps renvoyé tel quel (malformé)
+        self.raw_body: bytes | None = None  # corps brut pour toute réponse
+        self.delay_s = 0.0
 
     def load(self, spec: InstanceSpec) -> None:
         doc = json.loads(ftconfig.config_file(spec))
@@ -157,6 +165,8 @@ class FakeFreqtrade(HTTPAdapter):
             "exchange": doc["exchange"]["name"], "strategy": doc["strategy"],
             "force_entry_enable": doc["force_entry_enable"],
             "position_adjustment_enable": doc["position_adjustment_enable"],
+            "unfilledtimeout": doc["unfilledtimeout"],
+            "entry_pricing": doc["entry_pricing"], "exit_pricing": doc["exit_pricing"],
             "runmode": "dry_run" if doc["dry_run"] else "live",
         }  # fmt: skip
         self.initial_state = doc["initial_state"]
@@ -235,10 +245,20 @@ class FakeFreqtrade(HTTPAdapter):
         url = urlsplit(request.url or "")
         path = url.path.removeprefix("/api/v1/")
         self.calls.append((str(request.method), path))
-        code, body = self._route(str(request.method), path, parse_qs(url.query), request)
+        self.queries.append(parse_qs(url.query))
+        time.sleep(self.delay_s)
+        key = (str(request.method), path)
+        if key in self.fail:
+            failure = self.fail[key]
+            if failure is None:
+                raise requests.ConnectionError("coupée")
+            code, body = failure
+        else:
+            code, body = self._route(str(request.method), path, parse_qs(url.query), request)
         resp = requests.Response()
         resp.status_code = code
-        resp._content = _dump(body).encode()
+        # Corps en flux, comme une vraie réponse : le client le lit par morceaux, borné.
+        resp.raw = io.BytesIO(_dump(body).encode() if self.raw_body is None else self.raw_body)
         resp.url = request.url or ""
         resp.request = request
         return resp
@@ -252,7 +272,7 @@ class FakeFreqtrade(HTTPAdapter):
             return 401, {"detail": "Unauthorized"}
         body = json.loads(str(request.body)) if request.body else {}
         if method == "GET":
-            return 200, self._get(path, query)
+            return 200, self.override[path] if path in self.override else self._get(path, query)
         if method == "POST" and path in ("pause", "start", "stop"):
             self.state = {"pause": "paused", "start": "running", "stop": "stopped"}[path]
             if path == "start" and self.state == "running":
@@ -298,8 +318,16 @@ class FakeFreqtrade(HTTPAdapter):
         if path == "trades":
             done = [t for t in self.trades if not t["is_open"]]
             limit = int(query.get("limit", ["500"])[0])
-            done.sort(key=lambda t: -t["close_timestamp"])  # order_by_id=false
-            return {"trades": done[:limit], "trades_count": len(done), "total_trades": len(done)}
+            offset = int(query.get("offset", ["0"])[0])
+            assert query.get("order_by_id") == ["false"]  # tri par date de clôture décroissante
+            done.sort(key=lambda t: (-t["close_timestamp"], -t["trade_id"]))
+            page = done[offset : offset + limit]
+            return {
+                "trades": page,
+                "trades_count": len(page),
+                "offset": offset,
+                "total_trades": len(done),
+            }
         return {}
 
 

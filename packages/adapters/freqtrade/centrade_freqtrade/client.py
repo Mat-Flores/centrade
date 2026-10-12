@@ -1,7 +1,9 @@
-"""Client REST du moteur : un appel court, borné, en dehors de la boucle asynchrone.
+"""Client REST du moteur : un appel court, borné en durée et en taille, en dehors de la boucle
+asynchrone.
 
-`freqtrade-client` n'est pas utilisé tel quel : il lit les nombres en flottants, ignore le code
-HTTP et avale les erreurs de connexion. Les routes sont celles de sa documentation (ADR 0008).
+`freqtrade-client` n'est pas utilisé : il lit les nombres en flottants, ignore le code HTTP et
+avale les erreurs de connexion. C'est un écart au SPEC §5 et §7, à faire valider (ADR 0007). Les
+routes appelées sont les siennes (ADR 0008).
 """
 
 from __future__ import annotations
@@ -18,6 +20,8 @@ from centrade_core.engine.contract import CommandRejected, EngineUnreachable
 CONNECT_TIMEOUT_S = 2.0
 READ_TIMEOUT_S = 5.0
 EXIT_TIMEOUT_S = 20.0  # une sortie forcée passe par la venue : plus longue qu'une lecture
+# Plafond d'une réponse lue. Une page de 200 trades clos pèse de l'ordre du mégaoctet.
+MAX_RESPONSE_BYTES = 16 * 1024**2
 
 
 def _no_constant(name: str) -> Any:
@@ -55,13 +59,18 @@ class EngineApi:
                     headers={"Accept": "application/json", "Content-Type": "application/json"},
                     timeout=(CONNECT_TIMEOUT_S, read_s),
                     allow_redirects=False,
+                    stream=True,  # lu par morceaux : jamais plus que le plafond en mémoire
                 )
-            status, text = resp.status_code, resp.text
+                status, raw = resp.status_code, bytearray()
+                for chunk in resp.iter_content(64 * 1024):
+                    raw += chunk
+                    if len(raw) > MAX_RESPONSE_BYTES:
+                        raise EngineUnreachable("réponse du moteur trop volumineuse")
         except requests.RequestException as exc:
             raise EngineUnreachable(f"API du moteur injoignable : {type(exc).__name__}") from exc
         try:
-            data = _decode(text) if text else None
-        except ValueError as exc:
+            data = _decode(raw.decode("utf-8")) if raw else None
+        except (ValueError, RecursionError) as exc:  # JSON invalide, trop profond, mal encodé
             raise EngineUnreachable("réponse du moteur illisible") from exc
         if status == 502 and isinstance(data, dict):  # RPCException du moteur : refus métier
             raise CommandRejected(str(data.get("detail") or data.get("error") or "refus du moteur"))

@@ -1,9 +1,13 @@
+import copy
 import json
+from collections.abc import Iterator
 from decimal import Decimal
-from typing import get_args
+from typing import Any, get_args
 
 import pytest
+from centrade_core.deployment import config_hash
 from centrade_core.engine.types import Mode
+from centrade_freqtrade import config as ftconfig
 from centrade_freqtrade.config import (
     OWNED_KEYS,
     VENUE_CREDENTIAL_KEYS,
@@ -97,3 +101,84 @@ def test_argent_non_representable_sans_perte_est_refuse() -> None:
 def test_paires_invalides_refusees(pairs: list[str]) -> None:
     with pytest.raises(ValueError):
         render_config(make_spec(pairs=pairs))
+
+
+@given(st.decimals(allow_nan=True, allow_infinity=True))
+def test_un_decimal_s_ecrit_sans_perte_ou_est_refuse(d: Decimal) -> None:
+    """Le seul `float()` du paquet : le texte écrit redonne exactement le décimal, sinon refus."""
+    try:
+        text = ftconfig._to_json({"v": d})
+    except ValueError:
+        return
+    assert json.loads(text, parse_float=Decimal, parse_int=Decimal)["v"] == d
+
+
+@pytest.mark.parametrize("gain", ["Infinity", "NaN", "1e400", "0.1000000000000000055511151231"])
+def test_objectif_de_gain_non_fini_ou_inexact_est_refuse(gain: str) -> None:
+    m = sma_manifest()
+    exits = m.exits.model_copy(update={"take_profit": {"0": Decimal(gain)}})
+    with pytest.raises(ValueError):
+        config_file(make_spec(manifest=m.model_copy(update={"exits": exits})))
+
+
+def leaves(doc: Any, prefix: str = "") -> Iterator[str]:
+    if isinstance(doc, dict) and doc:
+        for k, v in doc.items():
+            yield from leaves(v, f"{prefix}.{k}" if prefix else k)
+    else:
+        yield prefix
+
+
+def owner(cfg_keys: Any, leaf: str) -> str | None:
+    return next((k for k in cfg_keys if leaf == k or leaf.startswith(k + ".")), None)
+
+
+@given(specs())
+def test_chaque_cle_ecrite_dans_le_fichier_est_possedee(spec) -> None:  # type: ignore[no-untyped-def]
+    """I10 : rien n'est écrit dans la configuration du moteur hors de l'empreinte."""
+    cfg = render_config(spec)
+    for leaf in leaves(json.loads(config_file(spec))):
+        assert owner(cfg.values, leaf), f"clé écrite mais non possédée : {leaf}"
+    assert cfg.mode_keys <= cfg.values.keys() and cfg.unreadable <= cfg.values.keys()
+
+
+def _other(v: Any) -> Any:
+    if isinstance(v, bool):
+        return not v
+    if isinstance(v, (int, Decimal)):
+        return v + 1
+    if isinstance(v, str):
+        return v + "x"
+    return [*v, "X"] if isinstance(v, list) else {"x": 1}
+
+
+@given(spec=specs(), data=st.data())
+def test_changer_une_cle_ecrite_change_le_hash(  # type: ignore[no-untyped-def]
+    spec, data: st.DataObject
+) -> None:
+    doc = ftconfig._document(spec)
+    leaf = data.draw(st.sampled_from(sorted(leaves(doc))))
+    changed = copy.deepcopy(doc)
+    cur = changed
+    *path, last = leaf.split(".")
+    for part in path:
+        cur = cur[part]
+    cur[last] = _other(cur[last])
+    before = render_config(spec)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(ftconfig, "_document", lambda _spec: changed)
+        after = render_config(spec)
+    key = owner(before.values, leaf)
+    assert key is not None and before.values[key] != after.values[key], leaf
+    same_hash = config_hash(before.values, exclude=before.mode_keys) == config_hash(
+        after.values, exclude=after.mode_keys
+    )
+    assert same_hash is (key in before.mode_keys), leaf  # seules les clés de mode y échappent
+
+
+def test_reglage_d_execution_de_la_plateforme_visible_et_dans_l_empreinte() -> None:
+    v = render_config(make_spec()).values
+    assert json.loads(v["entry_pricing"])["price_side"] == "other"
+    assert json.loads(v["exit_pricing"])["price_side"] == "other"
+    assert json.loads(v["unfilledtimeout"]) == {"entry": "10", "exit": "10", "unit": "minutes"}
+    assert v["dry_run_wallet"] == "150" and json.loads(v["pairlists"])[0]["method"]

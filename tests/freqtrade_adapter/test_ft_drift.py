@@ -40,6 +40,9 @@ def show_config(spec: InstanceSpec) -> dict[str, Any]:
                 "available_capital",
                 "force_entry_enable",
                 "position_adjustment_enable",
+                "unfilledtimeout",
+                "entry_pricing",
+                "exit_pricing",
             )
         },
         "stake_amount": str(d["stake_amount"]),
@@ -61,7 +64,10 @@ def _mutate(key: str, v: Any) -> Any:
         return v + "x"
     if isinstance(v, list):
         return [*v, "SOL/USDT"]
-    return {**v, "entry": "market"} if key == "order_types" else {**v, "999": 1.0}
+    if key == "minimal_roi":
+        return {**v, "999": 1.0}
+    first = next(iter(v))  # comparées par sous-ensemble : on change une de nos entrées
+    return {**v, first: _mutate(first, v[first])}
 
 
 def test_aucune_derive_sur_une_configuration_conforme() -> None:
@@ -91,8 +97,12 @@ def test_cle_observable_absente_est_une_derive(key: str) -> None:
 def test_cle_non_possedee_ignoree_et_defauts_du_moteur_toleres() -> None:
     spec = make_spec()
     eff = show_config(spec)
-    eff.update(state="running", timeframe="1h", version="9999", unfilledtimeout={"entry": 1})
+    eff.update(state="running", timeframe="1h", version="9999", use_custom_stoploss=None)
     eff["order_types"] = {**eff["order_types"], "entry_extra": "limit"}
+    eff["unfilledtimeout"] = {**eff["unfilledtimeout"], "exit_timeout_count": 0}
+    eff["entry_pricing"] = {**eff["entry_pricing"], "price_last_balance": 0.0, "extra": 1}
+    depth = {**eff["entry_pricing"]["check_depth_of_market"], "extra": True}
+    eff["entry_pricing"]["check_depth_of_market"] = depth
     assert drift(render_config(spec), eff) == []
 
 
@@ -108,7 +118,29 @@ def test_cles_non_observables_sont_documentees() -> None:
         "db_url", "initial_state", "tradable_balance_ratio", "cancel_open_orders_on_exit",
         "api_server.enabled", "api_server.listen_ip_address", "api_server.listen_port",
         "webhook.enabled", "webhook.allow_custom_messages", "telegram.enabled",
+        "exchange.pair_blacklist", "api_server.verbosity", "api_server.CORS_origins",
+        "pairlists", "dry_run_wallet", "centrade_params",
     }  # fmt: skip
+
+
+def test_derive_sur_un_reglage_d_execution_imbrique() -> None:
+    spec = make_spec()
+    eff = show_config(spec)
+    eff["entry_pricing"] = {**eff["entry_pricing"], "price_side": "same"}
+    eff["exit_pricing"] = {"use_order_book": True, "order_book_top": 1}  # price_side retiré
+    depth = {**eff["entry_pricing"]["check_depth_of_market"], "enabled": True}
+    assert [d.key for d in drift(render_config(spec), eff)] == ["entry_pricing", "exit_pricing"]
+    eff = show_config(spec)
+    eff["entry_pricing"] = {**eff["entry_pricing"], "check_depth_of_market": depth}
+    assert [d.key for d in drift(render_config(spec), eff)] == ["entry_pricing"]
+
+
+def test_valeur_relue_d_une_forme_inattendue_est_une_derive_pas_une_erreur() -> None:
+    spec = make_spec()
+    for odd in ("pas un dictionnaire", 3, [1], {"entry": {"imbriqué": 1}}):
+        eff = show_config(spec)
+        eff["unfilledtimeout"] = odd
+        assert [d.key for d in drift(render_config(spec), eff)] == ["unfilledtimeout"]
 
 
 def test_effective_mode() -> None:

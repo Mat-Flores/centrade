@@ -50,18 +50,25 @@ def test_hors_dry_run_refuse(strategy_cls: Any, cfg: dict[str, Any]) -> None:
 
 
 def test_exception_interne_refuse_sans_lever(strategy_cls: Any) -> None:
-    s = strategy_cls({"dry_run": True})
-
-    def boom(**_: Any) -> bool:
+    def boom(self: Any, **_: Any) -> bool:
         raise RuntimeError("panne")
 
-    s._entry_allowed = boom
-    assert enter(s) is False
+    type.__setattr__(strategy_cls, "_entry_allowed", boom)  # la base elle-même, pour l'essai
+    assert enter(strategy_cls({"dry_run": True})) is False
 
 
 def test_reponse_non_booleenne_refusee(strategy_cls: Any) -> None:
+    type.__setattr__(strategy_cls, "_entry_allowed", lambda self, **_: "oui")
+    assert enter(strategy_cls({"dry_run": True})) is False
+
+
+def test_config_illisible_refuse_sans_lever(strategy_cls: Any) -> None:
+    class Broken(dict[str, Any]):
+        def get(self, *a: Any) -> Any:
+            raise RuntimeError("panne")
+
     s = strategy_cls({"dry_run": True})
-    s._entry_allowed = lambda **_: "oui"
+    s.config = Broken()
     assert enter(s) is False
 
 
@@ -86,9 +93,64 @@ def test_mode_capture_a_la_construction(strategy_cls: Any) -> None:
 
 def test_sous_classe_qui_redefinit_un_nom_protege_est_refusee(strategy_cls: Any) -> None:
     for name in ("_entry_allowed", "confirm_trade_entry", "leverage", "adjust_exit_price",
-                 "_boot_dry_run", "__init__"):  # fmt: skip
+                 "_boot_dry_run", "__init__", "__setattr__", "_intact"):  # fmt: skip
         with pytest.raises(TypeError, match=name):
             type("S", (strategy_cls,), {name: lambda *a, **k: True})
+
+
+HOOKS = ("_entry_allowed", "confirm_trade_entry", "confirm_trade_exit", "leverage", "_intact")
+
+
+@pytest.mark.parametrize("name", HOOKS)
+def test_nom_protege_non_reaffectable_sur_la_classe_ni_sur_l_instance(
+    strategy_cls: Any, name: str
+) -> None:
+    sub = type("S", (strategy_cls,), {})
+    s = sub({"dry_run": True})
+    for target in (sub, strategy_cls, s):
+        with pytest.raises(TypeError, match=name):
+            setattr(target, name, lambda *a, **k: True)
+        with pytest.raises(TypeError, match=name):
+            delattr(target, name)
+    assert enter(s) is True  # rien n'a changé
+
+
+def test_mode_non_reaffectable_apres_la_construction(strategy_cls: Any) -> None:
+    s = strategy_cls({"dry_run": False})
+    with pytest.raises(TypeError):
+        s._boot_dry_run = True
+    s.config["dry_run"] = True
+    assert enter(s) is False
+
+
+def test_classe_placee_avant_la_base_ne_masque_aucun_nom_protege(strategy_cls: Any) -> None:
+    for name in ("confirm_trade_entry", "_entry_allowed", "_intact"):
+        mixin = type("Mixin", (), {name: lambda *a, **k: True})
+        with pytest.raises(TypeError, match=name):
+            type("S", (mixin, strategy_cls), {})
+
+
+@pytest.mark.parametrize("name", ["_entry_allowed", "_boot_dry_run", "leverage"])
+def test_hook_refuse_si_un_nom_protege_est_masque_malgre_tout(strategy_cls: Any, name: str) -> None:
+    """Écritures qui évitent `__setattr__` (inaccessibles à une stratégie contrôlée) : le hook
+    constate à l'appel que le type ne résout plus les noms de la base, et refuse."""
+    sub = type("S", (strategy_cls,), {})
+    s = sub({"dry_run": True})
+    type.__setattr__(sub, name, lambda *a, **k: True)
+    assert enter(s) is False
+    sub2 = type("S2", (strategy_cls,), {})
+    s2 = sub2({"dry_run": True})
+    if name != "_boot_dry_run":  # celui-ci vit sur l'instance : c'est la valeur lue à l'amorçage
+        object.__setattr__(s2, name, lambda *a, **k: True)
+        assert enter(s2) is False
+
+
+def test_les_ecritures_du_moteur_sur_la_strategie_restent_possibles(strategy_cls: Any) -> None:
+    sub: Any = type("S", (strategy_cls,), {"stoploss": -0.1})
+    s = sub({"dry_run": True})
+    s.stoploss, s.dp, s.wallets = -0.05, object(), None  # StrategyResolver, FreqtradeBot
+    sub.timeframe = "5m"
+    assert enter(s) is True
 
 
 def test_attributs_exiges_par_freqtrade_restent_redefinissables(strategy_cls: Any) -> None:

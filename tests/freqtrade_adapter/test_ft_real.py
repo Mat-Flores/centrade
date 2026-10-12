@@ -204,6 +204,8 @@ async def test_dry_run_instance_starts_reports_trades_and_stops(stack: Any) -> N
         return s if s.positions else None
 
     snap = await until(trade_visible, "un trade rempli", 240, 3)
+    # La position a pu apparaître entre le relevé des événements et l'instantané : on relit.
+    events.extend([e async for e in adapter.events(ref)])
     pos = snap.positions[0]
     note(
         f"trade remonté : position {pos.position_id} {pos.symbol} qty {pos.qty} "

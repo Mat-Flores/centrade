@@ -4,11 +4,15 @@ from __future__ import annotations
 
 import itertools
 import json
+from datetime import timedelta
 from decimal import Decimal
+from typing import Any
 
 import pytest
 from centrade_core.engine.contract import CommandRejected, EngineUnreachable, observe_status
 from centrade_core.engine.types import EXIT_CAUSES, BacktestSpec, InstanceRef, InstanceSpec
+from centrade_freqtrade import adapter as ft
+from centrade_freqtrade import client
 from centrade_freqtrade.adapter import EXIT_CAUSE
 from hypothesis import given, settings
 from hypothesis import strategies as st
@@ -241,13 +245,304 @@ async def test_closed_trade_is_read_with_translated_exit_cause() -> None:
     assert c.position_id == "1"  # même identifiant que la position ouverte
 
 
-async def test_closed_window_is_bounded() -> None:
+def close_many(rig: Rig, n: int) -> None:
+    for _ in range(n):
+        rig.server.close_trade(rig.server.open_entry(), "roi")
+        rig.clock.now += timedelta(seconds=1)
+
+
+def trade_pages(rig: Rig) -> list[tuple[int, int]]:
+    """(offset, limit) de chaque appel à GET /trades."""
+    return [
+        (int(q["offset"][0]), int(q["limit"][0]))
+        for (_, path), q in zip(rig.server.calls, rig.server.queries, strict=True)
+        if path == "trades"
+    ]
+
+
+async def test_first_read_of_a_process_returns_the_whole_closed_history() -> None:
+    """I9, S5 : après un arrêt du worker, aucun trade clos n'est perdu, quel qu'en soit le rang."""
     rig = Rig()
     _, ref = await deployed(rig)
-    for _ in range(60):
-        rig.server.close_trade(rig.server.open_entry(), "roi")
-        rig.clock.now = rig.clock.now.replace(microsecond=0)
-    assert len((await rig.adapter.snapshot(ref)).closed) == 50
+    close_many(rig, 60)
+    closed = (await rig.adapter.snapshot(ref)).closed
+    assert [c.position_id for c in closed] == [str(i) for i in range(1, 61)]  # ancien -> récent
+
+
+async def test_closed_history_is_read_by_pages_then_only_recent_pages(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ft, "HISTORY_PAGE", 7)
+    monkeypatch.setattr(ft, "RECENT_PAGE", 3)
+    rig = Rig()
+    _, ref = await deployed(rig)
+    close_many(rig, 20)
+    assert len((await rig.adapter.snapshot(ref)).closed) == 20
+    assert trade_pages(rig) == [(0, 7), (7, 7), (14, 7)]  # jusqu'à la page incomplète
+    rig.server.calls.clear()
+    rig.server.queries.clear()
+    close_many(rig, 1)
+    recent = (await rig.adapter.snapshot(ref)).closed
+    assert trade_pages(rig) == [(0, 3)]  # régime courant : une page récente suffit
+    assert "21" in {c.position_id for c in recent}
+    # Plus de clôtures qu'une page entre deux relevés : on pagine jusqu'à recouper le déjà-lu.
+    rig.server.calls.clear()
+    rig.server.queries.clear()
+    close_many(rig, 8)
+    recent = (await rig.adapter.snapshot(ref)).closed
+    assert {str(i) for i in range(22, 30)} <= {c.position_id for c in recent}
+    assert trade_pages(rig) == [(0, 3), (3, 3), (6, 3)]
+    # Un autre processus (worker redémarré) relit tout.
+    assert len((await rig.new_adapter().snapshot(ref)).closed) == 29
+
+
+async def test_events_replay_the_whole_history_after_a_worker_restart(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ft, "HISTORY_PAGE", 7)
+    monkeypatch.setattr(ft, "RECENT_PAGE", 3)
+    rig = Rig()
+    _, ref = await deployed(rig)
+    close_many(rig, 20)
+    await rig.adapter.snapshot(ref)  # le relevé ne doit pas priver les événements de l'historique
+    out = await events(rig, ref, rig.new_adapter())
+    closed = {e.payload.position_id for e in out if e.type.value == "position.closed"}
+    assert closed == {str(i) for i in range(1, 21)}
+    close_many(rig, 5)
+    more = await events(rig, ref)  # premier relevé de cet adaptateur-ci : tout, sans doublon
+    assert len({e.id for e in more}) == len(more)
+    assert sum(e.type.value == "position.closed" for e in more) == 25
+    close_many(rig, 5)
+    last = await events(rig, ref)
+    assert {e.payload.position_id for e in last if e.type.value == "position.closed"} == {
+        str(i) for i in range(26, 31)
+    }
+
+
+async def test_closed_history_beyond_the_cap_raises_instead_of_losing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(ft, "HISTORY_PAGE", 7)
+    monkeypatch.setattr(ft, "HISTORY_CAP", 14)
+    rig = Rig()
+    _, ref = await deployed(rig)
+    close_many(rig, 14)
+    with pytest.raises(ft.ClosedHistoryOverflow, match="14"):
+        await rig.adapter.snapshot(ref)
+    with pytest.raises(EngineUnreachable):  # ce que le worker attrape
+        await events(rig, ref)
+    assert (await rig.adapter.status(ref)).state == "exits_only"  # l'état, lui, reste lisible
+    await rig.adapter.flatten(ref)  # et une sortie n'en dépend pas (I4)
+
+
+# --- I4 : rien ne retient une sortie ni un arrêt ------------------------------------------------
+CANCEL = ("DELETE", "trades/1/open-order")
+REFUSED = (502, {"detail": "Order cancel failed"})
+
+
+@pytest.mark.parametrize("failure", [REFUSED, None, (500, {}), (200, "pas du JSON attendu")])
+@pytest.mark.parametrize("broken", [CANCEL, ("POST", "pause"), ("GET", "status")])
+async def test_flatten_sends_forceexit_whatever_happens_to_pause_and_cancel(
+    broken: tuple[str, str], failure: tuple[int, object] | None
+) -> None:
+    rig = Rig()
+    _, ref = await deployed(rig)
+    run_to_position(rig)  # trade 1 : position ouverte
+    rig.server.open_entry()  # trade 2 : ordre d'entrée ouvert
+    rig.server.trades[0]["trade_id"], rig.server.trades[1]["trade_id"] = 2, 1
+    rig.server.fail[broken] = failure
+    try:
+        await rig.adapter.flatten(ref)
+    except (EngineUnreachable, CommandRejected):
+        pass  # l'échec de la pause ou de l'annulation remonte, mais après la sortie
+    assert ("POST", "forceexit") in rig.server.calls
+    assert rig.server.open_trades() == []
+
+
+async def test_flatten_reports_the_failed_cancel_after_the_exit() -> None:
+    rig = Rig()
+    _, ref = await deployed(rig)
+    rig.server.open_entry()
+    rig.server.fail[CANCEL] = REFUSED
+    with pytest.raises(CommandRejected, match="Order cancel failed"):
+        await rig.adapter.flatten(ref)
+    assert rig.server.calls.index(CANCEL) < rig.server.calls.index(("POST", "forceexit"))
+
+
+@pytest.mark.parametrize("broken", [CANCEL, ("POST", "pause"), ("GET", "status")])
+@pytest.mark.parametrize("failure", [REFUSED, None])
+async def test_stop_always_stops_the_container(
+    broken: tuple[str, str], failure: tuple[int, object] | None
+) -> None:
+    rig = Rig()
+    spec, ref = await deployed(rig)
+    await rig.adapter.resume_entries(ref)
+    rig.server.step()  # un ordre d'entrée ouvert
+    rig.server.fail[broken] = failure
+    with pytest.raises((EngineUnreachable, CommandRejected)):
+        await rig.adapter.stop(ref)  # l'échec remonte, après l'arrêt
+    assert rig.runner.status[spec.instance_id] == "exited"
+    assert rig.runtime.cleaned == [spec.instance_id]
+    assert ("POST", "stop") not in rig.server.calls
+    if broken != ("POST", "pause"):
+        assert ("POST", "pause") in rig.server.calls  # ce qui pouvait être tenté l'a été
+    await rig.adapter.stop(ref)  # idempotent : conteneur déjà arrêté, plus rien à signaler
+
+
+async def test_stop_does_not_wait_for_a_silent_engine_api(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(ft, "STOP_GRACE_S", 0.05)
+    rig = Rig()
+    spec, ref = await deployed(rig)
+    rig.server.delay_s = 0.4  # l'API répond trop tard
+    with pytest.raises(EngineUnreachable):
+        await rig.adapter.stop(ref)
+    assert rig.runner.status[spec.instance_id] == "exited"
+
+
+async def test_stop_with_an_unreachable_api_still_stops() -> None:
+    rig = Rig()
+    spec, ref = await deployed(rig)
+    rig.server.unreachable = True
+    with pytest.raises(EngineUnreachable):
+        await rig.adapter.stop(ref)
+    assert rig.runner.status[spec.instance_id] == "exited"
+
+
+async def test_pause_never_cancels_an_exit_order() -> None:
+    rig = Rig()
+    _, ref = await deployed(rig)
+    run_to_position(rig)
+    rig.server.open_exit_order(rig.server.trades[0])  # trade 1 : sortie ouverte
+    both = rig.server.open_entry()  # trade 2 : entrée ET sortie ouvertes (la route annule tout)
+    rig.server.open_exit_order(both)
+    await rig.adapter.pause_entries(ref)
+    assert not [c for c in rig.server.calls if c[0] == "DELETE"]
+    assert (
+        all(o["is_open"] for o in both["orders"]) and rig.server.trades[0]["orders"][-1]["is_open"]
+    )
+    only = rig.server.open_entry()  # trade 3 : entrée seule
+    await rig.adapter.pause_entries(ref)
+    assert [c for c in rig.server.calls if c[0] == "DELETE"] == [("DELETE", "trades/3/open-order")]
+    assert not only["orders"][0]["is_open"]
+
+
+async def test_pause_still_cancels_entries_when_the_pause_call_fails() -> None:
+    rig = Rig()
+    _, ref = await deployed(rig)
+    t = rig.server.open_entry()
+    rig.server.fail[("POST", "pause")] = (500, {})
+    with pytest.raises(EngineUnreachable):
+        await rig.adapter.pause_entries(ref)
+    assert not t["orders"][0]["is_open"]
+
+
+async def test_close_position_is_sent_even_when_the_engine_state_is_unreadable() -> None:
+    rig = Rig()
+    _, ref = await deployed(rig)
+    run_to_position(rig)
+    rig.server.override["show_config"] = ["illisible"]
+    await rig.adapter.close_position(ref, "1")
+    assert rig.server.open_trades() == []
+
+
+# --- battement ----------------------------------------------------------------------------------
+@pytest.mark.parametrize("beat", [None, "1760270400", 1.5, True, [], {}])
+async def test_missing_or_non_integer_heartbeat_is_unknown(beat: object) -> None:
+    rig = Rig()
+    _, ref = await deployed(rig)
+    rig.server.override["health"] = {"last_process_ts": beat}
+    assert (await observe_status(rig.adapter, ref)).state == "unknown"
+    rig.server.override["health"] = {}
+    assert (await observe_status(rig.adapter, ref)).state == "unknown"
+
+
+async def test_halted_engine_does_not_beat_and_stays_halted() -> None:
+    """Tag 2026.9 : `process_stopped` ne met pas `last_process` à jour. `halted` reste visible."""
+    rig = Rig()
+    _, ref = await deployed(rig)
+    rig.server.state = "stopped"
+    rig.server.override["health"] = {"last_process_ts": None}
+    assert (await rig.adapter.status(ref)).state == "halted"
+
+
+# --- réponses malformées --------------------------------------------------------------------------
+json_values = st.recursive(
+    st.none()
+    | st.booleans()
+    | st.integers(min_value=-(10**30), max_value=10**30)
+    | st.decimals(allow_nan=False, allow_infinity=False)
+    | st.text(max_size=8),
+    lambda inner: (
+        st.lists(inner, max_size=4) | st.dictionaries(st.text(max_size=8), inner, max_size=4)
+    ),
+    max_leaves=12,
+)
+ROUTES = ("show_config", "health", "whitelist", "status", "trades", "balance")
+
+
+@st.composite
+def damaged(draw: st.DrawFn, body: Any) -> Any:
+    """Une réponse plausible, abîmée : clés retirées, valeurs remplacées par n'importe quoi."""
+    if isinstance(body, dict) and body:
+        out = dict(body)
+        for key in draw(st.lists(st.sampled_from(sorted(out)), max_size=3, unique=True)):
+            if draw(st.booleans()):
+                del out[key]
+            elif draw(st.booleans()):
+                out[key] = draw(json_values)
+            else:
+                out[key] = draw(damaged(out[key]))
+        return out
+    if isinstance(body, list) and body:
+        return [draw(damaged(x)) for x in body]
+    return draw(json_values)
+
+
+@settings(max_examples=300, deadline=None)
+@given(data=st.data(), route=st.sampled_from(ROUTES), wreck=st.booleans())
+async def test_any_engine_answer_only_raises_contract_exceptions(
+    data: st.DataObject, route: str, wreck: bool
+) -> None:
+    rig = Rig()
+    _, ref = await deployed(rig)
+    run_to_position(rig)
+    rig.server.close_trade(rig.server.open_entry(), "roi")
+    rig.server.open_entry()
+    good = rig.server._get(route, {"order_by_id": ["false"]})
+    rig.server.override[route] = data.draw(json_values if wreck else damaged(good))
+    a = rig.adapter
+    for call in (a.status, a.snapshot, a.effective_config, lambda r: events(rig, r),
+                 a.pause_entries, a.flatten):  # fmt: skip
+        try:
+            await call(ref)
+        except (EngineUnreachable, CommandRejected):
+            pass  # seules exceptions du contrat : l'instance devient `unknown`, pas le tour
+
+
+@pytest.mark.parametrize(
+    "raw",
+    [b"[" * 100_000, b"{" + b'"a":' * 50_000, b"\xff\xfe", b"NaN", b'{"a": Infinity}',
+     b"1e99999999", b""],
+)  # fmt: skip
+async def test_unreadable_bodies_are_unreachable(raw: bytes) -> None:
+    rig = Rig()
+    _, ref = await deployed(rig)
+    rig.server.raw_body = raw
+    for call in (rig.adapter.status, rig.adapter.snapshot, rig.adapter.effective_config):
+        with pytest.raises(EngineUnreachable):
+            await call(ref)
+
+
+async def test_oversized_answer_is_refused_without_reading_it_all(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(client, "MAX_RESPONSE_BYTES", 8192)
+    rig = Rig()
+    _, ref = await deployed(rig)
+    assert (await rig.adapter.status(ref)).state == "exits_only"  # réponses courtes : lues
+    rig.server.raw_body = b'{"a": "' + b"x" * 50_000 + b'"}'
+    with pytest.raises(EngineUnreachable, match="volumineuse"):
+        await rig.adapter.status(ref)
 
 
 async def test_events_cover_the_trade_lifecycle_and_replay_without_duplicates() -> None:

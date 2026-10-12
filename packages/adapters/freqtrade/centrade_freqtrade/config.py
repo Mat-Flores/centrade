@@ -15,6 +15,8 @@ from typing import Any
 from centrade_core.engine.types import EngineConfig, InstanceSpec, Mode
 
 # Clés possédées (annexe C), en notation pointée. Valeurs de EngineConfig : chaînes canoniques.
+# Toute clé écrite dans le fichier généré en fait partie (I10) : un test le vérifie feuille par
+# feuille, et qu'en changer une change le hash de configuration.
 OWNED_KEYS: tuple[str, ...] = (
     "dry_run",
     "db_url",
@@ -31,6 +33,8 @@ OWNED_KEYS: tuple[str, ...] = (
     "available_capital",
     "tradable_balance_ratio",
     "exchange.pair_whitelist",
+    "exchange.pair_blacklist",
+    "pairlists",
     "stoploss",
     "trailing_stop",
     "trailing_stop_positive",
@@ -39,9 +43,17 @@ OWNED_KEYS: tuple[str, ...] = (
     "minimal_roi",
     "order_types",
     "cancel_open_orders_on_exit",
+    # Réglages d'exécution décidés par la plateforme (ADR 0008), pas par la stratégie.
+    "entry_pricing",
+    "exit_pricing",
+    "unfilledtimeout",
+    "dry_run_wallet",
+    "centrade_params",
     "api_server.enabled",
     "api_server.listen_ip_address",
     "api_server.listen_port",
+    "api_server.verbosity",
+    "api_server.CORS_origins",
     "webhook.enabled",
     "webhook.allow_custom_messages",
     "telegram.enabled",
@@ -56,8 +68,8 @@ VENUE_CREDENTIAL_KEYS: tuple[str, ...] = (
 
 # Clé possédée -> clé de GET /show_config. `exchange.pair_whitelist` n'y figure pas : l'adaptateur
 # d'exécution l'ajoute sous `pair_whitelist` depuis GET /whitelist. Les clés absentes de cette
-# table (db_url, initial_state, tradable_balance_ratio, cancel_open_orders_on_exit, api_server,
-# webhook, telegram) ne sont pas observables par REST : voir l'ADR 0008.
+# table ne sont pas rendues par l'API du moteur : elles sont déclarées `unreadable`, chacune avec
+# sa justification dans l'ADR 0008.
 _SHOW_CONFIG_SOURCE: dict[str, str] = {
     "dry_run": "dry_run",
     "bot_name": "bot_name",
@@ -78,10 +90,13 @@ _SHOW_CONFIG_SOURCE: dict[str, str] = {
     "trailing_only_offset_is_reached": "trailing_only_offset_is_reached",
     "minimal_roi": "minimal_roi",
     "order_types": "order_types",
+    "entry_pricing": "entry_pricing",
+    "exit_pricing": "exit_pricing",
+    "unfilledtimeout": "unfilledtimeout",
 }
 OBSERVABLE_KEYS: tuple[str, ...] = tuple(k for k in OWNED_KEYS if k in _SHOW_CONFIG_SOURCE)
 # Le moteur peut ajouter des valeurs par défaut à ces dictionnaires : seules nos clés comptent.
-_SUBSET_KEYS = frozenset({"order_types"})
+_SUBSET_KEYS = frozenset({"order_types", "entry_pricing", "exit_pricing", "unfilledtimeout"})
 
 # Propres au mode ou à l'instance : hors du hash de configuration (I10).
 MODE_KEYS = frozenset({"dry_run", "db_url", "bot_name"})
@@ -223,9 +238,9 @@ def _document(spec: InstanceSpec) -> dict[str, Any]:
         },
         "webhook": {"enabled": False, "allow_custom_messages": False},
         "telegram": {"enabled": False},
-        # Non possédés : requis par le moteur ou lus par la stratégie.
         "pairlists": [{"method": "StaticPairList"}],
-        # Le moteur exige ces blocs (KeyError au démarrage sans eux). `other` : l'ordre limite
+        # Réglage d'exécution de la plateforme, le même pour toute stratégie (ADR 0008). Le
+        # moteur exige ces blocs (KeyError au démarrage sans eux). `other` : l'ordre limite
         # traverse le carnet, donc se remplit ; avec `same` un ordre pouvait rester posé jusqu'au
         # délai (observé), y compris en sortie, ce qui retarde une sortie (I4).
         "entry_pricing": {
@@ -256,8 +271,9 @@ def render_config(spec: InstanceSpec) -> EngineConfig:
     )
 
 
-def observed_values(show_config: Mapping[str, Any], whitelist: list[str]) -> dict[str, str]:
-    """Relecture ramenée aux noms de clés possédées et aux chaînes canoniques de render_config."""
+def observed_values(show_config: Mapping[str, Any], whitelist: Any) -> dict[str, str]:
+    """Relecture ramenée aux noms de clés possédées et aux chaînes canoniques de render_config.
+    C'est le seul endroit où une valeur relue est canonisée."""
     seen = {**show_config, "pair_whitelist": whitelist}
     out: dict[str, str] = {}
     for key in OBSERVABLE_KEYS:
@@ -267,11 +283,46 @@ def observed_values(show_config: Mapping[str, Any], whitelist: list[str]) -> dic
     return out
 
 
+def _within(want: Any, got: Any) -> bool:
+    """Nos entrées sont dans la relecture, à toute profondeur ; les défauts du moteur en plus."""
+    if isinstance(want, dict):
+        return isinstance(got, dict) and all(
+            k in got and _within(v, got[k]) for k, v in want.items()
+        )
+    return bool(want == got)
+
+
+def _same(key: str, want: str | None, got: str | None) -> bool:
+    """Compare deux chaînes canoniques d'une même clé."""
+    if key in _SUBSET_KEYS and want is not None and got is not None:
+        try:
+            return _within(json.loads(want), json.loads(got))
+        except ValueError:  # la relecture n'a pas la forme attendue : c'est un écart
+            return False
+    return want == got
+
+
 def observed_drift(generated: EngineConfig, observed: Mapping[str, str]) -> list[Drift]:
-    """Comme `drift`, depuis des valeurs déjà ramenées aux clés possédées (`observed_values`).
-    Une clé absente de la relecture n'est pas signalée ici : `owned_drifts` s'en charge."""
-    back = {_SHOW_CONFIG_SOURCE[k]: v for k, v in observed.items() if k in _SHOW_CONFIG_SOURCE}
-    return [d for d in drift(generated, back) if d.key in observed]
+    """Écarts sur les clés relues, depuis les valeurs de `observed_values`. Une clé absente de
+    la relecture n'est pas signalée ici : `owned_drifts` s'en charge."""
+    gen = generated.values
+    return [
+        Drift(k, gen.get(k), observed[k])
+        for k in OBSERVABLE_KEYS
+        if k in observed and not _same(k, gen.get(k), observed[k])
+    ]
+
+
+def drift(generated: EngineConfig, effective: Mapping[str, Any]) -> list[Drift]:
+    """Écarts sur les clés possédées observables. `effective` : réponse de GET /show_config,
+    plus `pair_whitelist` (GET /whitelist). Une clé observable absente est un écart."""
+    gen = generated.values
+    seen = observed_values(effective, effective.get("pair_whitelist"))
+    return [
+        Drift(k, gen.get(k), seen.get(k))
+        for k in OBSERVABLE_KEYS
+        if not _same(k, gen.get(k), seen.get(k))
+    ]
 
 
 def _json_number(o: Any) -> Any:
@@ -284,32 +335,18 @@ def _json_number(o: Any) -> Any:
     raise TypeError(type(o).__name__)
 
 
+def _to_json(doc: Any) -> str:
+    # allow_nan=False : un nombre infini ou indéfini est refusé (ValueError), jamais écrit.
+    return json.dumps(doc, default=_json_number, sort_keys=True, indent=2, allow_nan=False)
+
+
 def config_file(spec: InstanceSpec) -> str:
     """Texte JSON du premier fichier de configuration de l'instance (sans identifiants)."""
     doc = _document(spec)
     # Le schéma du moteur exige token et chat_id dès que le bloc existe, même désactivé : on
     # l'omet (absent = désactivé). `render_config` garde `telegram.enabled=false`.
     doc.pop("telegram")
-    return json.dumps(doc, default=_json_number, sort_keys=True, indent=2)
-
-
-def drift(generated: EngineConfig | Mapping[str, str], effective: Mapping[str, Any]) -> list[Drift]:
-    """Écarts sur les clés possédées observables. `effective` : réponse de GET /show_config,
-    plus `pair_whitelist` (GET /whitelist). Une clé observable absente est un écart."""
-    gen = generated.values if isinstance(generated, EngineConfig) else generated
-    out: list[Drift] = []
-    for key in OBSERVABLE_KEYS:
-        want = _canon(gen[key], key) if key in gen else None
-        raw = effective.get(_SHOW_CONFIG_SOURCE[key])
-        got = _canon(raw, key) if raw is not None else None
-        if key in _SUBSET_KEYS and want is not None and got is not None:
-            w, g = json.loads(want), json.loads(got)
-            same = isinstance(g, dict) and all(g.get(k) == v for k, v in w.items())
-        else:
-            same = want == got
-        if not same:
-            out.append(Drift(key, want, got))
-    return out
+    return _to_json(doc)
 
 
 def effective_mode(effective: Mapping[str, Any]) -> Mode | None:
