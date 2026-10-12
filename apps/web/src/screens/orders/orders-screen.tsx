@@ -13,7 +13,7 @@ import { fr } from "@/i18n/fr";
 import { accountsQuery } from "@/lib/accounts";
 import { commandsQuery, type Instance } from "@/lib/instances";
 import { useSeenCommands } from "@/lib/seen";
-import { NO_FILTERS, ordersQuery, positionsQuery, sortPositions, tradesQuery, type Order, type Position } from "@/lib/trading";
+import { NO_FILTERS, ordersQuery, positionsQuery, groupByAccount, sortPositions, tradesQuery, type Order, type Position } from "@/lib/trading";
 import { OrdersTable } from "./orders-table";
 import { PositionsTable } from "./positions-table";
 import { TradeActionDialog, type TradeAction } from "./trade-action-dialog";
@@ -75,6 +75,21 @@ function Section<T>({ id, title, load, empty, aside, children }: { id: string; t
   );
 }
 
+/** Les lignes d'une section, éventuellement regroupées par compte (un sous-titre par compte). */
+function Grouped<R extends { account_id: string | null; account_label: string | null }>({ rows, on, children }: { rows: R[]; on: boolean; children: (rows: R[]) => ReactNode }) {
+  if (!on) return <>{children(rows)}</>;
+  return (
+    <>
+      {groupByAccount(rows).map((g) => (
+        <div key={g.key} className="flex flex-col gap-2">
+          <h3 className="text-base font-semibold">{g.label ?? t.filters.noAccount}</h3>
+          {children(g.rows)}
+        </div>
+      ))}
+    </>
+  );
+}
+
 export interface OrdersScreenProps {
   canAct: boolean;
   degraded: boolean;
@@ -90,6 +105,7 @@ export function OrdersScreen({ canAct, degraded, nowIso, instances }: OrdersScre
   const filterId = useId();
   const whyId = useId();
   const [filters, setFilters] = useState(NO_FILTERS);
+  const [byAccount, setByAccount] = useState(false);
   const [action, setAction] = useState<TradeAction | null>(null);
   const { seen, markSeen } = useSeenCommands();
 
@@ -135,6 +151,10 @@ export function OrdersScreen({ canAct, degraded, nowIso, instances }: OrdersScre
             ))}
           </Select>
         </Field>
+        <label className="flex items-center gap-2 text-sm sm:col-span-2">
+          <input type="checkbox" checked={byAccount} onChange={(e) => setByAccount(e.target.checked)} />
+          {t.filters.groupByAccount}
+        </label>
       </form>
 
       <Section<Position>
@@ -154,7 +174,11 @@ export function OrdersScreen({ canAct, degraded, nowIso, instances }: OrdersScre
           )
         }
       >
-        {(items) => <PositionsTable positions={sortPositions(items)} instances={byId} nowIso={nowIso} canAct={canAct} dimmed={degraded} onClose={openClose} />}
+        {(items) => (
+          <Grouped rows={sortPositions(items)} on={byAccount}>
+            {(rows) => <PositionsTable positions={rows} instances={byId} nowIso={nowIso} canAct={canAct} dimmed={degraded} onClose={openClose} />}
+          </Grouped>
+        )}
       </Section>
 
       <Section<Order>
@@ -168,11 +192,19 @@ export function OrdersScreen({ canAct, degraded, nowIso, instances }: OrdersScre
           </p>
         }
       >
-        {(items) => <OrdersTable orders={items} instances={byId} nowIso={nowIso} canAct={canAct} dimmed={degraded} whyId={whyId} onCancel={openCancel} />}
+        {(items) => (
+          <Grouped rows={items} on={byAccount}>
+            {(rows) => <OrdersTable orders={rows} instances={byId} nowIso={nowIso} canAct={canAct} dimmed={degraded} whyId={whyId} onCancel={openCancel} />}
+          </Grouped>
+        )}
       </Section>
 
       <Section id="trades-title" title={t.trades.title} load={trades} empty={t.trades.empty}>
-        {(items) => <TradesSection trades={items} instances={byId} dimmed={degraded} />}
+        {(items) => (
+          <Grouped rows={items} on={byAccount}>
+            {(rows) => <TradesSection trades={rows} instances={byId} dimmed={degraded} />}
+          </Grouped>
+        )}
       </Section>
 
       <section aria-labelledby="commands-title" className="flex flex-col gap-3">

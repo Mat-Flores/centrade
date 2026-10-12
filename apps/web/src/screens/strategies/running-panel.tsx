@@ -28,7 +28,7 @@ export function RunningPanel({ detail, nowIso, dimmed }: { detail: InstanceDetai
   const drift = detail.drift;
   const driftRows = drift.value ?? [];
   const driftKeys = new Set(driftRows.map((d) => d.key));
-  const version = effective?.engine_version;
+  const version = detail.engine_version;
   const keys = effective ? Object.keys(effective).filter((k) => k !== "engine_version") : [];
   const rowKeys = [...new Set([...keys, ...driftRows.map((d) => d.key)])].sort();
   const expectedOf = (k: string) => driftRows.find((d) => d.key === k)?.expected;
@@ -61,7 +61,7 @@ export function RunningPanel({ detail, nowIso, dimmed }: { detail: InstanceDetai
           )}
         </Item>
         <Item label={t.engineVersion}>
-          <ObservedValue mono value={typeof version === "string" ? version : "unknown"} observedAt={eff.observed_at} {...common} />
+          <ObservedValue mono value={version.value ?? "unknown"} observedAt={version.observed_at} {...common} />
         </Item>
         <Item label={t.strategy}>
           {detail.strategy ? (

@@ -14,7 +14,7 @@ from decimal import Decimal
 from typing import Any, Literal, get_args
 from uuid import UUID
 
-from centrade_core.models.trading import Instance, Order, Position, Trade
+from centrade_core.models.trading import Account, Instance, Order, Position, Trade
 from centrade_core.settings import Settings
 from fastapi import APIRouter, HTTPException, Request, Response
 from pydantic import AwareDatetime, BaseModel
@@ -65,10 +65,17 @@ def _stale(at: datetime, now: datetime, cfg: Settings) -> bool:
     return (now - at).total_seconds() > cfg.observed_stale_after_s
 
 
-class OrderOut(BaseModel):
-    id: UUID
+class _Owned(BaseModel):
+    """Ce que toute ligne dit de son instance : mode et compte (None : instance sans compte)."""
+
     instance_id: UUID
     mode: Mode
+    account_id: UUID | None
+    account_label: str | None
+
+
+class OrderOut(_Owned):
+    id: UUID
     client_order_id: str  # identifiant côté moteur
     instrument: str
     side: str
@@ -84,10 +91,8 @@ class OrderOut(BaseModel):
     created_at: AwareDatetime
 
 
-class PositionOut(BaseModel):
+class PositionOut(_Owned):
     id: UUID
-    instance_id: UUID
-    mode: Mode
     instrument: str
     side: str
     quantity: str
@@ -105,10 +110,8 @@ class PositionOut(BaseModel):
     protection_verified_at: AwareDatetime | None
 
 
-class TradeOut(BaseModel):
+class TradeOut(_Owned):
     id: UUID
-    instance_id: UUID
-    mode: Mode
     instrument: str
     quantity: str
     entry_price: str
@@ -123,11 +126,18 @@ class TradeOut(BaseModel):
     duration_s: int
 
 
-def order_of(o: Order, mode: str, now: datetime, cfg: Settings) -> OrderOut:
+Owner = dict[str, Any]  # mode, account_id, account_label d'une ligne (voir `_owner`)
+
+
+def _owner(row: Any) -> Owner:
+    return {"mode": row[1], "account_id": row[2], "account_label": row[3]}
+
+
+def order_of(o: Order, own: Owner, now: datetime, cfg: Settings) -> OrderOut:
     return OrderOut(
         id=o.id,
         instance_id=o.instance_id,
-        mode=mode,
+        **own,
         client_order_id=o.client_order_id,
         instrument=o.instrument,
         side=o.side,
@@ -151,11 +161,11 @@ def stop_distance_pct(p: Position) -> Decimal | None:
     return (gap / p.entry_price * 100).quantize(Decimal("0.0001"))
 
 
-def position_of(p: Position, mode: str, now: datetime, cfg: Settings) -> PositionOut:
+def position_of(p: Position, own: Owner, now: datetime, cfg: Settings) -> PositionOut:
     return PositionOut(
         id=p.id,
         instance_id=p.instance_id,
-        mode=mode,
+        **own,
         instrument=p.instrument,
         side=p.side,
         quantity=_dec(p.quantity),
@@ -172,12 +182,12 @@ def position_of(p: Position, mode: str, now: datetime, cfg: Settings) -> Positio
     )
 
 
-def trade_of(t: Trade, mode: str, now: datetime, cfg: Settings) -> TradeOut:
+def trade_of(t: Trade, own: Owner, now: datetime, cfg: Settings) -> TradeOut:
     cause = t.exit_cause if t.exit_cause in get_args(ExitCause) else "unknown"
     return TradeOut(
         id=t.id,
         instance_id=t.instance_id,
-        mode=mode,
+        **own,
         instrument=t.instrument,
         quantity=_dec(t.quantity),
         entry_price=_dec(t.entry_price),
@@ -204,7 +214,11 @@ _KINDS: dict[str, tuple[Any, Any, Any]] = {
 
 def _select(kind: str) -> Select[Any]:
     model = _KINDS[kind][0]
-    return select(model, Instance.mode).join(Instance, Instance.id == model.instance_id)
+    return (
+        select(model, Instance.mode, Instance.account_id, Account.label)
+        .join(Instance, Instance.id == model.instance_id)
+        .outerjoin(Account, Account.id == Instance.account_id)
+    )
 
 
 async def trading_out(
@@ -212,7 +226,7 @@ async def trading_out(
 ) -> BaseModel | None:
     model, build, _ = _KINDS[kind]
     row = (await db.execute(_select(kind).where(model.id == ident))).one_or_none()
-    return None if row is None else build(row[0], row[1], now, cfg)
+    return None if row is None else build(row[0], _owner(row), now, cfg)
 
 
 async def _page(
@@ -241,7 +255,9 @@ async def _page(
         last = page[-1][0]
         head = now if kind == "position" else getattr(last, order.key)
         nxt = encode_cursor(head, last.id)
-    return Page(items=[build(r[0], r[1], now, cfg) for r in page], next_cursor=nxt, server_time=now)
+    return Page(
+        items=[build(r[0], _owner(r), now, cfg) for r in page], next_cursor=nxt, server_time=now
+    )
 
 
 @router.get("/orders")

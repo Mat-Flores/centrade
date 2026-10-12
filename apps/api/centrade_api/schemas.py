@@ -184,6 +184,8 @@ class InstanceDetail(InstanceOut):
     account: AccountRef | None
     deployment_fingerprint: str | None  # calculé par la plateforme (I10)
     config_hash: str | None
+    # Version que le moteur déclare, relue (F9) : value None = jamais observée, donc « inconnue ».
+    engine_version: Observed[str | None]
     # Relues dans le moteur : value None = jamais observé, donc « inconnu » (I1).
     effective_config: Observed[dict[str, Any] | None]
     drift: Observed[list[DriftItem] | None]  # liste vide : aucune dérive constatée

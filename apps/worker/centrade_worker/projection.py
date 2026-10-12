@@ -10,8 +10,8 @@ from datetime import datetime
 from uuid import UUID
 
 from centrade_core.audit import SYSTEM_WORKER, write_audit
-from centrade_core.engine.types import InstanceStatus, Snapshot
-from centrade_core.models.trading import Alert, Instance, Order, Position
+from centrade_core.engine.types import EXIT_CAUSES, InstanceStatus, Snapshot
+from centrade_core.models.trading import Alert, Instance, Order, Position, Trade
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,6 +63,31 @@ async def apply_observation(
             .returning(Position.id)
         )
         notes.extend(("position", i) for i in written)
+    for c in snap.closed:
+        # Le trade clos vient du relevé (les événements ne font qu'indiquer de relire). Une ligne
+        # déjà écrite n'est pas annoncée de nouveau ; une cause hors de F10 devient `unknown`.
+        written = await s.scalars(
+            insert(Trade)
+            .values(
+                instance_id=instance_id,
+                external_id=c.position_id,
+                instrument=c.symbol,
+                quantity=c.qty,
+                entry_price=c.entry_price,
+                exit_price=c.exit_price,
+                entry_cause=c.entry_cause or "unknown",
+                exit_cause=c.exit_cause if c.exit_cause in EXIT_CAUSES else "unknown",
+                pnl=c.pnl,
+                fees=c.fees,
+                currency=_currency(c.symbol),
+                opened_at=c.opened_at,
+                closed_at=c.closed_at,
+                duration_s=max(0, int((c.closed_at - c.opened_at).total_seconds())),
+            )
+            .on_conflict_do_nothing(index_elements=["instance_id", "external_id"])
+            .returning(Trade.id)
+        )
+        notes.extend(("trade", i) for i in written)
     open_ids = [o.order_id for o in snap.orders]
     # Un ordre local encore ouvert que le moteur ne connaît plus : issue inconnue, jamais inventée.
     lost = await s.scalars(

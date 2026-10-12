@@ -10,6 +10,8 @@ export const ID = (n: number) => `00000000-0000-4000-8000-0000000000${String(n).
 export function position(now: number, over: Json & { id: string; instance_id: string }): Json {
   return {
     mode: "paper",
+    account_id: over.instance_id === ID(4) ? null : "acc-paper", // delta (live) : sans compte
+    account_label: over.instance_id === ID(4) ? null : "Bac paper",
     instrument: "BTC/USDT",
     side: "long",
     quantity: "0.5",
@@ -29,6 +31,8 @@ export function position(now: number, over: Json & { id: string; instance_id: st
 export function order(now: number, over: Json & { id: string; instance_id: string }): Json {
   return {
     mode: "paper",
+    account_id: over.instance_id === ID(4) ? null : "acc-paper", // delta (live) : sans compte
+    account_label: over.instance_id === ID(4) ? null : "Bac paper",
     client_order_id: `co-${over.id}`,
     instrument: "BTC/USDT",
     side: "buy",
@@ -48,6 +52,8 @@ export function order(now: number, over: Json & { id: string; instance_id: strin
 export function trade(now: number, over: Json & { id: string; instance_id: string }): Json {
   return {
     mode: "paper",
+    account_id: over.instance_id === ID(4) ? null : "acc-paper", // delta (live) : sans compte
+    account_label: over.instance_id === ID(4) ? null : "Bac paper",
     instrument: "BTC/USDT",
     quantity: "0.25",
     entry_price: "60000.50",

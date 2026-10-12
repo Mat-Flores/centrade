@@ -7,7 +7,6 @@ import { Button } from "@/components/ui/button";
 import { Empty, EmptyHeader, EmptyTitle } from "@/components/ui/empty";
 import { Skeleton } from "@/components/ui/skeleton";
 import { fr } from "@/i18n/fr";
-import type { Instance } from "@/lib/instances";
 import { useSearch } from "@/lib/router";
 import { changeStatus, NEXT_STATUS, strategiesQuery, versionsKey, versionsQuery, type Strategy, type Version } from "@/lib/strategies";
 import { DepositDialog } from "./deposit-dialog";
@@ -33,7 +32,7 @@ function Failure({ title, body, onRetry }: { title: string; body: string; onRetr
   );
 }
 
-function StrategyView({ strategy, versionNumber, canAct, isAdmin, degraded, nowIso, instances, onNotice }: { strategy: Strategy; versionNumber: number | null; canAct: boolean; isAdmin: boolean; degraded: boolean; nowIso: string; instances: Instance[]; onNotice: (m: string) => void }) {
+function StrategyView({ strategy, versionNumber, canAct, isAdmin, degraded, nowIso, onNotice }: { strategy: Strategy; versionNumber: number | null; canAct: boolean; isAdmin: boolean; degraded: boolean; nowIso: string; onNotice: (m: string) => void }) {
   const qc = useQueryClient();
   const versions = useQuery(versionsQuery(strategy.id));
   const [depositing, setDepositing] = useState(false);
@@ -86,7 +85,7 @@ function StrategyView({ strategy, versionNumber, canAct, isAdmin, degraded, nowI
 
       {selected && versions.data && <VersionPanel strategyName={strategy.name} version={selected} serverTime={versions.data.server_time} canAct={canAct} onNotice={onNotice} />}
 
-      <InstancesPanel strategyId={strategy.id} instances={instances} nowIso={nowIso} degraded={degraded} canAct={canAct} isAdmin={isAdmin} />
+      <InstancesPanel strategyId={strategy.id} nowIso={nowIso} degraded={degraded} canAct={canAct} isAdmin={isAdmin} />
 
       {depositing && (
         <DepositDialog
@@ -109,11 +108,10 @@ export interface StrategiesScreenProps {
   isAdmin: boolean;
   degraded: boolean;
   nowIso: string;
-  instances: Instance[] | undefined;
 }
 
 /** Écran 2 : registre, versions, détail, déploiement en paper, instances et « Ce qui tourne réellement ». */
-export function StrategiesScreen({ canAct, isAdmin, degraded, nowIso, instances }: StrategiesScreenProps) {
+export function StrategiesScreen({ canAct, isAdmin, degraded, nowIso }: StrategiesScreenProps) {
   const search = useSearch();
   const strategies = useQuery(strategiesQuery);
   const [notice, setNotice] = useState<string | null>(null);
@@ -146,7 +144,7 @@ export function StrategiesScreen({ canAct, isAdmin, degraded, nowIso, instances 
             <StrategyList items={items} selectedId={selectedId} canAct={canAct} onNotice={setNotice} />
           </section>
           {selected ? (
-            <StrategyView key={selected.id} strategy={selected} versionNumber={versionNumber} canAct={canAct} isAdmin={isAdmin} degraded={degraded} nowIso={nowIso} instances={instances ?? []} onNotice={setNotice} />
+            <StrategyView key={selected.id} strategy={selected} versionNumber={versionNumber} canAct={canAct} isAdmin={isAdmin} degraded={degraded} nowIso={nowIso} onNotice={setNotice} />
           ) : (
             <p className="text-muted-foreground">{t.pick}</p>
           )}

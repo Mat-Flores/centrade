@@ -117,9 +117,19 @@ def _page_args(cursor: str | None) -> tuple[datetime, UUID] | None:
 
 @router.get("/instances")
 async def list_instances(
-    _: Viewer, db: Db, now: Now, cfg: Cfg, cursor: str | None = None, limit: Limit = 50
+    _: Viewer,
+    db: Db,
+    now: Now,
+    cfg: Cfg,
+    strategy_id: UUID | None = None,
+    cursor: str | None = None,
+    limit: Limit = 50,
 ) -> Page[InstanceOut]:
     stmt = select(Instance, Engine.kind).join(Engine, Engine.id == Instance.engine_id)
+    if strategy_id is not None:
+        stmt = stmt.join(StrategyVersion, StrategyVersion.id == Instance.strategy_version_id).where(
+            StrategyVersion.strategy_id == strategy_id
+        )
     if (at := _page_args(cursor)) is not None:
         stmt = stmt.where(tuple_(Instance.created_at, Instance.id) < tuple_(*at))
     rows = (
@@ -176,8 +186,10 @@ async def get_instance(instance_id: UUID, _: Viewer, db: Db, now: Now, cfg: Cfg)
             account = AccountRef.model_validate(acc, from_attributes=True)
     at, stale = inst.effective_config_at, cfg.observed_stale_after_s
     seen = at is not None and inst.effective_config is not None
+    version = (inst.effective_config or {}).get("engine_version") if seen else None
     return InstanceDetail(
         **out.model_dump(),
+        engine_version=observe(version if isinstance(version, str) else None, at, now, stale),
         strategy=strategy,
         account=account,
         deployment_fingerprint=inst.deployment_fingerprint,

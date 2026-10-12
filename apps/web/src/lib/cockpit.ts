@@ -226,6 +226,9 @@ export function applyStreamMessage(qc: QueryClient, msg: StreamMessage): void {
   switch (msg.event) {
     case "instance": {
       const inst = msg.instance;
+      if (!qc.getQueryData<Page<Instance>>(instancesKey)?.items.some((i) => i.id === inst.id)) {
+        void qc.invalidateQueries({ queryKey: [...instancesKey, "strategy"] }); // nouvelle instance : listes par stratégie relues
+      }
       qc.setQueryData<Page<Instance>>(instancesKey, (page) => {
         if (!page) return undefined;
         const known = page.items.find((i) => i.id === inst.id);

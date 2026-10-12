@@ -22,6 +22,7 @@ from centrade_core.engine.types import (
     BacktestSpec,
     Balance,
     Capabilities,
+    ClosedTrade,
     Drift,
     EffectiveConfig,
     EngineConfig,
@@ -51,6 +52,14 @@ from centrade_core.events import (
 
 ENGINE = "fake"
 SYMBOL = "crypto:fake:BTC/USDT"
+# Causes d'événement -> énumération de F10 (la liquidation d'urgence est une sortie manuelle ici).
+_F10_CAUSE = {
+    "manual": "manual",
+    "flatten": "manual",
+    "stop": "stop_loss",
+    "take_profit": "take_profit",
+    "signal": "signal",
+}
 SLOW_LAG = timedelta(seconds=60)  # `slow` : les relevés arrivent vieillis, donc périmés (I1)
 
 
@@ -79,6 +88,7 @@ class _Inst:
     orders: dict[str, Order] = field(default_factory=dict)  # ordres ouverts seulement
     decisions: dict[str, UUID | None] = field(default_factory=dict)
     stops: dict[str, Stop] = field(default_factory=dict)
+    closed: list[ClosedTrade] = field(default_factory=list)
     failures: set[Failure] = field(default_factory=set)
 
 
@@ -267,6 +277,7 @@ class FakeEngine:
             balances=(Balance(currency="USDT", free=total, total=total),),
             stops=tuple(inst.stops.values()),
             observed_at=self._observed_at(inst),
+            closed=tuple(inst.closed),
         )
 
     async def events(self, ref: InstanceRef) -> AsyncIterator[CanonicalEvent]:
@@ -432,6 +443,21 @@ class FakeEngine:
             status="filled",
         )
         self._emit(inst, EventType.ORDER_FILLED, self._order_payload(inst, exit_order, None))
+        inst.closed.append(
+            ClosedTrade(
+                position_id=pos.position_id,
+                symbol=pos.symbol,
+                side=pos.side,
+                qty=pos.qty,
+                entry_price=pos.entry_price,
+                exit_price=pos.entry_price,
+                pnl=Decimal(0),  # sortie au prix d'entrée
+                entry_cause="signal",
+                exit_cause=_F10_CAUSE[cause],
+                opened_at=pos.opened_at,
+                closed_at=self._clock(),
+            )
+        )
         self._emit(
             inst,
             EventType.POSITION_CLOSED,

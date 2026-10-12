@@ -338,7 +338,7 @@ class Worker:
         self._notes.extend(n for n in written if n[0] == "alert")
         # Positions et ordres : annoncés quand le relevé change, puis à la cadence de l'instance
         # (leur date d'observation avance) ; jamais à chaque tour.
-        sig = (status.state, status.mode, snap.positions, snap.orders, snap.stops)
+        sig = (status.state, status.mode, snap.positions, snap.orders, snap.stops, snap.closed)
         if self._note_instance(ref.instance_id, sig):
             self._notes.extend(n for n in written if n[0] != "alert")
         tour.info("resynchronisation", reason=reason, state=status.state)

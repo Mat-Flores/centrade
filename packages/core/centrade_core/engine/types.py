@@ -182,12 +182,46 @@ class Stop(Model):
     held_by: Literal["engine", "venue"]
 
 
+# Énumération canonique des causes de sortie (SPEC F10). Toute autre valeur est lue `unknown`.
+EXIT_CAUSES = (
+    "stop_loss",
+    "trailing_stop",
+    "take_profit",
+    "signal",
+    "timeout",
+    "manual",
+    "kill_switch",
+    "engine_protection",
+    "liquidation",
+    "unknown",
+)
+
+
+class ClosedTrade(Model):
+    """Position close, relue dans le moteur. `position_id` identifie le trade (unique par instance).
+    Cause absente ou hors de `EXIT_CAUSES` : le worker écrit `unknown`, il ne devine rien."""
+
+    position_id: str
+    symbol: Symbol
+    side: Side
+    qty: Dec
+    entry_price: Dec
+    exit_price: Dec
+    pnl: Dec
+    fees: Dec = Decimal(0)
+    entry_cause: str | None = None
+    exit_cause: str | None = None
+    opened_at: AwareDatetime
+    closed_at: AwareDatetime
+
+
 class Snapshot(Model):
     positions: tuple[Position, ...]
     orders: tuple[Order, ...]
     balances: tuple[Balance, ...]
     stops: tuple[Stop, ...]
     observed_at: AwareDatetime
+    closed: tuple[ClosedTrade, ...] = ()  # trades clos que le moteur relit encore
 
 
 class BacktestSpec(Model):

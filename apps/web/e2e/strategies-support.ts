@@ -53,11 +53,11 @@ export function strategiesWorld(now: number) {
   const base = { strategy: ref(now), account, deployment_fingerprint: "f".repeat(64), config_hash: "c".repeat(64) };
   const fresh = (ageS: number, stale = false) => iso(now - ageS * 1000) && { observed_at: iso(now - ageS * 1000), stale };
   const details: Record<string, Json> = {
-    [ID(1)]: { ...base, effective_config: { value: cfg(), ...fresh(4) }, drift: { value: [], ...fresh(4) } },
-    [ID(2)]: { ...base, effective_config: { value: cfg({ stoploss: "-0.10" }), ...fresh(95, true) }, drift: { value: [{ key: "stoploss", expected: "-0.05", observed: "-0.10" }], ...fresh(95, true) } },
-    [ID(3)]: { ...base, strategy: null, account: null, deployment_fingerprint: null, config_hash: null, effective_config: { value: null, observed_at: null, stale: false }, drift: { value: null, observed_at: null, stale: false } },
-    [ID(4)]: { ...base, effective_config: { value: cfg({ mode: "live" }), ...fresh(4) }, drift: { value: [{ key: "mode", expected: "paper", observed: "live" }], ...fresh(4) } },
-    [ID(5)]: { ...base, effective_config: { value: null, observed_at: null, stale: false }, drift: { value: null, observed_at: null, stale: false } },
+    [ID(1)]: { ...base, engine_version: { value: "2026.9", ...fresh(4) }, effective_config: { value: cfg(), ...fresh(4) }, drift: { value: [], ...fresh(4) } },
+    [ID(2)]: { ...base, engine_version: { value: "2026.9", ...fresh(95, true) }, effective_config: { value: cfg({ stoploss: "-0.10" }), ...fresh(95, true) }, drift: { value: [{ key: "stoploss", expected: "-0.05", observed: "-0.10" }], ...fresh(95, true) } },
+    [ID(3)]: { ...base, strategy: null, account: null, deployment_fingerprint: null, config_hash: null, engine_version: { value: null, observed_at: null, stale: false }, effective_config: { value: null, observed_at: null, stale: false }, drift: { value: null, observed_at: null, stale: false } },
+    [ID(4)]: { ...base, engine_version: { value: "2026.9", ...fresh(4) }, effective_config: { value: cfg({ mode: "live" }), ...fresh(4) }, drift: { value: [{ key: "mode", expected: "paper", observed: "live" }], ...fresh(4) } },
+    [ID(5)]: { ...base, engine_version: { value: null, observed_at: null, stale: false }, effective_config: { value: null, observed_at: null, stale: false }, drift: { value: null, observed_at: null, stale: false } },
   };
   return { versions: [version(now, 2, "approved"), version(now, 1, "draft")], details };
 }
@@ -88,7 +88,8 @@ export async function mockRegistry(page: Page, opts: { now?: () => number; role?
   await page.route(/\/api\/v1\/accounts/, (route) => reply(route, 200, { items: [paperAccount(now())], next_cursor: null, server_time: iso(now()) }));
   await page.route(/\/api\/v1\/(strategies|instances)/, async (route) => {
     const req = route.request();
-    const p = new URL(req.url()).pathname.replace("/api/v1", "");
+    const url = new URL(req.url());
+    const p = url.pathname.replace("/api/v1", "");
     const parts = p.split("/");
     const body = req.postData() ? (JSON.parse(req.postData()!) as Json) : null;
     const logged = () => state.requests.push({ method: req.method(), path: p, body, key: req.headers()["idempotency-key"] });
@@ -99,11 +100,15 @@ export async function mockRegistry(page: Page, opts: { now?: () => number; role?
         const inst = api.instances.find((i) => i.id === parts[2]);
         return inst ? reply(route, 200, { ...inst, ...state.details[parts[2]!], server_time: iso(now()) }) : reply(route, 404, { title: "Not Found", status: 404 }, "application/problem+json");
       }
+      if (p === "/instances" && req.method() === "GET" && url.searchParams.has("strategy_id")) {
+        const sid = url.searchParams.get("strategy_id");
+        return page_(api.instances.filter((i) => (state.details[i.id as string]?.strategy as Json | null)?.strategy_id === sid));
+      }
       if (p === "/instances" && req.method() === "POST") {
         logged();
         const created = { id: ID(60), name: (body as Json).name, engine: "fake", desired_mode: "paper", desired_state: "exits_only", state: { value: "unknown", observed_at: null, stale: false }, observed_mode: { value: "unknown", observed_at: null, stale: false }, mode_mismatch: false, active_command: null, created_at: iso(now()), server_time: iso(now()) };
         api.instances.unshift(created);
-        state.details[ID(60)] = { strategy: ref(now()), account, deployment_fingerprint: null, config_hash: null, effective_config: { value: null, observed_at: null, stale: false }, drift: { value: null, observed_at: null, stale: false } };
+        state.details[ID(60)] = { strategy: ref(now()), account, deployment_fingerprint: null, config_hash: null, engine_version: { value: null, observed_at: null, stale: false }, effective_config: { value: null, observed_at: null, stale: false }, drift: { value: null, observed_at: null, stale: false } };
         return reply(route, 201, created);
       }
       return route.fallback();

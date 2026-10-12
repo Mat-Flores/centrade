@@ -371,7 +371,7 @@ export const fr = {
   orders: {
     intro: "Positions, ordres et trades tels que les moteurs les rapportent. Chaque valeur donne son âge au survol ; passé 30 s elle est estompée et marquée périmée.",
     readOnly: "Lecture seule : fermer une position ou annuler un ordre d'entrée demande le rôle opérateur.",
-    filters: { label: "Filtres", instance: "Instance", account: "Compte", allInstances: "Toutes les instances", allAccounts: "Tous les comptes" },
+    filters: { label: "Filtres", instance: "Instance", account: "Compte", allInstances: "Toutes les instances", allAccounts: "Tous les comptes", groupByAccount: "Grouper par compte", noAccount: "Sans compte" },
     modes: { paper: "PAPER", live: "LIVE" } as Record<string, string>,
     simulated: "simulé",
     simulatedHint: "Chiffre paper : simulé, jamais additionné à du live.",

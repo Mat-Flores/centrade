@@ -39,6 +39,7 @@ class Projection:
     open_orders: frozenset[tuple[Any, ...]]
     n_events: int
     orders: frozenset[tuple[str, str]] = frozenset()  # (client_order_id, status), tous statuts
+    trades: frozenset[tuple[Any, ...]] = frozenset()  # (external_id, exit_cause, pnl)
 
 
 class World:
@@ -122,16 +123,16 @@ class World:
 
     async def wipe(self, ref: InstanceRef) -> None:
         """Remet les lignes dérivées de l'instance à zéro (entre deux passes d'une propriété)."""
-        from centrade_core.models.trading import Alert, Event, Order, Position
+        from centrade_core.models.trading import Alert, Event, Order, Position, Trade
 
         async with self.sessions.begin() as s:
-            for model in (Event, Position, Order):
+            for model in (Event, Position, Order, Trade):
                 await s.execute(delete(model).where(model.instance_id == ref.instance_id))
             await s.execute(delete(Alert).where(Alert.target_id == ref.instance_id))
         await self.redis.flushdb()
 
     async def projection(self, ref: InstanceRef) -> Projection:
-        from centrade_core.models.trading import Event, Order, Position
+        from centrade_core.models.trading import Event, Order, Position, Trade
 
         async with self.sessions() as s:
             pos = (
@@ -141,6 +142,9 @@ class World:
                 await s.scalars(select(Order).where(Order.instance_id == ref.instance_id))
             ).all()
             ords = [o for o in every if o.status == "open"]
+            trades = (
+                await s.scalars(select(Trade).where(Trade.instance_id == ref.instance_id))
+            ).all()
             n = len(
                 (
                     await s.scalars(select(Event.id).where(Event.instance_id == ref.instance_id))
@@ -156,6 +160,7 @@ class World:
             ),
             n,
             frozenset((o.client_order_id, o.status) for o in every),
+            frozenset((t.external_id, t.exit_cause, t.pnl) for t in trades),
         )
 
     async def expected(self, ref: InstanceRef) -> Projection:
@@ -178,4 +183,5 @@ class World:
                 if o.status == "open"
             ),
             0,
+            trades=frozenset((c.position_id, c.exit_cause, c.pnl) for c in snap.closed),
         )

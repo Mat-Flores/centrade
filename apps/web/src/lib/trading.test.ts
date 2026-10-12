@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { exitBreakdown, sortPositions, totalsByModeCurrency, type Position, type Trade } from "./trading";
+import { exitBreakdown, groupByAccount, sortPositions, totalsByModeCurrency, type Position, type Trade } from "./trading";
 
 const trade = (over: Partial<Trade>): Trade => ({
-  id: "t", instance_id: "i1", mode: "paper", instrument: "BTC/USDT", quantity: "1", entry_price: "100", exit_price: "99",
+  id: "t", instance_id: "i1", mode: "paper", account_id: null, account_label: null, instrument: "BTC/USDT", quantity: "1", entry_price: "100", exit_price: "99",
   entry_cause: "signal", exit_cause: "stop_loss", pnl: "-1", fees: "0.1", currency: "USDT", opened_at: "", closed_at: "", duration_s: 1, ...over,
 });
 const position = (id: string, protection_state: Position["protection_state"]): Position => ({
-  id, instance_id: "i1", mode: "paper", instrument: "BTC/USDT", side: "long", quantity: "1", entry_price: "100", currency: "USDT",
+  id, instance_id: "i1", mode: "paper", account_id: null, account_label: null, instrument: "BTC/USDT", side: "long", quantity: "1", entry_price: "100", currency: "USDT",
   observed_at: "", stale: false, stop_price: null, stop_venue: null, stop_type: null, stop_distance_pct: null, protection_state, protection_verified_at: null,
 });
 
@@ -44,6 +44,20 @@ describe("répartition des sorties", () => {
     expect(out).toEqual([
       { instanceId: "i1", total: 3, causes: [{ cause: "stop_loss", count: 2 }, { cause: "take_profit", count: 1 }] },
       { instanceId: "i2", total: 1, causes: [{ cause: "manual", count: 1 }] },
+    ]);
+  });
+});
+
+describe("regroupement par compte", () => {
+  it("un groupe par compte, ordre d'apparition, les lignes sans compte à part", () => {
+    const rows = [
+      { ...position("a", "protected"), account_id: "A", account_label: "Compte A" },
+      position("b", "protected"),
+      { ...position("c", "protected"), account_id: "A", account_label: "Compte A" },
+    ];
+    expect(groupByAccount(rows).map((g) => [g.key, g.label, g.rows.map((r) => r.id)])).toEqual([
+      ["A", "Compte A", ["a", "c"]],
+      ["", null, ["b"]],
     ]);
   });
 });

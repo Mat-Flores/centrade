@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { apiFetch } from "./api";
 import { observeServerTime } from "./clock";
-import { InstanceSchema, instanceDetailKey } from "./instances";
+import { InstanceSchema, instanceDetailKey, instancesKey } from "./instances";
 
 /** Formes de l'API du registre (apps/api/centrade_api/strategies.py) et du détail d'instance (schemas.py). */
 
@@ -40,6 +40,7 @@ export const InstanceDetailSchema = InstanceSchema.extend({
   account: z.object({ id: z.string(), venue: z.string(), type: z.string(), environment: z.string(), label: z.string(), currency: z.string() }).nullable(),
   deployment_fingerprint: z.string().nullable(),
   config_hash: z.string().nullable(),
+  engine_version: observed(z.string().nullable()),
   effective_config: observed(json.nullable()),
   drift: observed(z.array(z.object({ key: z.string(), expected: z.unknown(), observed: z.unknown() })).nullable()),
 });
@@ -72,6 +73,17 @@ export const versionQuery = (strategyId: string, version: number) =>
     queryKey: [...versionsKey(strategyId), version] as const,
     queryFn: ({ signal }) => apiFetch(`/strategies/${strategyId}/versions/${version}`, VersionDetailSchema, { signal }),
     staleTime: Infinity, // une version déposée ne change jamais (seul son statut : la liste le porte)
+  });
+
+/** Instances d'une stratégie : le filtre est fait par l'API. */
+export const strategyInstancesQuery = (strategyId: string) =>
+  queryOptions({
+    queryKey: [...instancesKey, "strategy", strategyId] as const,
+    queryFn: async ({ signal }) => {
+      const data = await apiFetch(`/instances?limit=200&strategy_id=${strategyId}`, page(InstanceSchema), { signal });
+      observeServerTime(data.server_time);
+      return data;
+    },
   });
 
 /** Le détail porte l'empreinte, la configuration effective et la dérive : relu par le flux et toutes les 30 s. */

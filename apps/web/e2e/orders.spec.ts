@@ -231,3 +231,14 @@ for (const scheme of ["light", "dark"] as const) {
     });
   }
 }
+
+test("regroupement par compte : un sous-titre par compte, les lignes sans compte à part", async ({ page }) => {
+  await mockTrading(page);
+  await page.goto("/orders");
+  await expect(posRow(page, "BTC/USDT", "alpha")).toBeVisible();
+  await expect(page.getByRole("heading", { level: 3, name: "Bac paper" })).toHaveCount(0);
+  await page.getByLabel("Grouper par compte").check();
+  await expect(page.getByRole("heading", { level: 3, name: "Bac paper" })).toHaveCount(3); // positions, ordres, trades
+  await expect(page.getByRole("heading", { level: 3, name: "Sans compte" })).toHaveCount(2); // positions et trades live
+  await expect(posRow(page, "BTC/USDT", "alpha")).toBeVisible();
+});

@@ -357,7 +357,15 @@ class Guard:
                     update(Instance)
                     .where(Instance.id == instance_id)
                     .values(
-                        effective_config=effective.values,
+                        effective_config={
+                            **effective.values,
+                            # lue par l'API pour « Ce qui tourne réellement »
+                            **(
+                                {"engine_version": effective.engine_version}
+                                if effective.engine_version
+                                else {}
+                            ),
+                        },
                         effective_config_at=effective.observed_at,
                         drift=[d.model_dump() for d in drifts or ()],
                     )

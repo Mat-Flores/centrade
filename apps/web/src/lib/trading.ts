@@ -30,6 +30,8 @@ export const OrderSchema = z.object({
   id: z.string(),
   instance_id: z.string(),
   mode: Mode,
+  account_id: z.string().nullable(),
+  account_label: z.string().nullable(),
   client_order_id: z.string(),
   instrument: z.string(),
   side: z.string(),
@@ -50,6 +52,8 @@ export const PositionSchema = z.object({
   id: z.string(),
   instance_id: z.string(),
   mode: Mode,
+  account_id: z.string().nullable(),
+  account_label: z.string().nullable(),
   instrument: z.string(),
   side: z.string(),
   quantity: z.string(),
@@ -70,6 +74,8 @@ export const TradeSchema = z.object({
   id: z.string(),
   instance_id: z.string(),
   mode: Mode,
+  account_id: z.string().nullable(),
+  account_label: z.string().nullable(),
   instrument: z.string(),
   quantity: z.string(),
   entry_price: z.string(),
@@ -131,6 +137,18 @@ export const cancelOrder = (id: string, idempotencyKey: string) =>
   apiFetch(`/orders/${id}`, CommandAcceptedSchema, { method: "DELETE", headers: { "Idempotency-Key": idempotencyKey } });
 
 /* ------------------------------------------------------------------ présentation */
+
+/** Regroupe des lignes par compte, dans l'ordre d'apparition ; les lignes sans compte forment un groupe à part. */
+export function groupByAccount<T extends { account_id: string | null; account_label: string | null }>(rows: readonly T[]): { key: string; label: string | null; rows: T[] }[] {
+  const groups = new Map<string, { key: string; label: string | null; rows: T[] }>();
+  for (const r of rows) {
+    const key = r.account_id ?? "";
+    const g = groups.get(key) ?? { key, label: r.account_label, rows: [] };
+    g.rows.push(r);
+    groups.set(key, g);
+  }
+  return [...groups.values()];
+}
 
 /** Les moins protégées d'abord : `unprotected`, puis `unknown`, `engine_only`, `protected`. Stable. */
 const RANK: Record<Position["protection_state"], number> = { unprotected: 0, unknown: 1, engine_only: 2, protected: 3 };

@@ -22,8 +22,8 @@ export interface ScreenContext {
 
 /** Écrans hors Cockpit, par route. */
 const SCREENS: Record<Exclude<RoutedScreen, "cockpit">, (ctx: ScreenContext) => React.ReactNode> = {
-  strategies: ({ me, degraded, nowIso, instances }) => (
-    <StrategiesScreen canAct={me.role !== "viewer"} isAdmin={me.role === "admin"} degraded={degraded} nowIso={nowIso} instances={instances} />
+  strategies: ({ me, degraded, nowIso }) => (
+    <StrategiesScreen canAct={me.role !== "viewer"} isAdmin={me.role === "admin"} degraded={degraded} nowIso={nowIso} />
   ),
   orders: ({ me, degraded, nowIso, instances }) => (
     <OrdersScreen canAct={me.role !== "viewer"} degraded={degraded} nowIso={nowIso} instances={instances} />
