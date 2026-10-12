@@ -14,3 +14,4 @@ Format : titre `ADR-NNNN : …`, puis les sections Statut (Proposée, Acceptée,
 | 0006 | Écarts acceptés à M1 | Acceptée |
 | 0007 | Dépendances du jalon M2 | Acceptée |
 | 0008 | Tag Freqtrade épinglé et annexe C revérifiée | Acceptée |
+| 0009 | Écarts et reports acceptés à M2 | Acceptée (point `freqtrade-client` à valider) |

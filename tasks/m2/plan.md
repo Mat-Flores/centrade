@@ -29,6 +29,11 @@ Un opérateur dépose une version de stratégie, crée un compte paper, déploie
 | Sonde réelle des permissions sur une venue | M7 | Aucune clé de venue en développement |
 | Réconciliation avec la venue, protection des positions (I7) | M3 | §14 |
 | Événement et alerte par relance après plantage (S4) | M3 | §14 |
+| Récepteur de webhooks des moteurs `POST /events/engine`, jetons liés à l'instance (lot W) | M3 | Dépend du Risk service ; le relevé REST fait foi à M2 |
+| Arrêt d'une instance avec positions ouvertes (F9) : choix et alerte « positions sans moteur » | M3 | Dépend de la protection des positions (I7) |
+| Acquittement serveur d'une commande échouée | M4 | Demande une colonne ; écran Flow |
+
+Le lot W n'a pas été fait ; voir `docs/decisions/0009-ecarts-m2.md`.
 
 ## Lots
 
@@ -46,7 +51,10 @@ Dépendances : `A → B, C, E` ; `D1 → C, D2` ; `E → D2, F` ; `C → F, G` ;
 | G | API : instances (création depuis une version et un compte, détail), `/orders`, `/positions`, `/trades`, fermeture, annulation d'un ordre d'entrée | sonnet | 3 |
 | H1 | Front : navigation, écrans Comptes et clés, Ordres et positions | sonnet | 4 |
 | H2 | Front : écran Stratégies (versions, déploiement, « Ce qui tourne réellement », commandes) | sonnet | 4 |
-| W | Récepteur `POST /events/engine` du worker, jetons de service liés à l'instance | sonnet | 4 |
+| W | Récepteur `POST /events/engine` du worker, jetons de service liés à l'instance | sonnet | 4 (non fait, reporté à M3) |
+| R | Re-confirmation du TOTP (`POST /auth/totp/confirm`) | opus | ajouté |
+| T | Projection des trades clos et compléments d'API pour les écrans | sonnet | ajouté |
+| Correctifs 1 à 3 | Trois lots issus des revues indépendantes (sécurité, code, interface) | opus et sonnet | après la vague 5 |
 | I | Assemblage : adaptateur enregistré dans le worker, essai de bout en bout Freqtrade en dry-run, mesure de capacité, documentation | orchestrateur + sonnet | 5 |
 
 Points de contrôle : `make lint test` après chaque vague ; revues indépendantes après la vague 5.

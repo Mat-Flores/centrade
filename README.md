@@ -17,12 +17,22 @@ make secrets             # génère les secrets Docker absents
 make up                  # Compose core : Postgres/Timescale, Redis, API, worker, web, Caddy
 make bootstrap-admin     # premier administrateur ; terminal interactif, aucun identifiant par défaut
 make down                # arrêt, volumes conservés
+make engines-pull        # M2 : télécharge l'image Freqtrade épinglée (tag et digest)
+make engines-up          # M2 : core + profil `engines` (socket proxy, worker avec runner)
 make lint test
 pnpm e2e                 # dans apps/web : E2E du Cockpit
 make e2e-live            # pile jetable avec le moteur simulé ; local seulement, pas en CI
 ```
 
 **Avertissement.** La sortie de `make bootstrap-admin` contient l'URI TOTP et les codes de récupération. Note-les hors ligne et ne les laisse dans aucun journal (le pilote de journaux Docker garde la sortie du conteneur).
+
+**Moteurs réels (M2).** Le worker écrit les fichiers de chaque instance dans un répertoire en mémoire de l'hôte. Crée-le avant `make engines-up`, et refais-le après chaque redémarrage de l'hôte ou de WSL2 (le contenu de `/run` disparaît) :
+
+```
+sudo install -d -m 700 -o 10001 /run/centrade
+```
+
+Essai réel en dry-run (Docker, image épinglée et accès Internet à la venue d'exemple ; local seulement, hors CI) : `uv run pytest -q -s tests/freqtrade_adapter/test_ft_real.py`. Capacité mesurée : `docs/capacite.md` (6 instances en dry-run annoncées pour l'hôte de référence).
 
 **Installation venant de M0.** Fais `make down` puis `make up` : le réseau `edge` passe en `172.31.250.0/24`, qui doit être libre sur l'hôte.
 
@@ -38,6 +48,8 @@ Dashboard web et API du plan de contrôle derrière Caddy ; PostgreSQL/Timescale
 
 **M1 livré.** Authentification et 2FA, contrat moteur, moteur simulé et ses modes de panne, bus, commandes suivies jusqu'à l'effet, Cockpit en temps réel. Testés : I1, I8, I14, S9, S10 (I4, I5 et I12 en partie) ; le reste est planifié dans `docs/invariants.md`.
 
+**M2 livré.** Registre de stratégies, SecretStore, comptes et clés, runner Docker, adaptateur Freqtrade en dry-run, écrans Stratégies, Ordres et positions, Comptes et clés. Testés : I2, I3, I9, I10, I12, S1, S5, S7, S8, avec les réserves de `docs/invariants.md`. Écarts et reports : `docs/decisions/0009-ecarts-m2.md`.
+
 ## Hypothèses du SPEC §15 appliquées
 
 Crypto via Freqtrade, spot uniquement, paper ou testnet par défaut ; un seul opérateur ; VPS Linux (4 vCPU, 8 Go minimum) ; interface en français, fuseau America/Toronto ; rien exposé à Internet, accès par VPN ; jour de risque 00:00 UTC, nombres `fr-CA`.
@@ -49,6 +61,14 @@ Crypto via Freqtrade, spot uniquement, paper ou testnet par défaut ; un seul op
 - Le Cockpit n'affiche ni PnL, ni exposition, ni drawdown, ni rejets de risque, ni panneau « Garanties » tant que leurs sources n'existent pas (M2 à M4).
 - Pas de routeur côté front tant qu'un seul écran est actif.
 - Écarts acceptés : `docs/decisions/0006-ecarts-m1.md`.
+
+**Hypothèses de M2** (détail : ADR 0009).
+- Spot uniquement ; dry-run sans aucune clé de trading ; `POST /instances` ne crée que du paper.
+- Venue d'exemple `kraken` pour l'essai réel : choisie parce qu'elle est joignable depuis le poste, pas une recommandation.
+- Sonde de permissions d'une clé : résultat « non vérifié » faute de venue réelle, ce qui bloque le live.
+- Hook d'entrée limité au dry-run (refus de tout le reste) jusqu'au Risk service de M3.
+- Pas de récepteur de webhooks des moteurs : l'interface suit le relevé périodique, pas la seconde.
+- `freqtrade-client` n'est pas utilisé (ADR 0007) : écart à faire valider par l'opérateur.
 
 ## Où trouver le reste
 
