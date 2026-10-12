@@ -6,6 +6,7 @@
 !apps/worker/centrade_worker
 !packages/core
 !packages/adapters/fake/centrade_fake
+!packages/adapters/freqtrade/centrade_freqtrade
 !alembic.ini
 !deploy/db
 !apps/web
