@@ -11,7 +11,7 @@ import { InstanceCell, num, Ts } from "./cells";
 const t = fr.orders.positions;
 // L'état de protection et la fermeture ne sortent jamais du champ : ces colonnes restent collées à droite quand le tableau défile.
 const PIN = "sticky z-[1] bg-card";
-const PROT = `${PIN} min-w-44 border-l`;
+const PROT = `${PIN} min-w-36 border-l`;
 
 function Protection({ p, nowIso }: { p: Position; nowIso: string }) {
   // Une position non protégée s'affiche toujours : l'alarme n'est jamais estompée ni masquée par l'âge.
@@ -88,14 +88,14 @@ export function PositionsTable({
   onClose: (p: Position) => void;
 }) {
   return (
-    <TableShell label={t.list} dimmed={dimmed} minWidth="min-w-[46rem]">
+    <TableShell label={t.list} dimmed={dimmed} minWidth="min-w-0">
       <thead className={THEAD}>
         <tr>
           <th scope="col" className={TH}>{t.columns.instance}</th>
           <th scope="col" className={TH}>{t.columns.instrument}</th>
           <th scope="col" className={THR}>{t.columns.quantity}</th>
           <th scope="col" className={THR}>{t.columns.entry}</th>
-          <th scope="col" className={`${TH} min-w-32`}>{t.columns.stop}</th>
+          <th scope="col" className={`${TH} min-w-28`}>{t.columns.stop}</th>
           <th scope="col" className={`${TH} ${PROT} ${canAct ? "right-28" : "right-0"}`}>{t.columns.protection}</th>
           {canAct && <th scope="col" className={`${TH} ${PIN} right-0 w-28`}>{t.columns.action}</th>}
         </tr>
@@ -116,7 +116,7 @@ export function PositionsTable({
                 <ObservedValue mono value={num(p.quantity)} observedAt={p.observed_at} serverTime={nowIso} staleAfterMs={ENGINE_STALE_MS} className="justify-end" />
               </td>
               <td className={TDR}>
-                <ObservedValue mono value={p.entry_price === null ? "unknown" : `${num(p.entry_price)}\u00a0${p.currency}`} observedAt={p.observed_at} serverTime={nowIso} staleAfterMs={ENGINE_STALE_MS} className="justify-end" />
+                <ObservedValue mono value={p.entry_price === null ? "unknown" : `${num(p.entry_price)} ${p.currency}`} observedAt={p.observed_at} serverTime={nowIso} staleAfterMs={ENGINE_STALE_MS} className="justify-end" />
               </td>
               <td className={TD}>
                 <Stop p={p} nowIso={nowIso} />

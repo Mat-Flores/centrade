@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 export const TH = "px-3 py-2 text-left text-sm font-medium text-muted-foreground";
 export const THR = "px-3 py-2 text-right text-sm font-medium text-muted-foreground";
 export const TD = "px-3 py-2 align-top";
-export const TDR = "px-3 py-2 align-top text-right font-mono whitespace-nowrap";
+export const TDR = "px-3 py-2 align-top text-right font-mono";
 
 /**
  * Zone défilable d'un tableau : `tabIndex` pour que le défilement se fasse au clavier (WCAG 2.1.1).

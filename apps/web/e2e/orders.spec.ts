@@ -292,3 +292,25 @@ test("bureau (1280 px) : aucune position coupée, le tableau des trades tient da
   const trades = page.locator('[role="region"]').filter({ has: page.locator("tr[data-trade]") });
   expect(await trades.first().evaluate((el) => el.scrollWidth - el.clientWidth)).toBeLessThanOrEqual(0);
 });
+
+test("tablette (820 px) : aucun montant, prix ou devise coupé ; les trois tableaux tiennent sans défilement horizontal", async ({ page }) => {
+  await page.setViewportSize({ width: 820, height: 1180 });
+  await mockTrading(page);
+  await page.goto("/orders");
+  await expect(page.locator("tr[data-trade]").first()).toBeVisible();
+  const regions = page.locator('[role="region"]');
+  expect(await regions.count()).toBe(3);
+  for (const region of await regions.all()) {
+    const m = await region.evaluate((el) => ({ label: el.getAttribute("aria-label"), over: el.scrollWidth - el.clientWidth }));
+    expect(m.over, `${m.label} : défilement horizontal`).toBeLessThanOrEqual(0);
+  }
+  // Chaque cellule de nombre : le texte est entièrement dans la région.
+  const clipped = await page.evaluate(() => [...document.querySelectorAll('[role="region"] td.font-mono, [role="region"] td[class*="text-right"], [role="region"] th[class*="text-right"]')].filter((cell) => {
+    const range = document.createRange();
+    range.selectNodeContents(cell);
+    const t = range.getBoundingClientRect();
+    const r = cell.closest('[role="region"]')!.getBoundingClientRect();
+    return t.right > r.right + 1 || t.left < r.left - 1 || cell.scrollWidth > cell.clientWidth + 1;
+  }).map((c) => c.textContent));
+  expect(clipped).toEqual([]);
+});

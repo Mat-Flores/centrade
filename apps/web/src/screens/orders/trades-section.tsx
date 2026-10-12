@@ -87,7 +87,7 @@ export function TradesSection({ trades, instances, nowIso, dimmed }: { trades: T
     <div className="flex flex-col gap-6" data-dimmed={dimmed || undefined}>
       <Totals trades={trades} instances={instances} nowIso={nowIso} />
       <Breakdowns trades={trades} instances={instances} nowIso={nowIso} />
-      <TableShell label={t.list} dimmed={dimmed} minWidth="min-w-[58rem]">
+      <TableShell label={t.list} dimmed={dimmed} minWidth="min-w-0">
         <thead className={THEAD}>
           <tr>
             <th scope="col" className={TH}>{t.columns.instance}</th>
@@ -114,7 +114,7 @@ export function TradesSection({ trades, instances, nowIso, dimmed }: { trades: T
               <td className={TD}>{causeLabel(x.exit_cause)}</td>
               <td className={TDR}>{pnl(x.pnl, x.currency)}</td>
               <td className={TDR}>
-                {num(x.fees)}&nbsp;{x.currency}
+                {num(x.fees)} {x.currency}
               </td>
               <td className={`${TD} font-mono`}>{when(x.closed_at)}</td>
             </tr>

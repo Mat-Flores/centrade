@@ -33,7 +33,7 @@ export function OrdersTable({
   onCancel: (o: Order) => void;
 }) {
   return (
-    <TableShell label={t.list} dimmed={dimmed} minWidth="min-w-[52rem]">
+    <TableShell label={t.list} dimmed={dimmed} minWidth="min-w-0">
       <thead className={THEAD}>
         <tr>
           <th scope="col" className={TH}>{t.columns.instance}</th>
@@ -69,7 +69,7 @@ export function OrdersTable({
                 {o.price === null ? (
                   <span className="font-sans text-muted-foreground">{t.noPrice}</span>
                 ) : (
-                  <ObservedValue mono value={`${num(o.price)}\u00a0${o.currency}`} observedAt={o.observed_at} serverTime={nowIso} staleAfterMs={ENGINE_STALE_MS} className="justify-end" />
+                  <ObservedValue mono value={`${num(o.price)} ${o.currency}`} observedAt={o.observed_at} serverTime={nowIso} staleAfterMs={ENGINE_STALE_MS} className="justify-end" />
                 )}
               </td>
               <td className={`${TD} ${PIN}`}>
