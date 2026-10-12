@@ -6,42 +6,38 @@ import { navigate, SCREEN_PATHS, type RoutedScreen } from "@/lib/router";
 import type { Me } from "@/lib/session";
 import type { Theme } from "@/lib/theme";
 import { Button } from "@/components/ui/button";
+import type { Instance } from "@/lib/instances";
 import { AccountsScreen } from "./accounts/accounts-screen";
+import { OrdersScreen } from "./orders/orders-screen";
+import { StrategiesScreen } from "./strategies/strategies-screen";
 
-function ComingSoon({ text }: { text: string }) {
-  return (
-    <Empty className="min-h-56">
-      <EmptyHeader>
-        <EmptyTitle className="text-base">{fr.routes.soonTitle}</EmptyTitle>
-        <EmptyDescription>{text}</EmptyDescription>
-        <EmptyDescription>{fr.routes.soonAction}</EmptyDescription>
-      </EmptyHeader>
-      <EmptyContent>
-        <Button type="button" variant="outline" onClick={() => navigate(SCREEN_PATHS.cockpit)}>
-          {fr.routes.toCockpit}
-        </Button>
-      </EmptyContent>
-    </Empty>
-  );
+/** Ce que la coquille partage avec chaque écran : un seul flux et une seule horloge pour toute l'application. */
+export interface ScreenContext {
+  me: Me;
+  /** Mode dégradé : seules les actions qui réduisent le risque restent actives. */
+  degraded: boolean;
+  nowIso: string;
+  instances: Instance[] | undefined;
 }
 
-/**
- * Écrans hors Cockpit, par route. Le lot suivant remplace les deux entrées `ComingSoon`
- * (strategies, orders) par ses écrans ; `me` leur est transmis pour les droits d'écriture.
- */
-const SCREENS: Record<Exclude<RoutedScreen, "cockpit">, (me: Me) => React.ReactNode> = {
-  strategies: () => <ComingSoon text={fr.routes.soon.strategies} />,
-  orders: () => <ComingSoon text={fr.routes.soon.orders} />,
-  accounts: (me) => <AccountsScreen isAdmin={me.role === "admin"} />,
+/** Écrans hors Cockpit, par route. */
+const SCREENS: Record<Exclude<RoutedScreen, "cockpit">, (ctx: ScreenContext) => React.ReactNode> = {
+  strategies: ({ me, degraded, nowIso, instances }) => (
+    <StrategiesScreen canAct={me.role !== "viewer"} isAdmin={me.role === "admin"} degraded={degraded} nowIso={nowIso} instances={instances} />
+  ),
+  orders: ({ me, degraded, nowIso, instances }) => (
+    <OrdersScreen canAct={me.role !== "viewer"} degraded={degraded} nowIso={nowIso} instances={instances} />
+  ),
+  accounts: ({ me }) => <AccountsScreen isAdmin={me.role === "admin"} />,
 };
 
 /** Coquille d'un écran hors Cockpit (ou d'une adresse inconnue) : même barre persistante, même navigation. */
 export function ScreenPage({ me, theme, onToggleTheme, screen }: { me: Me; theme: Theme; onToggleTheme: () => void; screen: Exclude<RoutedScreen, "cockpit"> | null }) {
-  const { bar } = useShellBar();
+  const { bar, degraded, nowIso, items } = useShellBar();
   return (
     <AppShell me={me} theme={theme} onToggleTheme={onToggleTheme} bar={bar}>
       {screen ? (
-        SCREENS[screen](me)
+        SCREENS[screen]({ me, degraded: degraded.degraded, nowIso, instances: items })
       ) : (
         <Empty className="min-h-56">
           <EmptyHeader>

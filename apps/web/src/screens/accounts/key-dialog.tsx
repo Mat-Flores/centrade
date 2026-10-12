@@ -1,5 +1,5 @@
 import { CircleAlertIcon } from "lucide-react";
-import { useId, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -8,9 +8,10 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from "@/components/ui
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { fr } from "@/i18n/fr";
-import { errorCause, labelMatches, SecretFormSchema, writeKey, type Account, type ErrorCause, type KeyUsage } from "@/lib/accounts";
+import { confirmTotp, errorCause, labelMatches, SecretFormSchema, TOTP_CODE, TOTP_REUSE_MS, totpCause, writeKey, type Account, type ErrorCause, type KeyUsage, type TotpCause } from "@/lib/accounts";
 
 const t = fr.accounts.keyDialog;
+const totp = fr.totpConfirm;
 
 export interface KeyAction {
   account: Account;
@@ -31,6 +32,11 @@ export function KeyDialog({ action, onClose, onDone }: { action: KeyAction; onCl
   const [pending, setPending] = useState(false);
   const [failure, setFailure] = useState<{ cause: ErrorCause; detail: string | null } | null>(null);
   const [empty, setEmpty] = useState(false);
+  // Code TOTP : confirmé avant l'envoi de la clé, jamais après coup. `needsTotp` : l'API vient de le réclamer.
+  const [totpFailure, setTotpFailure] = useState<TotpCause | "invalid" | null>(null);
+  const [needsTotp, setNeedsTotp] = useState(false);
+  const [totpDone, setTotpDone] = useState(false);
+  const confirmedAt = useRef<number | null>(null);
 
   const usageName = t.usage[usage];
   const exists = (usage === "trade" ? account.trade_key : account.read_key) !== null;
@@ -42,8 +48,40 @@ export function KeyDialog({ action, onClose, onDone }: { action: KeyAction; onCl
     event.preventDefault();
     if (pending || !confirmed) return;
     const form = event.currentTarget;
-    const data = new FormData(form);
-    const parsed = SecretFormSchema.safeParse({ key: data.get("key"), secret: data.get("secret") });
+    setFailure(null);
+    setEmpty(false);
+
+    // 1. Le code TOTP d'abord : la clé n'est ni lue ni vidée tant qu'il n'est pas confirmé, donc un refus laisse
+    //    ressaisir le code seul, et rien ne doit être gardé pour « rejouer » l'envoi de la clé.
+    const totpInput = form.elements.namedItem("totp") as HTMLInputElement;
+    const code = totpInput.value.trim();
+    totpInput.value = "";
+    const recent = confirmedAt.current !== null && Date.now() - confirmedAt.current < TOTP_REUSE_MS;
+    if (code !== "" || (needsTotp && !recent)) {
+      if (!TOTP_CODE.test(code)) {
+        setTotpFailure("invalid");
+        totpInput.focus();
+        return;
+      }
+      setPending(true);
+      setTotpFailure(null);
+      try {
+        await confirmTotp(code);
+        confirmedAt.current = Date.now();
+        setTotpDone(true);
+        setNeedsTotp(false);
+      } catch (error) {
+        setTotpFailure(totpCause(error));
+        setPending(false);
+        setTimeout(() => totpInput.focus(), 0); // le champ est désactivé jusqu'au rendu suivant
+        return;
+      }
+    }
+
+    // 2. La clé : lue une fois, vidée aussitôt, envoyée, jamais conservée.
+    // `.value` plutôt que FormData : les champs sont désactivés pendant la confirmation du code, FormData les ignorerait.
+    const read = (name: string) => (form.elements.namedItem(name) as HTMLInputElement).value;
+    const parsed = SecretFormSchema.safeParse({ key: read("key"), secret: read("secret") });
     // Vidés dès l'envoi, succès ou échec : rien de la saisie ne reste dans le DOM.
     for (const name of ["key", "secret"]) (form.elements.namedItem(name) as HTMLInputElement).value = "";
     if (!parsed.success) {
@@ -57,7 +95,14 @@ export function KeyDialog({ action, onClose, onDone }: { action: KeyAction; onCl
       await writeKey(account.id, mode, { usage, ...parsed.data });
       onDone(mode === "rotate" ? t.done.rotate(usageName) : t.done.put(usageName));
     } catch (error) {
-      setFailure(errorCause(error));
+      const failed = errorCause(error);
+      if (failed.cause === "totp") {
+        // La confirmation a expiré ou manquait : le code sera demandé avant le prochain envoi.
+        confirmedAt.current = null;
+        setTotpDone(false);
+        setNeedsTotp(true);
+      }
+      setFailure(failed);
       setPending(false);
     }
   }
@@ -72,9 +117,34 @@ export function KeyDialog({ action, onClose, onDone }: { action: KeyAction; onCl
       </p>
       <form onSubmit={onSubmit} noValidate autoComplete="off" className="flex flex-col gap-5" aria-label={title}>
         <FieldGroup>
+          <Field data-invalid={needsTotp || totpFailure ? true : undefined}>
+            <FieldLabel htmlFor={`${id}-totp`}>{totp.code}</FieldLabel>
+            <Input
+              id={`${id}-totp`}
+              name="totp"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              spellCheck={false}
+              disabled={pending}
+              data-autofocus
+              data-1p-ignore
+              aria-required={needsTotp || undefined}
+              aria-invalid={totpFailure ? true : undefined}
+              aria-describedby={`${id}-totp-help`}
+            />
+            <FieldDescription id={`${id}-totp-help`}>{needsTotp ? totp.fieldHelpNeeded : totp.fieldHelp}</FieldDescription>
+            {totpDone && !needsTotp && <p className="text-sm font-medium">{totp.confirmed}</p>}
+          </Field>
+          {totpFailure && (
+            <Alert role="alert">
+              <CircleAlertIcon />
+              <AlertTitle>{totp.errorTitle}</AlertTitle>
+              <AlertDescription>{totpFailure === "invalid" ? totp.invalid : totp.causes[totpFailure]}</AlertDescription>
+            </Alert>
+          )}
           <Field>
             <FieldLabel htmlFor={`${id}-key`}>{t.key}</FieldLabel>
-            <Input id={`${id}-key`} name="key" type="password" autoComplete="off" spellCheck={false} data-autofocus disabled={pending} data-1p-ignore />
+            <Input id={`${id}-key`} name="key" type="password" autoComplete="off" spellCheck={false} disabled={pending} data-1p-ignore />
           </Field>
           <Field>
             <FieldLabel htmlFor={`${id}-secret`}>{t.secret}</FieldLabel>

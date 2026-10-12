@@ -11,6 +11,7 @@ import { accountsKey, accountsQuery, errorCause, testAccount, type Account, type
 import { AccountTable } from "./account-table";
 import { CreateAccount } from "./create-account";
 import { KeyDialog, type KeyAction } from "./key-dialog";
+import { TotpDialog } from "./totp-dialog";
 
 const t = fr.accounts;
 
@@ -42,6 +43,8 @@ export function AccountsScreen({ isAdmin }: { isAdmin: boolean }) {
   const [keyAction, setKeyAction] = useState<KeyAction | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [testing, setTesting] = useState<string | null>(null);
+  // Test des permissions refusé faute de TOTP : le code est demandé, puis le test est rejoué (il ne porte aucun secret).
+  const [needsTotp, setNeedsTotp] = useState<Account | null>(null);
 
   const test = useMutation({
     mutationFn: (account: Account) => testAccount(account.id),
@@ -53,12 +56,15 @@ export function AccountsScreen({ isAdmin }: { isAdmin: boolean }) {
       await qc.invalidateQueries({ queryKey: accountsKey });
       setNotice(t.testResult[out.result](account.label));
     },
+    onError: (error, account) => {
+      if (errorCause(error).cause === "totp") setNeedsTotp(account);
+    },
     onSettled: () => setTesting(null),
   });
 
   const page = accounts.data;
   const items = page?.items ?? [];
-  const testFailure = test.isError ? errorCause(test.error) : null;
+  const testFailure = test.isError && needsTotp === null ? errorCause(test.error) : null;
 
   return (
     <>
@@ -138,6 +144,17 @@ export function AccountsScreen({ isAdmin }: { isAdmin: boolean }) {
       )}
 
       <Unavailable />
+
+      {needsTotp && (
+        <TotpDialog
+          onClose={() => setNeedsTotp(null)}
+          onConfirmed={() => {
+            const account = needsTotp;
+            setNeedsTotp(null);
+            test.mutate(account);
+          }}
+        />
+      )}
 
       {keyAction && (
         <KeyDialog

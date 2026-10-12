@@ -190,7 +190,7 @@ export async function mockCockpit(
   return api;
 }
 
-export const emit = (page: Page, type: "instance" | "command" | "alert" | "heartbeat", data: unknown) =>
+export const emit = (page: Page, type: "instance" | "command" | "alert" | "heartbeat" | "order" | "position" | "trade", data: unknown) =>
   page.evaluate(([t, d]) => (window as unknown as { __emit: (t: string, d: unknown) => void }).__emit(t as string, d), [type, data] as const);
 
 export const stopBeats = (page: Page) => page.evaluate(() => ((window as unknown as { __beats: boolean }).__beats = false));

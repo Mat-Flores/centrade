@@ -88,6 +88,7 @@ export const instancesKey = ["instances"] as const;
 export const commandsKey = ["commands"] as const;
 export const alertsKey = ["alerts", "open"] as const;
 export const healthKey = ["health"] as const;
+export const instanceDetailKey = (id: string) => ["instance-detail", id] as const;
 
 /** Les dates du serveur recalent l'horloge d'affichage : l'âge ne dépend jamais de celle du navigateur. */
 async function timed<T extends { server_time: string }>(promise: Promise<T>): Promise<T> {

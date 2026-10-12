@@ -147,3 +147,34 @@ export function errorCause(error: unknown): { cause: ErrorCause; detail: string 
   if (error.status === 409) return { cause: "refused", detail };
   return { cause: "other", detail };
 }
+
+/* ------------------------------------------------------------------------ confirmation TOTP */
+
+export const TOTP_CODE = /^\d{6}$/;
+/** Une confirmation vaut cinq minutes côté API : la page n'en réutilise une que pendant quatre. */
+export const TOTP_REUSE_MS = 4 * 60_000;
+
+/**
+ * Confirme un code TOTP pour la session (`POST /auth/totp/confirm`, 204). Appel d'authentification : un 401 ne renvoie
+ * pas à la connexion, et un 403 (code refusé) laisse ressaisir. Le code n'est ni mis en cache ni gardé.
+ */
+export const confirmTotp = (code: string) => apiFetch("/auth/totp/confirm", z.undefined(), { method: "POST", body: { code }, authCall: true });
+
+export type TotpCause = "refused" | "locked" | "rateLimited" | "session" | "network" | "other";
+
+export function totpCause(error: unknown): TotpCause {
+  if (!(error instanceof ApiError)) return "other";
+  if (error.kind === "network") return "network";
+  switch (error.status) {
+    case 403:
+      return "refused";
+    case 423:
+      return "locked";
+    case 429:
+      return "rateLimited";
+    case 401:
+      return "session";
+    default:
+      return "other";
+  }
+}

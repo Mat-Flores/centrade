@@ -102,7 +102,6 @@ test("navigation : liens au clavier entre écrans, URL partageables, bouton reto
     await page.keyboard.press("Enter");
     await expect(page).toHaveURL(url);
     await expect(page.getByRole("heading", { level: 1, name })).toBeVisible();
-    await expect(page.getByText("Pas encore disponible")).toBeVisible();
   }
 
   await page.goBack();
@@ -217,7 +216,7 @@ test("dépôt d'une clé : confirmation par le libellé, valeur envoyée une foi
   expect(logs.join("\n")).not.toContain(SENTINEL);
 });
 
-test("échec d'un dépôt : cause et action, champs déjà vidés ; TOTP périmé expliqué", async ({ page }) => {
+test("échec d'un dépôt : cause et action, champs déjà vidés ; TOTP réclamé expliqué", async ({ page }) => {
   const api = await mockAccounts(page);
   api.status["PUT /secret"] = { status: 403, detail: "Confirmation par code TOTP requise." };
   await page.goto("/accounts");
@@ -227,8 +226,8 @@ test("échec d'un dépôt : cause et action, champs déjà vidés ; TOTP périm�
   await dialog.getByLabel("Secret", { exact: true }).fill(SENTINEL);
   await dialog.getByLabel("Libellé du compte").fill("Sans clé");
   await dialog.getByRole("button", { name: "Envoyer la clé" }).click();
-  await expect(dialog.getByRole("alert")).toContainText("plus de cinq minutes");
-  await expect(dialog.getByRole("alert")).toContainText("Se déconnecter puis se reconnecter");
+  await expect(dialog.getByRole("alert")).toContainText("Confirmation par code TOTP requise");
+  await expect(dialog.getByRole("alert")).toContainText("rien n'a été conservé");
   await expect(dialog.getByLabel("Clé d'API")).toHaveValue("");
   await expect(dialog.getByLabel("Secret", { exact: true })).toHaveValue("");
   expect(await page.content()).not.toContain(SENTINEL);
@@ -312,3 +311,143 @@ for (const scheme of ["light", "dark"] as const) {
     });
   }
 }
+
+
+/* ------------------------------------------------------------------ confirmation TOTP (raccord) */
+
+const CODE = "123456";
+
+/** Simule `POST /auth/totp/confirm` : une réponse par appel, dans l'ordre ; 204 lève le refus TOTP des écritures. */
+async function mockConfirm(page: Page, api: Mock, statuses: number[]) {
+  const calls: string[] = [];
+  const bodies: string[] = [];
+  await page.route("**/api/v1/auth/totp/confirm", (route) => {
+    const status = statuses[Math.min(calls.length, statuses.length - 1)]!;
+    calls.push(String(status));
+    bodies.push(route.request().postData() ?? "");
+    if (status === 204) {
+      delete api.status["PUT /secret"];
+      delete api.status["POST /test"];
+      return route.fulfill({ status: 204 });
+    }
+    const detail = status === 403 ? "Code refusé." : status === 423 ? "Compte verrouillé." : status === 429 ? "Trop de tentatives." : "Session incomplète.";
+    return route.fulfill({ status, contentType: "application/problem+json", body: JSON.stringify({ type: "about:blank", title: "x", status, detail }) });
+  });
+  return { calls, bodies };
+}
+
+async function openDeposit(page: Page) {
+  await page.goto("/accounts");
+  await row(page, "Sans clé").getByRole("button", { name: /Déposer : Clé de trading/ }).click();
+  const dialog = page.getByRole("alertdialog");
+  await dialog.getByLabel("Libellé du compte").fill("Sans clé");
+  return dialog;
+}
+const fillKey = async (dialog: ReturnType<Page["getByRole"]>) => {
+  await dialog.getByLabel("Clé d'API").fill(SENTINEL);
+  await dialog.getByLabel("Secret", { exact: true }).fill(SENTINEL);
+};
+const noTrace = async (page: Page) => {
+  const html = await page.content();
+  expect(html).not.toContain(SENTINEL);
+  expect(await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }))).not.toContain(CODE);
+  expect(html).not.toContain(CODE);
+};
+
+test("TOTP réclamé par l'API : code demandé avant l'envoi, clé ressaisie, rien de conservé", async ({ page }) => {
+  const api = await mockAccounts(page);
+  api.status["PUT /secret"] = { status: 403, detail: "Confirmation par code TOTP requise." };
+  const confirm = await mockConfirm(page, api, [204]);
+  const dialog = await openDeposit(page);
+  await fillKey(dialog);
+  await dialog.getByRole("button", { name: "Envoyer la clé" }).click();
+  await expect(dialog.getByRole("alert")).toContainText("Confirmation par code TOTP requise");
+  await expect(dialog.getByLabel("Clé d'API")).toHaveValue(""); // clé vidée : elle n'est pas gardée pour être rejouée
+  await expect(dialog.getByLabel("Secret", { exact: true })).toHaveValue("");
+  await expect(dialog.getByLabel(/Code TOTP/)).toHaveAttribute("aria-required", "true");
+  await expect(dialog.getByText("Obligatoire maintenant")).toBeVisible();
+  await noTrace(page);
+
+  // Sans code, rien ne part : la clé reste dans les champs.
+  await fillKey(dialog);
+  await dialog.getByRole("button", { name: "Envoyer la clé" }).click();
+  await expect(dialog.getByRole("alert")).toContainText("6 chiffres");
+  await expect(dialog.getByLabel("Clé d'API")).toHaveValue(SENTINEL);
+  expect(confirm.calls).toHaveLength(0);
+
+  await dialog.getByLabel(/Code TOTP/).fill(CODE);
+  await dialog.getByRole("button", { name: "Envoyer la clé" }).click();
+  await expect(page.getByText(/Clé de trading enregistrée/)).toBeVisible();
+  expect(JSON.parse(confirm.bodies[0]!)).toEqual({ code: CODE });
+  const order = api.requests.filter((r) => r.method === "PUT").length;
+  expect(order).toBe(2); // refus puis succès
+  await expect(dialog).toHaveCount(0);
+  await noTrace(page);
+});
+
+test("code TOTP saisi d'emblée : confirmé avant la clé ; refus : la clé reste dans ses champs, on ressaisit le code", async ({ page }) => {
+  const api = await mockAccounts(page);
+  const confirm = await mockConfirm(page, api, [403, 204]);
+  const dialog = await openDeposit(page);
+  await fillKey(dialog);
+  await dialog.getByLabel(/Code TOTP/).fill("654321");
+  await dialog.getByRole("button", { name: "Envoyer la clé" }).click();
+  await expect(dialog.getByRole("alert")).toContainText("Code refusé");
+  await expect(page.getByRole("heading", { level: 1, name: "Comptes et clés" })).toBeVisible(); // pas de retour à la connexion
+  await expect(dialog.getByLabel(/Code TOTP/)).toHaveValue(""); // le code est vidé dès l'envoi
+  await expect(dialog.getByLabel(/Code TOTP/)).toBeFocused();
+  await expect(dialog.getByLabel("Clé d'API")).toHaveValue(SENTINEL); // jamais envoyée
+  expect(api.requests.filter((r) => r.method === "PUT")).toHaveLength(0);
+
+  await dialog.getByLabel(/Code TOTP/).fill(CODE);
+  await dialog.getByRole("button", { name: "Envoyer la clé" }).click();
+  await expect(page.getByText(/Clé de trading enregistrée/)).toBeVisible();
+  expect(confirm.calls).toEqual(["403", "204"]);
+  expect(api.requests.filter((r) => r.method === "PUT")).toHaveLength(1);
+  await noTrace(page);
+});
+
+for (const [status, text] of [[423, "Compte verrouillé"], [429, "Trop de tentatives"], [401, "La session n'est plus complète"]] as const) {
+  test(`confirmation TOTP ${status} : cause affichée, aucune clé envoyée, pas de boucle`, async ({ page }) => {
+    const api = await mockAccounts(page);
+    const confirm = await mockConfirm(page, api, [status]);
+    const dialog = await openDeposit(page);
+    await fillKey(dialog);
+    await dialog.getByLabel(/Code TOTP/).fill(CODE);
+    await dialog.getByRole("button", { name: "Envoyer la clé" }).click();
+    await expect(dialog.getByRole("alert")).toContainText(text);
+    expect(confirm.calls).toHaveLength(1); // aucune relance automatique
+    expect(api.requests.filter((r) => r.method === "PUT")).toHaveLength(0);
+    await expect(dialog).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Comptes et clés" })).toBeVisible();
+  });
+}
+
+test("code de forme invalide : refusé sur place, rien n'est envoyé", async ({ page }) => {
+  const api = await mockAccounts(page);
+  const confirm = await mockConfirm(page, api, [204]);
+  const dialog = await openDeposit(page);
+  await fillKey(dialog);
+  await dialog.getByLabel(/Code TOTP/).fill("12");
+  await dialog.getByRole("button", { name: "Envoyer la clé" }).click();
+  await expect(dialog.getByRole("alert")).toContainText("6 chiffres");
+  expect(confirm.calls).toHaveLength(0);
+  expect(api.requests.filter((r) => r.method === "PUT")).toHaveLength(0);
+});
+
+test("test des permissions refusé faute de TOTP : code demandé, puis test rejoué sans secret", async ({ page }) => {
+  const api = await mockAccounts(page);
+  api.status["POST /test"] = { status: 403, detail: "Confirmation par code TOTP requise." };
+  const confirm = await mockConfirm(page, api, [204]);
+  await page.goto("/accounts");
+  await row(page, "Réserve").getByRole("button", { name: /Tester les permissions/ }).click();
+  const dialog = page.getByRole("alertdialog");
+  await expect(dialog).toContainText("Confirmation par code TOTP");
+  await dialog.getByLabel(/Code TOTP/).fill(CODE);
+  await dialog.getByRole("button", { name: "Confirmer le code" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole("status").filter({ hasText: "Réserve" })).toContainText("non vérifié");
+  expect(confirm.calls).toEqual(["204"]);
+  expect(api.requests.filter((r) => r.path.endsWith("/test"))).toHaveLength(2); // refus, puis rejeu
+  await noTrace(page);
+});

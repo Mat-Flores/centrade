@@ -8,6 +8,8 @@ import {
   errorCause,
   labelMatches,
   permissionState,
+  TOTP_CODE,
+  totpCause,
   writeKey,
   type Account,
 } from "./accounts";
@@ -116,5 +118,18 @@ describe("la valeur d'une clé ne survit pas à l'envoi", () => {
   it("le schéma de compte ne porte aucun champ de valeur", () => {
     expect(Object.keys(AccountSchema.shape)).not.toContain("secret");
     expect(Object.keys(AccountSchema.shape)).not.toContain("key");
+  });
+});
+
+describe("confirmation TOTP", () => {
+  it("accepte six chiffres exactement", () => {
+    expect(["123456", "000000"].every((c) => TOTP_CODE.test(c))).toBe(true);
+    expect(["12345", "1234567", "12345a", " 123456", ""].some((c) => TOTP_CODE.test(c))).toBe(false);
+  });
+  it("nomme la cause de chaque réponse, sans jamais confondre un refus de code et une session perdue", () => {
+    const err = (status: number) => new ApiError("problem", status, null, "x");
+    expect([403, 423, 429, 401, 500].map((s) => totpCause(err(s)))).toEqual(["refused", "locked", "rateLimited", "session", "other"]);
+    expect(totpCause(new ApiError("network", null, null, "x"))).toBe("network");
+    expect(totpCause(new Error("x"))).toBe("other");
   });
 });

@@ -6,6 +6,7 @@ import { freshness } from "@/lib/format";
 import {
   alertsKey,
   commandsKey,
+  instanceDetailKey,
   instancesKey,
   type ActionType,
   type Alert,
@@ -210,7 +211,8 @@ export type StreamMessage =
   | { event: "heartbeat"; server_time: string }
   | { event: "instance"; server_time: string; instance: Instance }
   | { event: "command"; server_time: string; command: Command }
-  | { event: "alert"; server_time: string; alert: Alert };
+  | { event: "alert"; server_time: string; alert: Alert }
+  | { event: "order" | "position" | "trade"; server_time: string };
 
 const byCreated = (a: Instance, b: Instance) =>
   Date.parse(b.created_at) - Date.parse(a.created_at) || (a.id < b.id ? 1 : -1);
@@ -231,8 +233,16 @@ export function applyStreamMessage(qc: QueryClient, msg: StreamMessage): void {
         const items = [inst, ...page.items.filter((i) => i.id !== inst.id)].sort(byCreated);
         return { ...page, items };
       });
+      // Le détail (empreinte, configuration effective, dérive) est relu : le message ne le porte pas.
+      void qc.invalidateQueries({ queryKey: instanceDetailKey(inst.id) });
       break;
     }
+    case "order":
+    case "position":
+    case "trade":
+      // Le message ne porte que la ligne ; les listes filtrées sont relues (jamais d'état supposé).
+      void qc.invalidateQueries({ queryKey: ["trading", `${msg.event}s`] });
+      break;
     case "command": {
       qc.setQueryData<Page<Command>>(commandsKey, (page) =>
         page ? { ...page, items: upsertCommand(page.items, msg.command) } : undefined,

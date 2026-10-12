@@ -1,4 +1,5 @@
 import { CircleAlertIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
 import { ObservedValue } from "@/components/observed-value";
 import { Badge } from "@/components/ui/badge";
@@ -32,11 +33,13 @@ export interface InstanceRowProps {
   seen: ReadonlySet<string>;
   onSeen: (commandId: string) => void;
   onAction: (instance: Instance, action: ActionType) => void;
+  /** Contenu propre à l'écran hôte (écran Stratégies : « Ce qui tourne réellement »), sous les actions. */
+  children?: ReactNode;
 }
 
 const typeLabel = (type: string) => fr.cockpit.command.types[type] ?? type;
 
-export function InstanceRow({ instance, commands, nowIso, degraded, canAct, isAdmin, seen, onSeen, onAction }: InstanceRowProps) {
+export function InstanceRow({ instance, commands, nowIso, degraded, canAct, isAdmin, seen, onSeen, onAction, children }: InstanceRowProps) {
   const nowMs = Date.parse(nowIso);
   const view = stateView(instance, nowMs);
   const mode = instance.observed_mode;
@@ -106,6 +109,7 @@ export function InstanceRow({ instance, commands, nowIso, degraded, canAct, isAd
       {latest && !problems.some((p) => p.id === latest.id) && <CommandLine command={latest} nowMs={nowMs} />}
 
       {canAct && <Actions instance={instance} degraded={degraded} role={isAdmin ? "admin" : "operator"} nowMs={nowMs} onAction={onAction} />}
+      {children}
     </li>
   );
 }
