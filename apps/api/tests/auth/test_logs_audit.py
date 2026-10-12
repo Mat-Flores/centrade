@@ -3,14 +3,9 @@
 import base64
 import io
 import json
-import logging
 import re
-from collections.abc import Iterator
 
-import pytest
-import structlog
 from centrade_core.audit import verify_chain
-from centrade_core.logging import configure_logging
 from centrade_core.models import AuditLog
 from centrade_core.settings import Settings
 from sqlalchemy import select
@@ -22,16 +17,6 @@ LOGIN, TOTP, ME, LOGOUT = (f"/api/v1/auth/{p}" for p in ("login", "totp", "me", 
 WRONG = "SENTINELLE-mauvais-mot-de-passe"
 WRONG_UNKNOWN = "SENTINELLE-essai-sur-compte-inconnu"
 IP = "203.0.113.77"
-
-
-@pytest.fixture
-def logs(monkeypatch: pytest.MonkeyPatch) -> Iterator[io.StringIO]:
-    monkeypatch.setenv("CENTRADE_LOG_LEVEL", "DEBUG")  # le niveau le plus bavard
-    buffer = io.StringIO()
-    configure_logging(stream=buffer)
-    yield buffer
-    structlog.reset_defaults()
-    logging.getLogger().handlers.clear()
 
 
 async def _journey(make_client: MakeClient, account: Account, clock: FakeClock) -> list[str]:

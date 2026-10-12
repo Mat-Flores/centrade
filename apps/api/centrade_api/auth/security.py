@@ -49,12 +49,16 @@ def token_hash(token: str) -> str:
     return hashlib.sha256(token.encode()).hexdigest()
 
 
+def is_totp_code(code: str) -> bool:
+    return _TOTP_CODE.fullmatch(code) is not None
+
+
 def totp_step(secret: str, code: str, now: datetime) -> int | None:
     """Pas de temps (30 s) auquel `code` correspond, à un pas près, ou None s'il est refusé.
 
     L'appelant refuse un pas déjà accepté (anti-rejeu) : pyotp 2.10 ne renvoie pas le pas.
     """
-    if not _TOTP_CODE.fullmatch(code):
+    if not is_totp_code(code):
         return None
     totp = pyotp.TOTP(secret)
     current = totp.timecode(now)

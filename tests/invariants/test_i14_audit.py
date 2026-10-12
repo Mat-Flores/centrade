@@ -90,7 +90,7 @@ async def test_i14_toute_action_ecrit_une_ligne_d_audit_avec_auteur(stack: Stack
         (m, p)
         for ctx in iter_route_contexts(stack.app.routes)
         for m in (ctx.methods or set()) - {"GET", "HEAD", "OPTIONS"}
-        if (p := ctx.path) and not p.startswith("/api/v1/auth/")
+        if (p := ctx.path)
     }
     actions = ("start", "stop", "pause-entries", "resume-entries", "flatten")
     # Une route qui change un état et qui n'est pas parcourue ici fait échouer ce test.
@@ -111,8 +111,10 @@ async def test_i14_toute_action_ecrit_une_ligne_d_audit_avec_auteur(stack: Stack
         ("POST", "/api/v1/positions/{position_id}/close"),
         ("DELETE", "/api/v1/orders/{order_id}"),
     }
-    assert changing >= registre | comptes | trading
-    assert changing - registre - comptes - trading == {("POST", "/api/v1/instances")} | {
+    # Authentification : auditée dans apps/api/tests/auth/ (test_logs_audit, test_totp_confirm).
+    auth = {("POST", f"/api/v1/auth/{p}") for p in ("login", "totp", "totp/confirm", "logout")}
+    assert changing >= registre | comptes | trading | auth
+    assert changing - registre - comptes - trading - auth == {("POST", "/api/v1/instances")} | {
         ("POST", f"/api/v1/instances/{{instance_id}}/{a}") for a in actions
     }
 
