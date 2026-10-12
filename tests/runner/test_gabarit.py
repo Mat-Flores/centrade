@@ -1,5 +1,7 @@
 """Runner Docker, unitaires : client Docker doublé (le gabarit, les refus, l'admission)."""
 
+import io
+import tarfile
 from dataclasses import replace
 from pathlib import Path
 from typing import Any
@@ -30,8 +32,13 @@ class FakeContainer:
             "HostConfig": {"Memory": kwargs["mem_limit"]},
         }
         self.calls: list[str] = []
+        self.archives: list[tuple[str, bytes]] = []
 
     def reload(self) -> None: ...
+
+    def put_archive(self, path: str, data: bytes) -> bool:
+        self.archives.append((path, data))
+        return True
 
     def start(self) -> None:
         self.calls.append("start")
@@ -131,6 +138,17 @@ async def test_gabarit_durcissement_complet(
         LABEL_FINGERPRINT: "f" * 64,
         LABEL_MODE: "paper",
     }
+
+
+async def test_dossier_du_moteur_cree_au_nom_de_l_utilisateur_du_conteneur(
+    runner: DockerRunner, client: FakeClient, spec: ContainerSpec
+) -> None:
+    await runner.create(replace(spec, user="10001:10002"))
+    path, data = client.by_name[f"centrade-engine-{spec.instance_id}"].archives[0]
+    with tarfile.open(fileobj=io.BytesIO(data)) as tar:
+        (entry,) = tar.getmembers()
+    assert path == "/data" and entry.name == "engine" and entry.isdir()
+    assert (entry.uid, entry.gid, entry.mode) == (10001, 10002, 0o700)
 
 
 async def test_gabarit_deux_montages_seulement(

@@ -4,21 +4,52 @@ import asyncio
 import os
 import socket
 from datetime import UTC, datetime
+from decimal import Decimal
 
+import structlog
 from centrade_core.bus import Bus
 from centrade_core.db import make_engine, make_session_factory
 from centrade_core.engine.contract import EngineAdapter
 from centrade_core.ids import uuid7
 from centrade_core.logging import configure_logging
+from centrade_core.models.trading import Engine
 from centrade_core.settings import get_settings
 from centrade_fake.engine import ENGINE as FAKE
 from centrade_fake.engine import FakeEngine
+from centrade_freqtrade.adapter import FreqtradeAdapter
+from centrade_freqtrade.capabilities import capabilities
+from centrade_freqtrade.checks import ENGINE as FREQTRADE
+from centrade_freqtrade.image import (
+    ENGINE_MEMORY_BYTES,
+    ENGINE_NANO_CPUS,
+    FREQTRADE_DIGEST,
+    FREQTRADE_IMAGE,
+    FREQTRADE_TAG,
+)
 from redis.asyncio import Redis
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from centrade_worker.runner import DockerRunner
+from centrade_worker.runtime import WorkerRuntime
 from centrade_worker.worker import Worker, WorkerConfig, install_stop_signals
 
 GROUP = "worker"
+log = structlog.get_logger()
+
+
+async def register_engine(sessions: async_sessionmaker[AsyncSession]) -> None:
+    """Ligne `engines` de Freqtrade : image, digest et réservations de `image.py` (ADR 0008)."""
+    async with sessions.begin() as s:
+        row = await s.scalar(select(Engine).where(Engine.kind == FREQTRADE))
+        row = row or Engine(kind=FREQTRADE)
+        row.image = f"{FREQTRADE_IMAGE}:{FREQTRADE_TAG}"
+        row.version = FREQTRADE_TAG
+        row.digest = FREQTRADE_DIGEST
+        row.memory_reservation_mb = ENGINE_MEMORY_BYTES // 1024**2
+        row.cpu_reservation = Decimal(ENGINE_NANO_CPUS) / 1_000_000_000
+        row.capabilities = capabilities().model_dump(mode="json")
+        s.add(row)
 
 
 async def main() -> None:
@@ -35,15 +66,25 @@ async def main() -> None:
             allow_failure_injection=cfg.engine_failure_injection,
         )
     }
-    # Profil engines seulement : sans socket proxy, aucun conteneur à rattacher. Un adaptateur à
-    # conteneurs se construit ici avec ce runner et un `WorkerRuntime` (clé maître par
-    # `cfg.master_key()`, répertoire `cfg.engine_runtime_dir`).
+    # Profil engines seulement : sans socket proxy, aucun conteneur à rattacher.
+    sessions = make_session_factory(db)
     runner = DockerRunner() if os.environ.get("DOCKER_HOST") else None
+    if runner is None:
+        log.info("moteurs_a_conteneurs_absents", raison="DOCKER_HOST absent, seul le FakeEngine")
+    else:
+        runtime = WorkerRuntime(
+            sessions=sessions,
+            master_key=cfg.master_key(),
+            runtime_dir=cfg.engine_runtime_dir,
+            clock=lambda: datetime.now(UTC),
+        )
+        adapters[FREQTRADE] = FreqtradeAdapter(runner, runtime)
+        await register_engine(sessions)
     worker = Worker(
         adapters=adapters,
         runner=runner,
         simulated=frozenset({FAKE}),
-        sessions=make_session_factory(db),
+        sessions=sessions,
         redis=redis,
         bus=Bus(redis, GROUP, consumer=f"worker-{socket.gethostname()}"),
         config=WorkerConfig(

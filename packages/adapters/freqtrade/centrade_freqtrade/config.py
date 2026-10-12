@@ -83,8 +83,13 @@ OBSERVABLE_KEYS: tuple[str, ...] = tuple(k for k in OWNED_KEYS if k in _SHOW_CON
 # Le moteur peut ajouter des valeurs par défaut à ces dictionnaires : seules nos clés comptent.
 _SUBSET_KEYS = frozenset({"order_types"})
 
+# Propres au mode ou à l'instance : hors du hash de configuration (I10).
+MODE_KEYS = frozenset({"dry_run", "db_url", "bot_name"})
+
 API_PORT = 8080
-_USER_DATA = "/freqtrade/user_data"
+# Sous-dossier de /data créé par le runner au nom de l'utilisateur du conteneur : la racine du
+# volume appartient à root, le moteur n'y écrit rien.
+USER_DATA = "/data/engine"
 
 
 @dataclass(frozen=True, slots=True)
@@ -176,7 +181,7 @@ def _document(spec: InstanceSpec) -> dict[str, Any]:
     doc: dict[str, Any] = {
         # Dérivé de l'énumération du mode : une instance paper ou backtest reste en dry-run.
         "dry_run": spec.mode != "live",
-        "db_url": f"sqlite:///{_USER_DATA}/trades-{spec.mode}.sqlite",
+        "db_url": f"sqlite:///{USER_DATA}/trades-{spec.mode}.sqlite",
         "bot_name": f"centrade-{spec.instance_id}",
         "strategy": m.entrypoint.rsplit("/", 1)[-1].removesuffix(".py"),
         "trading_mode": "spot",
@@ -220,6 +225,18 @@ def _document(spec: InstanceSpec) -> dict[str, Any]:
         "telegram": {"enabled": False},
         # Non possédés : requis par le moteur ou lus par la stratégie.
         "pairlists": [{"method": "StaticPairList"}],
+        # Le moteur exige ces blocs (KeyError au démarrage sans eux). `other` : l'ordre limite
+        # traverse le carnet, donc se remplit ; avec `same` un ordre pouvait rester posé jusqu'au
+        # délai (observé), y compris en sortie, ce qui retarde une sortie (I4).
+        "entry_pricing": {
+            "price_side": "other",
+            "use_order_book": True,
+            "order_book_top": 1,
+            "price_last_balance": Decimal(0),
+            "check_depth_of_market": {"enabled": False, "bids_to_ask_delta": Decimal(1)},
+        },
+        "exit_pricing": {"price_side": "other", "use_order_book": True, "order_book_top": 1},
+        "unfilledtimeout": {"entry": 10, "exit": 10, "unit": "minutes"},
         "dry_run_wallet": stake * m.sizing.max_open_positions,
         "centrade_params": {k: v for k, v in spec.params.items() if k != "pairs"},
     }
@@ -232,7 +249,29 @@ def render_config(spec: InstanceSpec) -> EngineConfig:
     """Clés possédées uniquement, en chaînes canoniques (comparaison exacte avec drift)."""
     doc = _document(spec)
     values = {k: _canon(_get(doc, k), k) for k in OWNED_KEYS if _get(doc, k) is not None}
-    return EngineConfig(values=values)
+    return EngineConfig(
+        values=values,
+        mode_keys=frozenset(MODE_KEYS & values.keys()),
+        unreadable=frozenset(values.keys() - set(OBSERVABLE_KEYS)),
+    )
+
+
+def observed_values(show_config: Mapping[str, Any], whitelist: list[str]) -> dict[str, str]:
+    """Relecture ramenée aux noms de clés possédées et aux chaînes canoniques de render_config."""
+    seen = {**show_config, "pair_whitelist": whitelist}
+    out: dict[str, str] = {}
+    for key in OBSERVABLE_KEYS:
+        raw = seen.get(_SHOW_CONFIG_SOURCE[key])
+        if raw is not None:
+            out[key] = _canon(raw, key)
+    return out
+
+
+def observed_drift(generated: EngineConfig, observed: Mapping[str, str]) -> list[Drift]:
+    """Comme `drift`, depuis des valeurs déjà ramenées aux clés possédées (`observed_values`).
+    Une clé absente de la relecture n'est pas signalée ici : `owned_drifts` s'en charge."""
+    back = {_SHOW_CONFIG_SOURCE[k]: v for k, v in observed.items() if k in _SHOW_CONFIG_SOURCE}
+    return [d for d in drift(generated, back) if d.key in observed]
 
 
 def _json_number(o: Any) -> Any:
@@ -247,7 +286,11 @@ def _json_number(o: Any) -> Any:
 
 def config_file(spec: InstanceSpec) -> str:
     """Texte JSON du premier fichier de configuration de l'instance (sans identifiants)."""
-    return json.dumps(_document(spec), default=_json_number, sort_keys=True, indent=2)
+    doc = _document(spec)
+    # Le schéma du moteur exige token et chat_id dès que le bloc existe, même désactivé : on
+    # l'omet (absent = désactivé). `render_config` garde `telegram.enabled=false`.
+    doc.pop("telegram")
+    return json.dumps(doc, default=_json_number, sort_keys=True, indent=2)
 
 
 def drift(generated: EngineConfig | Mapping[str, str], effective: Mapping[str, Any]) -> list[Drift]:

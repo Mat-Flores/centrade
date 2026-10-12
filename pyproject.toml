@@ -65,7 +65,10 @@ disallow_subclassing_any = false
 [tool.pytest.ini_options]
 testpaths = ["apps/api/tests", "tests"]
 pythonpath = ["apps/api", "packages/core", "packages/adapters/fake", "packages/adapters/freqtrade", "apps/worker", "tests"]
-markers = ["docker: exige un Docker local (sautée si absent)"]
+markers = [
+    "docker: exige un Docker local (sautée si absent)",
+    "network: exige un accès réseau aux données publiques d'une venue (sautée si absent)",
+]
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "session"
 asyncio_default_test_loop_scope = "session"

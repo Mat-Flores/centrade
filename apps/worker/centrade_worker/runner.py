@@ -9,8 +9,10 @@ Sources : https://docker-py.readthedocs.io/en/stable/containers.html
 from __future__ import annotations
 
 import asyncio
+import io
 import os
 import re
+import tarfile
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -34,6 +36,9 @@ LABEL_FINGERPRINT = "centrade.fingerprint"
 LABEL_MODE = "centrade.mode"
 
 DATA_PATH = "/data"  # volume de données de l'instance, en écriture
+# Un volume neuf appartient à root : le runner y crée ce sous-dossier au nom de l'utilisateur du
+# conteneur, seul endroit où un moteur sans privilège peut écrire (racine du volume : rien).
+DATA_SUBDIR = "engine"
 FILES_PATH = "/run/centrade"  # configuration, stratégie, identifiants : lecture seule
 ENV_ALLOWED = frozenset({"TZ", "PYTHONUNBUFFERED"})  # jamais de secret en variable (I12)
 _ACTIVE = ("running", "created", "restarting", "paused")  # états qui occupent de la mémoire
@@ -73,6 +78,18 @@ _Views = list[RunnerContainer]  # `list` est aussi une méthode du runner
 
 def _name(instance_id: UUID) -> str:
     return f"centrade-engine-{instance_id}"
+
+
+def _own_data_subdir(container: Any, user: str) -> None:
+    uid, gid = (int(x) for x in user.split(":"))
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as tar:
+        info = tarfile.TarInfo(DATA_SUBDIR)
+        info.type, info.mode, info.uid, info.gid = tarfile.DIRTYPE, 0o700, uid, gid
+        tar.addfile(info)
+    # Sans effet sur un dossier déjà là : le contenu d'une instance relancée reste intact.
+    if not container.put_archive(DATA_PATH, buf.getvalue()):
+        raise CommandRejected("volume de données : dossier du moteur non créé")
 
 
 def _view(c: Any) -> RunnerContainer:
@@ -226,6 +243,11 @@ class DockerRunner:
         def go(cli: Any) -> RunnerContainer:
             image = kwargs.pop("image")
             c = cli.containers.create(image, **kwargs)  # `create` ne télécharge jamais
+            try:
+                _own_data_subdir(c, spec.user)
+            except BaseException:
+                c.remove(v=False)  # pas de conteneur à moitié préparé
+                raise
             c.reload()
             return _view(c)
 
