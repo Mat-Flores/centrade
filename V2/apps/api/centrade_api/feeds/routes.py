@@ -16,7 +16,7 @@ from centrade_api.core.deps import (
 from centrade_api.core.pagination import Page, decode_cursor, encode_cursor, page_args
 from centrade_api.feeds.schemas import AlertOut, AuditOut, EventOut
 
-router = APIRouter(prefix="/api/v1", tags=["journaux"])
+router = APIRouter(prefix="/api/v1", tags=["feeds"])
 
 
 @router.get("/events")

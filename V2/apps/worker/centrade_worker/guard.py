@@ -233,7 +233,9 @@ class Guard:
             raise CommandRejected("code de stratégie refusé : " + " ; ".join(checked.errors))
         pinned = self._pinned.get(t.spec.engine)
         if pinned is not None and dep.digest != pinned:
-            log.error("digest_modifie_en_base", instance_id=str(instance_id), engine=t.spec.engine)
+            log.error(
+                "digest_changed_in_database", instance_id=str(instance_id), engine=t.spec.engine
+            )
             raise CommandRejected(
                 "digest de l'image en base différent de celui de l'adaptateur : déploiement refusé"
             )
@@ -316,7 +318,7 @@ class Guard:
                 stale_after_s=self._stale_after_s,
             )
         except Exception as exc:  # tout doute vaut refus (I5) ; rien n'est envoyé
-            log.exception("verification_impossible", instance_id=str(ref.instance_id))
+            log.exception("verification_unavailable", instance_id=str(ref.instance_id))
             out = (Refusal(ERROR, f"Vérification impossible ({type(exc).__name__}) : refus."),)
         if out:
             async with self._sessions.begin() as s:
@@ -487,7 +489,7 @@ class Guard:
         self._note("instance", instance_id)
         if refusals:
             log.warning(
-                "verification_f9_refus",
+                "f9_verification_rejected",
                 instance_id=str(instance_id),
                 codes=sorted(codes),
                 observed_state=status.state,
@@ -538,4 +540,4 @@ class Guard:
         )
         self._note("command", cmd.id)
         self.pause_requested.add(instance_id)
-        log.warning("pause_automatique", instance_id=str(instance_id), codes=codes)
+        log.warning("automatic_pause", instance_id=str(instance_id), codes=codes)

@@ -45,7 +45,7 @@ from centrade_api.core.deps import (
 from centrade_api.core.pagination import Page, encode_cursor, page_args
 
 log = structlog.get_logger()
-router = APIRouter(prefix="/api/v1", tags=["comptes"])
+router = APIRouter(prefix="/api/v1", tags=["accounts"])
 
 # Ajouter ou remplacer une clé est une action dangereuse (SPEC §9) : TOTP de moins de 5 min.
 RecentTotp = Depends(require_recent_totp)

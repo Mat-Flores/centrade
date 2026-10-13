@@ -4,7 +4,7 @@ Un tour (`run_once`) : relève les commandes, puis lance UNE tâche par instance
 envoi de ses commandes (ce qui réduit le risque d'abord) -> ses événements (bus, ingestion) ->
 son relevé (état + instantané) -> vérification de F9 -> envoi de sa pause d'office. Puis :
 vérification des commandes, expiration, battement. Une instance lente, muette ou en erreur ne
-retarde aucune autre (I4, X14) : le tour n'attend ses tâches que `tour_wait_s`, la tâche
+retarde aucune autre (I4, X14) : le tour n'attend ses tâches que `tick_wait_s`, la tâche
 inachevée continue et son instance n'en reçoit pas d'autre tant qu'elle dure (une commande à la
 fois par instance, F9). Le battement ne dépend d'aucun moteur. Aucun sommeil ici : `run` dort
 entre deux tours, les tests appellent `run_once` avec une horloge injectée.
@@ -76,7 +76,7 @@ class WorkerConfig:
     pause_deadline_s: float = 10.0
     # Attente des tâches d'instance par tour. Au-delà, le tour se termine sans elles : battement
     # (TTL ci-dessus) et pause d'une autre instance (10 s, §13) n'attendent pas un moteur lent.
-    tour_wait_s: float = 2.0
+    tick_wait_s: float = 2.0
     # Moteur `running` dont la configuration n'a pas pu être relue depuis ce délai : alerte
     # critique et pause (§13 : dérive détectée en 60 s).
     unreadable_after_s: float = 60.0
@@ -167,7 +167,7 @@ class Worker:
                     ref = await self._adapters[kind].deploy(await self.guard.deployment(inst.id))
                 self.register(ref)
             except Exception:
-                log.exception("instance_non_rechargee", instance_id=str(inst.id))
+                log.exception("instance_not_reloaded", instance_id=str(inst.id))
         if self._runner is not None:
             await self._adopt([inst for inst, _ in rows])
 
@@ -178,7 +178,7 @@ class Worker:
         try:
             running = {c.instance_id: c for c in await self._runner.adopt()}
         except EngineUnreachable:
-            log.warning("adoption_impossible")  # Docker injoignable : rien n'est conclu
+            log.warning("adoption_failed")  # Docker injoignable : rien n'est conclu
             return
         known = {i.id: i for i in instances}
         alerts: list[UUID | None] = []
@@ -241,7 +241,7 @@ class Worker:
         )
 
     async def run_once(self) -> None:
-        tour = log.bind(correlation_id=str(uuid7()))
+        tick_log = log.bind(correlation_id=str(uuid7()))
         errors: list[Exception] = []  # étapes de la plateforme : sans elles, pas de battement
         self._ingest_error = None
 
@@ -249,15 +249,15 @@ class Worker:
             try:
                 return await do()
             except Exception as exc:  # l'étape suivante a lieu quand même
-                tour.exception("etape_en_echec", step=name)
+                tick_log.exception("step_failed", step=name)
                 errors.append(exc)
                 return None
 
         try:
             # Les commandes d'abord : ni le bus ni un lot d'événements ne retardent une pause.
             # Seul ce qui augmente le risque peut périmer avant de partir.
-            await step("expiration_avant_envoi", lambda: self._commands.expire(("requested",)))
-            claimed = await step("releve_des_commandes", self._claim) or {}
+            await step("expire_before_dispatch", lambda: self._commands.expire(("requested",)))
+            claimed = await step("claim_commands", self._claim) or {}
             # Bus en panne : aucune boîte d'envoi de moteur n'est vidée à ce tour.
             before = len(errors)
             await step("bus", lambda: self._bus.ensure_group(EVENTS_STREAM))
@@ -265,22 +265,22 @@ class Worker:
             for iid in dict.fromkeys([*claimed, *self._refs]):
                 if iid not in self._tasks:
                     self._tasks[iid] = asyncio.create_task(
-                        self._instance(tour, iid, claimed.get(iid, ()), bus_ok)
+                        self._instance(tick_log, iid, claimed.get(iid, ()), bus_ok)
                     )
             if self._tasks:
-                await asyncio.wait(self._tasks.values(), timeout=self._cfg.tour_wait_s)
+                await asyncio.wait(self._tasks.values(), timeout=self._cfg.tick_wait_s)
             observed: dict[UUID, Observation] = {}
             failed: list[Exception] = []  # propres à une instance : visibles, sans effet ailleurs
             for iid, task in list(self._tasks.items()):
                 if not task.done():
-                    tour.warning("instance_lente", instance_id=str(iid))
+                    tick_log.warning("instance_slow", instance_id=str(iid))
                     continue
                 del self._tasks[iid]
                 obs, errs = task.result()
                 failed.extend(errs)
                 if obs is not None:
                     observed[iid] = obs
-            await self._ingest(tour)
+            await self._ingest(tick_log)
             if self._ingest_error is not None:
                 errors.append(self._ingest_error)
             await step("verification", lambda: self._commands.verify(observed))
@@ -303,39 +303,39 @@ class Worker:
         return await self._commands.claim(skip=tuple(self._tasks))
 
     async def _instance(
-        self, tour: _Log, iid: UUID, claimed: Sequence[_Claimed], bus_ok: bool
+        self, tick_log: _Log, iid: UUID, claimed: Sequence[_Claimed], bus_ok: bool
     ) -> tuple[Observation | None, list[Exception]]:
         """Le tour d'UNE instance. Ne lève jamais : rend son relevé et ses erreurs."""
-        tlog = tour.bind(instance_id=str(iid))
+        instance_log = tick_log.bind(instance_id=str(iid))
         errors: list[Exception] = []
 
         async def step(name: str, do: Callable[[], Awaitable[_T]]) -> _T | None:
             try:
                 return await do()
             except Exception as exc:  # l'étape suivante a lieu quand même
-                tlog.exception("etape_en_echec", step=name)
+                instance_log.exception("step_failed", step=name)
                 errors.append(exc)
                 return None
 
         if claimed:  # avant toute lecture : rien ne retarde une pause (I4)
-            await step("envoi", lambda: self._commands.send(claimed))
+            await step("dispatch", lambda: self._commands.send(claimed))
         obs: Observation | None = None
         ref = self._refs.get(iid)  # un `deploy` vient peut-être de l'enregistrer
         if ref is not None:
             # Un seul délai pour les événements et le relevé : muet => `unknown` en 30 s (§13).
             deadline = asyncio.get_running_loop().time() + self._cfg.engine_silent_after_s
             if bus_ok:
-                await step("publication", lambda: self._publish_events(tlog, ref, deadline))
-                await self._ingest(tlog)  # avant le relevé, qui a le dernier mot
-            obs = await step("releve", lambda: self._resync(tlog, ref, deadline))
+                await step("publication", lambda: self._publish_events(instance_log, ref, deadline))
+                await self._ingest(instance_log)  # avant le relevé, qui a le dernier mot
+            obs = await step("snapshot", lambda: self._resync(instance_log, ref, deadline))
             if obs is not None:
                 status = obs.status
-                if await step("verification_f9", lambda: self.guard.check(ref, status)) == ():
+                if await step("f9_verification", lambda: self.guard.check(ref, status)) == ():
                     obs = replace(obs, conform=True)
-                await step("nettoyage", lambda: self._clean_stopped(tlog, iid, status.state))
+                await step("cleanup", lambda: self._clean_stopped(instance_log, iid, status.state))
         if iid in self.guard.pause_requested:  # la pause d'office part dans le même tour
             self.guard.pause_requested.discard(iid)
-            await step("envoi_des_pauses", lambda: self._commands.dispatch(only=iid))
+            await step("dispatch_pauses", lambda: self._commands.dispatch(only=iid))
         return obs, errors
 
     async def aclose(self) -> None:
@@ -350,35 +350,35 @@ class Worker:
             try:
                 await self.run_once()
             except Exception:
-                log.exception("tour_en_echec")  # pas de battement : l'API voit un worker figé
+                log.exception("tick_failed")  # pas de battement : l'API voit un worker figé
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(stop.wait(), self._cfg.interval_s)
         await self.aclose()
-        log.info("arret_propre")
+        log.info("clean_shutdown")
 
     # --- étapes ---------------------------------------------------------------------------
-    async def _publish_events(self, tour: _Log, ref: InstanceRef, deadline: float) -> None:
+    async def _publish_events(self, tick_log: _Log, ref: InstanceRef, deadline: float) -> None:
         try:
             async with asyncio.timeout_at(deadline):
                 async for ev in self._adapters[ref.engine].events(ref):
                     await self._bus.publish(EVENTS_STREAM, ev.model_dump_json())
         except (EngineUnreachable, CommandRejected, TimeoutError):
             # Rien n'est inventé ; le relevé du tour dira `unknown`.
-            tour.warning("evenements_indisponibles")
+            tick_log.warning("events_unavailable")
 
-    async def _ingest(self, tour: _Log) -> None:
+    async def _ingest(self, tick_log: _Log) -> None:
         """Ingestion, par une tâche à la fois. Un échec arrête l'ingestion jusqu'au tour
         suivant (le message non acquitté sera relivré) et prive ce tour de battement."""
         async with self._ingest_lock:
             if self._ingest_error is not None:
                 return
             try:
-                await self._consume(tour)
+                await self._consume(tick_log)
             except Exception as exc:
-                tour.exception("etape_en_echec", step="ingestion")
+                tick_log.exception("step_failed", step="ingestion")
                 self._ingest_error = exc
 
-    async def _consume(self, tour: _Log) -> None:
+    async def _consume(self, tick_log: _Log) -> None:
         while msgs := await self._bus.read(EVENTS_STREAM, self._cfg.batch):
             for m in msgs:
                 try:
@@ -386,15 +386,15 @@ class Worker:
                     res = await ingest(self._sessions, ev, self._clock())
                 except (ValidationError, IntegrityError):
                     # Message inexploitable ou instance inconnue : le relivrer ne le réparerait pas.
-                    tour.error("message_rejete", message_id=m.id)
+                    tick_log.error("message_rejected", message_id=m.id)
                     await self._bus.ack(EVENTS_STREAM, m.id)
                     continue
                 if res.anomaly:
                     self._anomalies[ev.instance_id] = res.anomaly
                 if res.order_id is not None:
                     self._notes.append(("order", res.order_id))
-                tour.info(
-                    "evenement_ingere",
+                tick_log.info(
+                    "event_ingested",
                     instance_id=str(ev.instance_id),
                     seq=ev.seq,
                     new=res.new,
@@ -402,7 +402,9 @@ class Worker:
                 )
                 await self._bus.ack(EVENTS_STREAM, m.id)  # après traitement réussi seulement
 
-    async def _resync(self, tour: _Log, ref: InstanceRef, deadline: float) -> Observation | None:
+    async def _resync(
+        self, tick_log: _Log, ref: InstanceRef, deadline: float
+    ) -> Observation | None:
         reason = self._anomalies.pop(ref.instance_id, "poll")
         adapter = self._adapters[ref.engine]
         try:
@@ -417,8 +419,8 @@ class Worker:
             if unknown.alert_id is not None:
                 self._notes.append(("alert", unknown.alert_id))
             self._note_instance(ref.instance_id, ("unknown",))
-            tour.warning(
-                "moteur_injoignable",
+            tick_log.warning(
+                "engine_unreachable",
                 reason=reason,
                 error=type(exc).__name__,
                 alert_created=unknown.alert_id is not None,
@@ -434,10 +436,10 @@ class Worker:
         sig = (status.state, status.mode, snap.positions, snap.orders, snap.stops, snap.closed)
         if self._note_instance(ref.instance_id, sig):
             self._notes.extend(n for n in written if n[0] != "alert")
-        tour.info("resynchronisation", reason=reason, state=status.state)
+        tick_log.info("resync", reason=reason, state=status.state)
         return Observation(status, snap)
 
-    async def _clean_stopped(self, tour: _Log, iid: UUID, state: str) -> None:
+    async def _clean_stopped(self, tick_log: _Log, iid: UUID, state: str) -> None:
         """Arrêt observé sans `stop` commandé (plantage) : le fichier d'identifiants ne reste pas
         sur le disque, il sera réécrit au prochain démarrage. Seulement si Docker confirme
         qu'aucun conteneur ne tourne ni ne va être relancé ; au moindre doute, rien n'est retiré."""
@@ -454,7 +456,7 @@ class Worker:
         if c is None or c.status in ("exited", "dead"):
             await self._cleanup(iid)
             self._cleaned.add(iid)
-            tour.info("identifiants_retires", observed_state=state)
+            tick_log.info("credentials_removed", observed_state=state)
 
     def _note_instance(self, iid: UUID, sig: tuple[object, ...]) -> bool:
         now = self._clock()

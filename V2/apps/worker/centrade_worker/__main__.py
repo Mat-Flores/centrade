@@ -71,7 +71,7 @@ async def main() -> None:
     runner = DockerRunner() if os.environ.get("DOCKER_HOST") else None
     runtime: WorkerRuntime | None = None
     if runner is None:
-        log.info("moteurs_a_conteneurs_absents", raison="DOCKER_HOST absent, seul le FakeEngine")
+        log.info("engines_with_missing_containers", reason="DOCKER_HOST unset, FakeEngine only")
     else:
         runtime = WorkerRuntime(
             sessions=sessions,

@@ -65,7 +65,7 @@ limiter = RateLimiter(limit=10, window=timedelta(minutes=1))
 def throttle(request: Request, now: Annotated[datetime, Depends(utcnow)]) -> None:
     """Débit par adresse, avant toute lecture du corps, de la base ou calcul d'empreinte."""
     ip = client_ip(request)
-    if (wait := limiter.retry_after(ip or "inconnue", now)) is not None:
+    if (wait := limiter.retry_after(ip or "unknown", now)) is not None:
         log.warning("auth_rate_limited", ip=ip)
         raise HTTPException(
             429, "Trop de tentatives. Réessayez plus tard.", headers={"Retry-After": str(wait)}

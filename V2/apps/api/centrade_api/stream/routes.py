@@ -39,7 +39,7 @@ from centrade_api.instances.service import instance_out
 from centrade_api.trading.projections import trading_out
 
 log = structlog.get_logger()
-router = APIRouter(prefix="/api/v1", tags=["flux"])
+router = APIRouter(prefix="/api/v1", tags=["stream"])
 
 
 async def _session_alive(
@@ -110,7 +110,7 @@ async def stream_messages(
                     note = json.loads(msg["data"])
                     event = await _message(factory, cfg, note["kind"], UUID(note["id"]), now())
                 except (ValueError, KeyError, TypeError):
-                    log.warning("notification_illisible")
+                    log.warning("notification_unreadable")
                     event = None
                 if event is not None:
                     yield event

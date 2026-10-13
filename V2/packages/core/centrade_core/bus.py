@@ -79,4 +79,4 @@ async def notify(redis: Redis, kind: str, ident: object) -> None:
     try:
         await redis.publish(NOTIFY_CHANNEL, json.dumps({"kind": kind, "id": str(ident)}))
     except Exception:
-        log.warning("notification_perdue", kind=kind)  # le flux se resynchronise au prochain tour
+        log.warning("notification_lost", kind=kind)  # le flux se resynchronise au prochain tour

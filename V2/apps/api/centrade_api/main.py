@@ -147,33 +147,33 @@ def create_app() -> FastAPI:
                     detail = await check()
                 return Check(status="ok", observed_at=now, detail=detail)
             except Exception as exc:  # panne de n'importe quelle nature : composant « down »
-                log.warning("sante_composant_en_panne", component=name, error=type(exc).__name__)
+                log.warning("health_component_down", component=name, error=type(exc).__name__)
                 return Check(status="down", observed_at=now)
 
         async def database() -> str | None:
             if factory is None:
-                raise RuntimeError("base non configurée")
+                raise RuntimeError("database not configured")
             async with factory() as s:
                 await s.execute(text("SELECT 1"))
             return None
 
         async def bus() -> str | None:
             if redis is None:
-                raise RuntimeError("bus non configuré")
+                raise RuntimeError("bus not configured")
             await redis.ping()
             return None
 
         async def worker() -> str | None:
             if redis is None:
-                raise RuntimeError("bus non configuré")
+                raise RuntimeError("bus not configured")
             raw = await redis.get(HEARTBEAT_KEY)  # la clé expire si le worker se tait
             if raw is None:
-                raise RuntimeError("battement absent")
+                raise RuntimeError("heartbeat missing")
             beat = str(raw)
             cfg: Settings = request.app.dependency_overrides.get(get_settings, get_settings)()
             age = now - datetime.fromisoformat(beat)
             if age > timedelta(seconds=cfg.worker_heartbeat_ttl_s):
-                raise RuntimeError("battement trop ancien")
+                raise RuntimeError("heartbeat too old")
             return beat
 
         checks = {

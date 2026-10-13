@@ -241,7 +241,7 @@ class FreqtradeAdapter:
         except BaseException:
             await self._runtime.cleanup(iid)
             raise
-        log.info("moteur_deploye", instance_id=str(iid), mode=spec.mode, image=dep.image)
+        log.info("engine_deployed", instance_id=str(iid), mode=spec.mode, image=dep.image)
         return ref
 
     def _container(self, spec: InstanceSpec, strategy_file: str, directory: Path) -> Any:
@@ -306,11 +306,11 @@ class FreqtradeAdapter:
                     failed = await self._reduce_entries(ref)
             except TimeoutError:
                 failed = EngineUnreachable("API du moteur muette avant l'arrêt")
-                log.warning("arret_sans_pause_confirmee", instance_id=str(iid))
+                log.warning("stop_without_confirmed_pause", instance_id=str(iid))
             await self._runner.stop(iid)
         await self._runtime.cleanup(iid)
         self._creds.pop(iid, None)
-        log.info("moteur_arrete", instance_id=str(iid))
+        log.info("engine_stopped", instance_id=str(iid))
         if failed is not None:
             raise failed
 
@@ -330,7 +330,7 @@ class FreqtradeAdapter:
                     await step(ref)
             except (EngineUnreachable, CommandRejected) as exc:
                 log.warning(
-                    "reduction_des_entrees_incomplete",
+                    "entry_reduction_incomplete",
                     instance_id=str(ref.instance_id),
                     step=step.__name__,
                     error=str(exc),
@@ -376,7 +376,7 @@ class FreqtradeAdapter:
                 if await self._engine_state(ref) == "stopped":
                     await self._post(ref, "pause")  # forceexit refuse un moteur arrêté
         except (EngineUnreachable, CommandRejected) as exc:
-            log.warning("lecture_avant_sortie_en_echec", instance_id=str(ref.instance_id),
+            log.warning("read_before_exit_failed", instance_id=str(ref.instance_id),
                         error=str(exc))  # fmt: skip
         await api.call("POST", "forceexit", {"tradeid": position_id}, read_s=EXIT_TIMEOUT_S)
 
@@ -601,7 +601,7 @@ class FreqtradeAdapter:
                 return list(reversed(found.values()))
             if offset >= HISTORY_CAP:
                 self._overflow.add(iid)
-                log.error("historique_des_trades_clos_trop_long", instance_id=str(iid))
+                log.error("closed_trades_history_too_long", instance_id=str(iid))
                 raise ClosedHistoryOverflow(f"plus de {HISTORY_CAP} trades clos : relevé refusé")
 
     async def _read(self, ref: InstanceRef, seen: set[str] | None) -> dict[str, Any]:

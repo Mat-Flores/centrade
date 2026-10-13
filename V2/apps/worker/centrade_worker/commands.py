@@ -150,7 +150,7 @@ class Commands:
                 )
                 self._note("command", cmd.id)
                 self._note("alert", alert.id)
-                log.warning("commande_expiree", command_id=str(cmd.id), type=cmd.type)
+                log.warning("command_expired", command_id=str(cmd.id), type=cmd.type)
 
     async def claim(
         self, only: UUID | None = None, skip: Collection[UUID] = ()
@@ -226,7 +226,7 @@ class Commands:
             try:
                 await self._call(c)
             except Exception as exc:
-                log.exception("commande_non_suivie", command_id=str(c.id), type=c.type)
+                log.exception("command_untracked", command_id=str(c.id), type=c.type)
                 failures.append(exc)
         if failures:
             raise failures[0]
@@ -271,7 +271,7 @@ class Commands:
                     await self._send(c, adapter, ref)
         except (EngineUnreachable, TimeoutError):
             # Ni accusé ni échec : on ignore si le moteur a reçu l'ordre. Pas de rejeu.
-            log.warning("commande_sans_reponse", command_id=str(c.id), type=c.type)
+            log.warning("command_unanswered", command_id=str(c.id), type=c.type)
             return
         except Exception as exc:
             await self._finish(c.id, "failed", {"reason": f"{type(exc).__name__}: {exc}"[:200]})
@@ -293,7 +293,7 @@ class Commands:
                 if dst == "failed":
                     await self._audit(s, "command.failed", command_id, "dispatched", dst, result)
                     log.warning(
-                        "commande_en_echec",
+                        "command_failed",
                         command_id=str(command_id),
                         reason=(result or {}).get("reason"),
                     )

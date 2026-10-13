@@ -74,7 +74,7 @@ def quick(w: World, **kw: Any) -> Worker:
         redis=w.redis,
         bus=w.bus,
         clock=w.clock,
-        config=replace(WorkerConfig(), tour_wait_s=0.3),
+        config=replace(WorkerConfig(), tick_wait_s=0.3),
         simulated=frozenset({"fake"}),
         **kw,
     )

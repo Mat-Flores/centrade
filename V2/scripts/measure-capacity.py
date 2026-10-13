@@ -64,7 +64,7 @@ async def main(count: int, venue: str, settle_s: int, samples: int) -> None:
         root = Path(tmp)
         root.chmod(0o755)  # noqa: ASYNC240
         runner = DockerRunner(
-            "tcp://non-utilise:2375",
+            "tcp://unused:2375",
             client=raw,
             runtime_dir=root,
             network=net.name,
@@ -128,16 +128,16 @@ async def main(count: int, venue: str, settle_s: int, samples: int) -> None:
                 await asyncio.sleep(5)
             info = raw.info()
             out = {
-                "hote": {"cpus": info["NCPU"], "memoire_mib": info["MemTotal"] // MIB},
+                "host": {"cpus": info["NCPU"], "memory_mib": info["MemTotal"] // MIB},
                 "reservation": {
-                    "memoire_mib": ENGINE_MEMORY_BYTES // MIB,
+                    "memory_mib": ENGINE_MEMORY_BYTES // MIB,
                     "cpu": ENGINE_NANO_CPUS / 1e9,
                 },
                 "instances": {
                     k: {
-                        "memoire_mib_moy": round(statistics.mean(m for m, _ in v), 1),
-                        "memoire_mib_max": round(max(m for m, _ in v), 1),
-                        "cpu_pct_moy": round(statistics.mean(c for _, c in v), 1),
+                        "memory_mib_avg": round(statistics.mean(m for m, _ in v), 1),
+                        "memory_mib_max": round(max(m for m, _ in v), 1),
+                        "cpu_pct_avg": round(statistics.mean(c for _, c in v), 1),
                         "cpu_pct_max": round(max(c for _, c in v), 1),
                     }
                     for k, v in per.items()
