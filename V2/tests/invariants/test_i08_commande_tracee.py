@@ -1,0 +1,193 @@
+"""I8 : une commande n'est « faite » que lorsque son effet est observé (SPEC §1.2, F9)."""
+
+import asyncio
+from typing import get_args
+
+import httpx
+from centrade_api.testing import Stack, act, create_instance, get, ref_of
+from centrade_core.audit import fingerprint
+from centrade_core.commands import Status, transition
+from centrade_core.db import make_engine, make_session_factory
+from centrade_core.ids import uuid7
+from centrade_core.models import AuditLog
+from centrade_core.models.trading import Command
+from centrade_fake.engine import Failure
+from centrade_worker.testing import T0
+from hypothesis import HealthCheck, given, settings
+from hypothesis import strategies as st
+from sqlalchemy import select, text
+
+STATUSES: tuple[Status, ...] = get_args(Status)
+RANK = {"requested": 0, "dispatched": 1, "acknowledged": 2}
+
+
+async def _running(stack: Stack, **params: object) -> tuple[httpx.AsyncClient, str]:
+    c = await stack.client("operator")
+    inst = await create_instance(c, **params)
+    w = stack.world
+    await w.worker.run_once()
+    r = await act(c, inst["id"], "resume-entries")
+    assert r.status_code == 202
+    await w.worker.run_once()
+    return c, inst["id"]
+
+
+async def test_i08_commande_non_faite_sans_effet_observe(stack: Stack) -> None:
+    c, iid = await _running(stack, failures=["ignore_pause"])
+    assert (await get(c, f"/api/v1/instances/{iid}"))["state"]["value"] == "running"
+    r = await act(c, iid, "pause-entries")
+    cid = r.json()["command_id"]
+
+    for _ in range(3):  # le moteur accuse réception mais ne fait rien
+        stack.world.clock.advance(2)
+        await stack.world.worker.run_once()
+        cmd = await get(c, f"/api/v1/commands/{cid}")
+        assert cmd["status"] == "acknowledged" and cmd["verified_at"] is None
+    inst = await get(c, f"/api/v1/instances/{iid}")
+    assert inst["state"]["value"] == "running" and inst["desired_state"] == "exits_only"
+
+    stack.world.clock.advance(stack.settings.deadline_pause_entries_s)
+    await stack.world.worker.run_once()
+    assert (await get(c, f"/api/v1/commands/{cid}"))["status"] == "timed_out"
+
+
+async def test_i08_commande_sans_reponse_passe_timed_out(stack: Stack) -> None:
+    c, iid = await _running(stack)
+    stack.world.fake.set_failure(ref_of(iid), Failure.SILENT)
+    r = await act(c, iid, "flatten")
+    cid = r.json()["command_id"]
+    await stack.world.worker.run_once()
+    cmd = await get(c, f"/api/v1/commands/{cid}")
+    assert cmd["status"] == "dispatched" and cmd["acknowledged_at"] is None  # ni accusé, ni rejoué
+
+    stack.world.clock.advance(stack.settings.deadline_flatten_s + 1)
+    await stack.world.worker.run_once()
+    cmd = await get(c, f"/api/v1/commands/{cid}")
+    assert cmd["status"] == "timed_out" and cmd["timed_out_at"] and cmd["verified_at"] is None
+    alerts = await get(c, f"/api/v1/alerts?instance_id={iid}")
+    assert any(a["rule"] == "command_timed_out" for a in alerts["items"])
+
+    stack.world.fake.set_failure(ref_of(iid), Failure.SILENT, on=False)
+    stack.world.clock.advance(1)
+    await stack.world.worker.run_once()  # aucune relance automatique
+    assert (await get(c, f"/api/v1/commands/{cid}"))["status"] == "timed_out"
+
+
+async def test_i08_pas_de_verification_sur_un_releve_anterieur_a_l_accuse(stack: Stack) -> None:
+    c, iid = await _running(stack)
+    w = stack.world
+    w.fake.set_failure(ref_of(iid), Failure.SLOW)  # le moteur obéit, mais ses relevés datent
+    cid = (await act(c, iid, "pause-entries")).json()["command_id"]
+    await w.worker.run_once()
+    assert (await w.fake.status(ref_of(iid))).state == "exits_only"  # l'effet est réel…
+    cmd = await get(c, f"/api/v1/commands/{cid}")
+    assert cmd["status"] == "acknowledged" and cmd["verified_at"] is None  # …mais pas observé
+
+    w.fake.set_failure(ref_of(iid), Failure.SLOW, on=False)
+    w.clock.advance(1)
+    await w.worker.run_once()
+    assert (await get(c, f"/api/v1/commands/{cid}"))["status"] == "verified"
+
+
+async def test_i08_pause_et_flatten_passent_devant_une_instance_occupee(stack: Stack) -> None:
+    c, iid = await _running(stack)
+    w = stack.world
+    w.fake.set_failure(ref_of(iid), Failure.SILENT)
+    stop = (await act(c, iid, "stop")).json()["command_id"]
+    await w.worker.run_once()  # `stop` reste envoyé, sans réponse : l'instance est occupée
+    assert (await get(c, f"/api/v1/commands/{stop}"))["status"] == "dispatched"
+    w.fake.set_failure(ref_of(iid), Failure.SILENT, on=False)
+
+    pause = (await act(c, iid, "pause-entries")).json()["command_id"]
+    flatten = (await act(c, iid, "flatten")).json()["command_id"]
+    await w.worker.run_once()
+
+    assert (await get(c, f"/api/v1/commands/{stop}"))["status"] == "dispatched"
+    for cid in (pause, flatten):
+        assert (await get(c, f"/api/v1/commands/{cid}"))["status"] == "verified"
+
+
+async def test_i08_empreinte_d_audit_de_l_expiration_porte_le_statut_precedent(
+    stack: Stack,
+) -> None:
+    c, iid = await _running(stack)
+    w = stack.world
+    w.fake.set_failure(ref_of(iid), Failure.SILENT)
+    cid = (await act(c, iid, "flatten")).json()["command_id"]
+    await w.worker.run_once()
+    w.clock.advance(stack.settings.deadline_flatten_s + 1)
+    await w.worker.run_once()
+    async with w.sessions() as s:
+        row = (
+            await s.execute(
+                select(AuditLog).where(
+                    AuditLog.action == "command.timed_out", AuditLog.target == f"command:{cid}"
+                )
+            )
+        ).scalar_one()
+    assert row.before_hash == fingerprint({"status": "dispatched"})
+    assert row.after_hash == fingerprint({"status": "timed_out"})
+
+
+async def _lifecycle(pg_url: str, path: list[Status]) -> None:
+    """Tente chaque transition en base, puis compare à ce que le cycle de F9 autorise."""
+    engine = make_engine(pg_url)
+    try:
+        sessions = make_session_factory(engine)
+        cid, iid = uuid7(), uuid7()
+        async with sessions.begin() as s:
+            eid = await s.scalar(text("SELECT id FROM engines LIMIT 1"))
+            await s.execute(
+                text(
+                    "INSERT INTO instances (id, engine_id, name, mode, desired_state) "
+                    "VALUES (:i, :e, :n, 'paper', 'exits_only')"
+                ),
+                {"i": iid, "e": eid, "n": str(iid)},
+            )
+            s.add(
+                Command(
+                    id=cid,
+                    instance_id=iid,
+                    type="pause_entries",
+                    actor="user:test",
+                    idempotency_key=str(cid),
+                    correlation_id=cid,
+                    deadline_at=T0,
+                    requested_at=T0,
+                )
+            )
+        state: str = "requested"
+        for target in path:
+            async with sessions.begin() as s:
+                done = await transition(s, cid, target, T0)
+            async with sessions() as s:
+                row = await s.get(Command, cid)
+            assert row is not None
+            allowed = (state, target) in LEGAL
+            assert done is allowed, (state, target)
+            assert row.status == (target if allowed else state)  # un refus ne change rien
+            if allowed:
+                assert getattr(row, f"{target}_at") == T0
+                state = target
+            if state == "verified":  # effet observé seulement après envoi puis accusé
+                assert row.dispatched_at is not None and row.acknowledged_at is not None
+    finally:
+        await engine.dispose()
+
+
+# Le cycle de F9, écrit ici indépendamment du code : toute autre transition est refusée.
+LEGAL = {
+    ("requested", "dispatched"),
+    ("dispatched", "acknowledged"),
+    ("acknowledged", "verified"),
+    ("dispatched", "failed"),
+    *((src, end) for src in RANK for end in ("timed_out", "superseded")),
+}
+
+
+@settings(max_examples=40, deadline=None, suppress_health_check=[HealthCheck.too_slow])
+@given(path=st.lists(st.sampled_from(STATUSES), max_size=8))
+def test_i08_cycle_de_vie_de_la_commande_est_ordonne(migrated_url: str, path: list[Status]) -> None:
+    """Quelle que soit la suite de transitions tentées sur la vraie table : jamais en arrière,
+    jamais de saut d'étape, et un état terminal ne change plus."""
+    asyncio.run(_lifecycle(migrated_url, path))

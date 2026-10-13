@@ -1,0 +1,52 @@
+rules:
+  # CLAUDE.md "Conventions" : tags exacts, jamais `latest` (ni image sans tag).
+  - id: centrade-image-tag-latest-dockerfile
+    languages: [dockerfile]
+    severity: ERROR
+    message: Image de base sans tag exact (`latest` ou absent). Épingler un tag exact.
+    pattern-either:
+      - pattern: FROM $IMAGE:latest
+      - patterns:
+          - pattern: FROM $IMAGE
+          - pattern-not: FROM $IMAGE:$TAG
+          - pattern-not: FROM $IMAGE@$DIGEST
+          - pattern-not: FROM scratch
+  - id: centrade-image-tag-latest-compose
+    languages: [yaml]
+    severity: ERROR
+    message: Image Compose sans tag exact (`latest` ou absent). Épingler un tag exact.
+    paths:
+      include: ["deploy/**", "*.yml", "*.yaml"]
+    patterns:
+      - pattern: |
+          image: $IMAGE
+      - metavariable-regex:
+          metavariable: $IMAGE
+          regex: ^(?!\$)([^:@]+|[^@]+:latest)(@.*)?$
+
+  # Règle absolue 5 : argent en Decimal, jamais float.
+  - id: centrade-float-for-money
+    languages: [python]
+    severity: ERROR
+    message: Montant, prix ou quantité en float. Utiliser Decimal (chaînes décimales).
+    patterns:
+      - pattern-either:
+          - pattern: $VAR = float(...)
+          - pattern: "$VAR: float = ..."
+          - pattern: "$VAR: float"
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: (?i).*(price|prix|amount|montant|qty|quantity|balance|solde|fee|frais|pnl|equity|notional).*
+
+  # Règle absolue 8 : la plateforme n'appelle jamais une fonction d'ordre d'une venue.
+  - id: centrade-venue-order-call
+    languages: [python]
+    severity: ERROR
+    message: Appel d'une fonction d'ordre. La plateforme n'émet aucun ordre (I11, F4).
+    pattern-either:
+      - pattern: $X.create_order(...)
+      - pattern: $X.place_order(...)
+      - pattern: $X.submit_order(...)
+      - pattern: $X.cancel_order(...)
+      - pattern: $X.create_market_order(...)
+      - pattern: $X.create_limit_order(...)

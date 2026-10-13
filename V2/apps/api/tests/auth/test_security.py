@@ -1,0 +1,135 @@
+"""Primitives : argon2id, AES-256-GCM lié à l'utilisateur, TOTP, codes de récupération, débit."""
+
+from datetime import UTC, datetime, timedelta
+
+import pyotp
+import pytest
+from centrade_api.auth import routes, security
+from centrade_core.ids import uuid7
+from cryptography.exceptions import InvalidTag
+
+KEY = bytes(range(32))
+SECRET = "JBSWY3DPEHPK3PXP"  # noqa: S105  # exemple public de la RFC, pas un secret
+NOW = datetime(2026, 10, 10, 12, 0, 15, tzinfo=UTC)
+FULLWIDTH = "".join(chr(0xFF10 + d) for d in range(1, 7))  # chiffres pleine chasse
+
+
+def test_mot_de_passe_hache_en_argon2id_et_verifie() -> None:
+    hashed = security.hash_password("SENTINELLE-a")
+
+    assert hashed.startswith("$argon2id$")
+    assert "SENTINELLE-a" not in hashed
+    assert security.verify_password(hashed, "SENTINELLE-a") is True
+    assert security.verify_password(hashed, "SENTINELLE-b") is False
+
+
+@pytest.mark.parametrize("stored", [None, "", "pas-une-empreinte", "$argon2id$tronquee"])
+def test_empreinte_absente_ou_illisible_ne_verifie_jamais(stored: str | None) -> None:
+    assert security.verify_password(stored, "SENTINELLE-a") is False
+    assert security.verify_password(stored, "") is False
+
+
+def test_empreinte_factice_ne_verifie_jamais_meme_avec_son_mot_de_passe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(security, "_DUMMY_HASH", security.hash_password("SENTINELLE-factice"))
+
+    assert security.verify_password(None, "SENTINELLE-factice") is False
+
+
+def test_secret_totp_chiffre_avec_nonce_unique_et_lie_a_l_utilisateur() -> None:
+    user, other = uuid7(), uuid7()
+
+    nonce, ciphertext = security.encrypt_totp_secret(master_key=KEY, user_id=user, secret=SECRET)
+    nonce2, ciphertext2 = security.encrypt_totp_secret(master_key=KEY, user_id=user, secret=SECRET)
+
+    assert len(nonce) == 12 and nonce != nonce2 and ciphertext != ciphertext2
+    assert SECRET.encode() not in ciphertext
+    assert (
+        security.decrypt_totp_secret(
+            master_key=KEY, user_id=user, nonce=nonce, ciphertext=ciphertext
+        )
+        == SECRET
+    )
+    # Un chiffré recopié sur un autre compte, une autre clé ou un octet altéré : refus.
+    for kwargs in (
+        {"master_key": KEY, "user_id": other, "nonce": nonce, "ciphertext": ciphertext},
+        {"master_key": bytes(32), "user_id": user, "nonce": nonce, "ciphertext": ciphertext},
+        {"master_key": KEY, "user_id": user, "nonce": nonce2, "ciphertext": ciphertext},
+        {"master_key": KEY, "user_id": user, "nonce": nonce, "ciphertext": ciphertext[:-1] + b"!"},
+    ):
+        with pytest.raises(InvalidTag):
+            security.decrypt_totp_secret(**kwargs)  # type: ignore[arg-type]
+
+
+def test_cle_maitre_de_mauvaise_taille_refusee() -> None:
+    with pytest.raises(ValueError, match="32 octets"):
+        security.encrypt_totp_secret(master_key=bytes(16), user_id=uuid7(), secret=SECRET)
+    with pytest.raises(ValueError, match="32 octets"):
+        security.decrypt_totp_secret(
+            master_key=b"", user_id=uuid7(), nonce=bytes(12), ciphertext=bytes(32)
+        )
+
+
+def test_pas_totp_accepte_a_un_pas_pres_et_renvoie_le_pas() -> None:
+    totp = pyotp.TOTP(SECRET)
+    step = totp.timecode(NOW)
+
+    assert security.totp_step(SECRET, totp.at(NOW), NOW) == step
+    assert security.totp_step(SECRET, totp.at(NOW, -1), NOW) == step - 1
+    assert security.totp_step(SECRET, totp.at(NOW, 1), NOW) == step + 1
+    assert security.totp_step(SECRET, totp.at(NOW, -2), NOW) is None
+    assert security.totp_step(SECRET, totp.at(NOW, 2), NOW) is None
+
+
+@pytest.mark.parametrize("code", ["", "12345", "1234567", "abcdef", FULLWIDTH, "12 456", "-12345"])
+def test_code_totp_mal_forme_refuse(code: str) -> None:
+    assert security.totp_step(SECRET, code, NOW) is None
+
+
+def test_codes_de_recuperation_aleatoires_et_haches() -> None:
+    codes = security.new_recovery_codes()
+
+    assert len(codes) == len(set(codes)) == 10
+    assert all(len(c.replace("-", "")) == 16 for c in codes)  # 80 bits : hors de portée hors ligne
+    assert codes != security.new_recovery_codes()
+    hashed = security.recovery_code_hash(codes[0])
+    assert codes[0] not in hashed and len(hashed) == 64
+    assert security.recovery_code_hash(f" {codes[0].lower().replace('-', ' ')} ") == hashed
+    assert security.recovery_code_hash(codes[1]) != hashed
+
+
+def test_jetons_de_session_aleatoires_et_haches() -> None:
+    token = security.new_token()
+
+    assert token != security.new_token()
+    assert len(token) >= 43
+    assert token not in security.token_hash(token)
+
+
+def test_duree_de_verrouillage_progressive_et_bornee() -> None:
+    minutes = [routes.lock_duration(n) for n in range(4, 11)]
+
+    assert minutes[0] is None  # pas avant le 5e échec
+    assert minutes[1:] == [timedelta(minutes=m) for m in (1, 2, 4, 8, 15, 15)]
+    assert routes.lock_duration(10**9) == timedelta(minutes=15)  # ni débordement ni verrou infini
+
+
+def test_limiteur_de_debit_fenetre_fixe_par_cle() -> None:
+    limiter = routes.RateLimiter(limit=2, window=timedelta(seconds=60))
+
+    assert limiter.retry_after("a", NOW) is None
+    assert limiter.retry_after("a", NOW + timedelta(seconds=10)) is None
+    assert limiter.retry_after("a", NOW + timedelta(seconds=20)) == 40
+    assert limiter.retry_after("b", NOW + timedelta(seconds=20)) is None  # clés indépendantes
+    assert limiter.retry_after("a", NOW + timedelta(seconds=60)) is None  # nouvelle fenêtre
+
+
+def test_limiteur_de_debit_ne_grossit_pas_sans_borne() -> None:
+    limiter = routes.RateLimiter(limit=1, window=timedelta(seconds=60))
+
+    for n in range(routes.RateLimiter.MAX_KEYS + 50):
+        limiter.retry_after(f"ip-{n}", NOW)
+    limiter.retry_after("tard", NOW + timedelta(seconds=61))
+
+    assert limiter.size() <= routes.RateLimiter.MAX_KEYS

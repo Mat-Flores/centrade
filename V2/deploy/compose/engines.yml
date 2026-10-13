@@ -1,0 +1,75 @@
+# Profil engines (SPEC §5, §13) : socket proxy et réseaux des moteurs. À composer avec core.yml
+# (voir COMPOSE_ENGINES du Makefile). Les conteneurs de moteurs n'y figurent pas : le runner les
+# crée avec le SDK Docker, ils n'appartiennent pas au projet Compose et survivent à `down` (I9).
+# Sources : https://github.com/Tecnativa/docker-socket-proxy
+name: centrade
+
+services:
+  docker-socket-proxy:
+    profiles: [engines]
+    image: tecnativa/docker-socket-proxy:v0.5.0@sha256:1f5038b54f06c3e18422902cf00ba21803d1c97805aae032e5e6673d532d3459
+    restart: unless-stopped
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    read_only: true
+    tmpfs: [/run, /tmp]
+    environment:
+      # Opérations de conteneurs seulement : lister, inspecter, journaux (GET), puis créer,
+      # démarrer, arrêter, supprimer (POST, DELETE). `info` donne la mémoire de l'hôte (admission).
+      CONTAINERS: 1
+      POST: 1
+      INFO: 1
+      # Refusés explicitement (valeurs par défaut, écrites pour qu'une relecture les voie) :
+      # exec, construction, images (donc aucun téléchargement à l'exécution : `make engines-pull`),
+      # volumes, secrets, configs, swarm, services, tâches, nœuds, réseaux, plugins, système.
+      EXEC: 0
+      BUILD: 0
+      COMMIT: 0
+      IMAGES: 0
+      DISTRIBUTION: 0
+      VOLUMES: 0
+      SECRETS: 0
+      CONFIGS: 0
+      SWARM: 0
+      SERVICES: 0
+      TASKS: 0
+      NODES: 0
+      NETWORKS: 0
+      PLUGINS: 0
+      SYSTEM: 0
+      AUTH: 0
+      SESSION: 0
+      GRPC: 0
+      EVENTS: 0
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks: [docker]
+
+  # Le worker pilote Docker (réseau `docker`) et joint les moteurs (réseau `engines`). Les réseaux
+  # app, data et edge de core.yml sont inchangés ; le répertoire d'exécution (tenu en mémoire sur
+  # l'hôte) est monté au même chemin, car Docker résout les montages sur l'hôte. À préparer :
+  # `sudo install -d -m 700 -o 10001 /run/centrade` (recréé à chaque redémarrage de l'hôte).
+  # Clé maître : par Docker secret (fichier, jamais variable), et dans ce profil seulement. Le
+  # worker en a besoin pour les identifiants de l'API native des moteurs (SecretStore, usage
+  # `engine_api`) ; sans moteur à conteneurs, core.yml ne la lui donne pas.
+  worker:
+    environment:
+      DOCKER_HOST: tcp://docker-socket-proxy:2375
+      ENGINE_RUNTIME_DIR: ${ENGINE_RUNTIME_DIR:-/run/centrade}
+      CENTRADE_MASTER_KEY_FILE: /run/secrets/master_key
+    secrets: [master_key]
+    volumes:
+      - ${ENGINE_RUNTIME_DIR:-/run/centrade}:${ENGINE_RUNTIME_DIR:-/run/centrade}
+    networks: [docker, engines]
+    depends_on:
+      docker-socket-proxy: {condition: service_started}
+
+networks:
+  # Worker et socket proxy seulement ; sans route vers l'extérieur.
+  docker:
+    internal: true
+  # Moteurs, worker (et le Risk service à M3). Interne : aucune sortie vers Internet. Les sorties
+  # des moteurs vers les venues (liste blanche de domaines) sont un sujet de M7 ; d'ici là, les
+  # moteurs ne tournent qu'en paper sur des données locales ou une doublure.
+  engines:
+    internal: true

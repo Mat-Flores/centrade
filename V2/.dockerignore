@@ -1,0 +1,20 @@
+# Liste blanche : seul ce dont les builds ont besoin entre dans le contexte.
+*
+!pyproject.toml
+!uv.lock
+!apps/api/centrade_api
+!apps/worker/centrade_worker
+!packages/core
+!packages/adapters/fake/centrade_fake
+!packages/adapters/freqtrade/centrade_freqtrade
+!alembic.ini
+!deploy/db
+!apps/web
+!deploy/caddy/build
+# Aide aux tests (remise à zéro de Redis et de tables) : jamais dans une image.
+apps/api/centrade_api/testing.py
+apps/worker/centrade_worker/testing.py
+**/__pycache__
+**/node_modules
+**/dist
+**/.env*

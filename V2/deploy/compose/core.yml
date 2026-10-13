@@ -1,0 +1,198 @@
+# Profil core (SPEC §5, §13). Sources : https://docs.docker.com/reference/compose-file/
+name: centrade
+
+x-hardened: &hardened
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  read_only: true
+  restart: unless-stopped
+
+# Réglages des conteneurs applicatifs : chemins de secrets seulement, aucune valeur secrète.
+# Le rôle Postgres applicatif n'a ni DDL ni écriture sur audit_log (deploy/db/provision_roles.py).
+x-app-env: &app-env
+  CENTRADE_LOG_LEVEL: ${CENTRADE_LOG_LEVEL:-INFO}
+  CENTRADE_DB_USER: centrade_app
+  CENTRADE_POSTGRES_PASSWORD_FILE: /run/secrets/app_db_password
+  CENTRADE_REDIS_URL: redis://redis:6379/0
+  CENTRADE_PUBLIC_ORIGIN: https://${CENTRADE_HOSTNAME:-localhost}:${CENTRADE_HTTPS_PORT:-8443}
+
+x-app-image: &app-image
+  build:
+    context: ../..
+    dockerfile: apps/api/Dockerfile
+  image: centrade/api:dev
+  pull_policy: build # jamais tirée d'un registre : le nom est résoluble sur Docker Hub
+
+services:
+  postgres:
+    <<: *hardened
+    profiles: [core]
+    image: timescale/timescaledb:2.30.2-pg16@sha256:6f139d56042989bd35f50ba5986e492cd32e35cc6778c50be2659add298dc09f
+    user: "70:70"
+    environment:
+      POSTGRES_USER: centrade
+      POSTGRES_DB: centrade
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password]
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    tmpfs:
+      - /tmp
+      - /var/run/postgresql:uid=70,gid=70,mode=0755
+    networks: [data]
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "centrade", "-d", "centrade"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 20s
+
+  redis:
+    <<: *hardened
+    profiles: [core]
+    image: redis:7.4.11-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
+    user: "999:1000"
+    # Le fichier secret ne contient que `requirepass <valeur>` : rien en ligne de commande.
+    command: ["redis-server", "/run/secrets/redis_conf", "--appendonly", "yes"]
+    secrets: [redis_conf]
+    volumes:
+      - redis_data:/data
+    networks: [data]
+    healthcheck:
+      test: ["CMD-SHELL", "REDISCLI_AUTH=$$(sed -n 's/^requirepass //p' /run/secrets/redis_conf) redis-cli ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  # Exécution unique : migrations (propriétaire de la base), puis droits du rôle applicatif.
+  migrate:
+    <<: [*hardened, *app-image]
+    profiles: [core]
+    restart: "no"
+    command: ["sh", "-c", "alembic upgrade head && python /app/deploy/db/provision_roles.py"]
+    environment:
+      <<: *app-env
+      CENTRADE_DB_USER: centrade
+      CENTRADE_POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+      CENTRADE_APP_DB_USER: centrade_app
+      CENTRADE_APP_DB_PASSWORD_FILE: /run/secrets/app_db_password
+    secrets: [postgres_password, app_db_password]
+    networks: [data]
+    depends_on:
+      postgres: {condition: service_healthy}
+
+  api:
+    <<: [*hardened, *app-image]
+    profiles: [core]
+    # Uvicorn ne croit X-Forwarded-For que de Caddy (adresse fixe sur edge), jamais de `*`.
+    command: ["uvicorn", "centrade_api.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "172.31.250.10"]
+    environment:
+      <<: *app-env
+      CENTRADE_REDIS_CONF_FILE: /run/secrets/redis_conf
+      CENTRADE_MASTER_KEY_FILE: /run/secrets/master_key # l'API seule : TOTP, puis SecretStore
+    secrets: [app_db_password, master_key, redis_conf]
+    tmpfs: [/tmp]
+    networks: [edge, app, data]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/api/v1/system/health', timeout=2)"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+
+  worker:
+    <<: [*hardened, *app-image]
+    profiles: [core]
+    command: ["python", "-m", "centrade_worker"]
+    environment:
+      <<: *app-env
+      CENTRADE_REDIS_CONF_FILE: /run/secrets/redis_conf
+    secrets: [app_db_password, redis_conf]
+    tmpfs: [/tmp]
+    networks: [app, data]
+    depends_on:
+      migrate: {condition: service_completed_successfully}
+      redis: {condition: service_healthy}
+    healthcheck:
+      # Sain tant que sa clé de battement (TTL court) existe dans Redis.
+      test: ["CMD", "python", "-c", "import sys; from redis import Redis; from centrade_core.bus import HEARTBEAT_KEY; from centrade_core.settings import get_settings; sys.exit(0 if Redis.from_url(get_settings().redis_url, socket_timeout=2).exists(HEARTBEAT_KEY) else 1)"]
+      interval: 5s
+      timeout: 4s
+      retries: 6
+      start_period: 20s
+
+  web:
+    <<: *hardened
+    profiles: [core]
+    build:
+      context: ../..
+      dockerfile: deploy/caddy/Dockerfile
+      target: web
+    image: centrade/web:dev
+    pull_policy: build
+    networks: [edge]
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  caddy:
+    <<: *hardened
+    profiles: [core]
+    build:
+      context: ../..
+      dockerfile: deploy/caddy/Dockerfile
+      target: proxy
+    image: centrade/caddy:dev
+    pull_policy: build
+    environment:
+      CENTRADE_HOSTNAME: ${CENTRADE_HOSTNAME:-localhost}
+    ports:
+      - "${CENTRADE_BIND_ADDR:-127.0.0.1}:${CENTRADE_HTTPS_PORT:-8443}:8443"
+    volumes:
+      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    tmpfs:
+      - /config:uid=10002,mode=0700
+    networks:
+      edge:
+        ipv4_address: 172.31.250.10 # adresse que l'API croit pour X-Forwarded-For
+    depends_on:
+      api: {condition: service_healthy}
+      web: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+networks:
+  edge:
+    ipam:
+      config:
+        - subnet: 172.31.250.0/24
+  # API et worker seulement ; sans route vers l'extérieur.
+  app:
+    internal: true
+  # Postgres et Redis ; joignables par l'API, le worker et migrate seulement.
+  data:
+    internal: true
+
+volumes:
+  postgres_data: {}
+  redis_data: {}
+  caddy_data: {}
+
+secrets:
+  app_db_password:
+    file: ../../secrets/app_db_password
+  master_key:
+    file: ../../secrets/master_key
+  postgres_password:
+    file: ../../secrets/postgres_password
+  redis_conf:
+    file: ../../secrets/redis.conf
