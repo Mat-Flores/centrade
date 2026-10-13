@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pyotp
 import pytest
-from centrade_api.auth import routes, security
+from centrade_api.auth import security, throttle
 from centrade_core.ids import uuid7
 from cryptography.exceptions import InvalidTag
 
@@ -108,15 +108,15 @@ def test_jetons_de_session_aleatoires_et_haches() -> None:
 
 
 def test_duree_de_verrouillage_progressive_et_bornee() -> None:
-    minutes = [routes.lock_duration(n) for n in range(4, 11)]
+    minutes = [throttle.lock_duration(n) for n in range(4, 11)]
 
     assert minutes[0] is None  # pas avant le 5e échec
     assert minutes[1:] == [timedelta(minutes=m) for m in (1, 2, 4, 8, 15, 15)]
-    assert routes.lock_duration(10**9) == timedelta(minutes=15)  # ni débordement ni verrou infini
+    assert throttle.lock_duration(10**9) == timedelta(minutes=15)  # ni débordement ni verrou infini
 
 
 def test_limiteur_de_debit_fenetre_fixe_par_cle() -> None:
-    limiter = routes.RateLimiter(limit=2, window=timedelta(seconds=60))
+    limiter = throttle.RateLimiter(limit=2, window=timedelta(seconds=60))
 
     assert limiter.retry_after("a", NOW) is None
     assert limiter.retry_after("a", NOW + timedelta(seconds=10)) is None
@@ -126,10 +126,10 @@ def test_limiteur_de_debit_fenetre_fixe_par_cle() -> None:
 
 
 def test_limiteur_de_debit_ne_grossit_pas_sans_borne() -> None:
-    limiter = routes.RateLimiter(limit=1, window=timedelta(seconds=60))
+    limiter = throttle.RateLimiter(limit=1, window=timedelta(seconds=60))
 
-    for n in range(routes.RateLimiter.MAX_KEYS + 50):
+    for n in range(throttle.RateLimiter.MAX_KEYS + 50):
         limiter.retry_after(f"ip-{n}", NOW)
     limiter.retry_after("tard", NOW + timedelta(seconds=61))
 
-    assert limiter.size() <= routes.RateLimiter.MAX_KEYS
+    assert limiter.size() <= throttle.RateLimiter.MAX_KEYS

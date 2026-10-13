@@ -24,7 +24,7 @@ from centrade_core.settings import Settings, get_settings
 from centrade_worker.testing import World
 from fastapi import FastAPI
 
-from centrade_api.auth import routes, security
+from centrade_api.auth import security, throttle
 from centrade_api.core.deps import get_db, get_redis, get_session_factory, utcnow
 from centrade_api.main import create_app
 
@@ -76,7 +76,7 @@ class Stack:
             headers={"Origin": ORIGIN},
         )
         self._clients.append(c)
-        routes.limiter.reset()  # compteur de connexions global au processus
+        throttle.limiter.reset()  # compteur de connexions global au processus
         if signed_in:
             acc = self.last_account = await self.account(role)
             r = await c.post(

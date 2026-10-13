@@ -24,8 +24,8 @@ from centrade_api.auth import (
     current_user,
     require_recent_totp,
     require_role,
-    routes,
     security,
+    throttle,
 )
 from centrade_api.core.deps import get_db, utcnow
 from centrade_api.main import create_app
@@ -117,7 +117,7 @@ def app(
     application.dependency_overrides[get_db] = _db
     application.dependency_overrides[utcnow] = clock
     application.dependency_overrides[get_settings] = lambda: settings
-    routes.limiter.reset()
+    throttle.limiter.reset()
 
     # Routes témoins : aucune route de M1 n'emploie encore les rôles ni la ré-authentification.
     for role in ("viewer", "operator", "admin"):
