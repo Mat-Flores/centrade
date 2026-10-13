@@ -40,16 +40,16 @@ def enter(s: Any) -> Any:
     )  # fmt: skip
 
 
-def test_dry_run_accepte(strategy_cls: Any) -> None:
+def test_dry_run_is_accepted(strategy_cls: Any) -> None:
     assert enter(strategy_cls({"dry_run": True})) is True
 
 
 @pytest.mark.parametrize("cfg", [{"dry_run": False}, {}, {"dry_run": "true"}, {"dry_run": 1}])
-def test_hors_dry_run_refuse(strategy_cls: Any, cfg: dict[str, Any]) -> None:
+def test_non_dry_run_is_rejected(strategy_cls: Any, cfg: dict[str, Any]) -> None:
     assert enter(strategy_cls(cfg)) is False
 
 
-def test_exception_interne_refuse_sans_lever(strategy_cls: Any) -> None:
+def test_internal_exception_is_rejected_without_raising(strategy_cls: Any) -> None:
     def boom(self: Any, **_: Any) -> bool:
         raise RuntimeError("panne")
 
@@ -57,12 +57,12 @@ def test_exception_interne_refuse_sans_lever(strategy_cls: Any) -> None:
     assert enter(strategy_cls({"dry_run": True})) is False
 
 
-def test_reponse_non_booleenne_refusee(strategy_cls: Any) -> None:
+def test_non_boolean_answer_is_rejected(strategy_cls: Any) -> None:
     type.__setattr__(strategy_cls, "_entry_allowed", lambda self, **_: "oui")
     assert enter(strategy_cls({"dry_run": True})) is False
 
 
-def test_config_illisible_refuse_sans_lever(strategy_cls: Any) -> None:
+def test_unreadable_config_is_rejected_without_raising(strategy_cls: Any) -> None:
     class Broken(dict[str, Any]):
         def get(self, *a: Any) -> Any:
             raise RuntimeError("panne")
@@ -72,7 +72,7 @@ def test_config_illisible_refuse_sans_lever(strategy_cls: Any) -> None:
     assert enter(s) is False
 
 
-def test_sortie_jamais_bloquee_et_chemins_d_entree_fermes(strategy_cls: Any) -> None:
+def test_exit_is_never_blocked_and_entry_paths_are_closed(strategy_cls: Any) -> None:
     s = strategy_cls({"dry_run": False})
     assert s.confirm_trade_exit(pair="BTC/USDT", exit_reason="stop_loss") is True
     assert s.adjust_trade_position(trade=None) is None
@@ -80,7 +80,7 @@ def test_sortie_jamais_bloquee_et_chemins_d_entree_fermes(strategy_cls: Any) -> 
     assert s.leverage(pair="BTC/USDT", proposed_leverage=3.0) == 1.0
 
 
-def test_mode_capture_a_la_construction(strategy_cls: Any) -> None:
+def test_mode_is_captured_at_construction(strategy_cls: Any) -> None:
     cfg = {"dry_run": False}
     s = strategy_cls(cfg)
     cfg["dry_run"] = True  # modifié après coup : sans effet
@@ -91,7 +91,7 @@ def test_mode_capture_a_la_construction(strategy_cls: Any) -> None:
     assert enter(s2) is False
 
 
-def test_sous_classe_qui_redefinit_un_nom_protege_est_refusee(strategy_cls: Any) -> None:
+def test_subclass_redefining_a_protected_name_is_rejected(strategy_cls: Any) -> None:
     for name in ("_entry_allowed", "confirm_trade_entry", "leverage", "adjust_exit_price",
                  "_boot_dry_run", "__init__", "__setattr__", "_intact"):  # fmt: skip
         with pytest.raises(TypeError, match=name):
@@ -102,7 +102,7 @@ HOOKS = ("_entry_allowed", "confirm_trade_entry", "confirm_trade_exit", "leverag
 
 
 @pytest.mark.parametrize("name", HOOKS)
-def test_nom_protege_non_reaffectable_sur_la_classe_ni_sur_l_instance(
+def test_protected_name_cannot_be_reassigned_on_the_class_or_the_instance(
     strategy_cls: Any, name: str
 ) -> None:
     sub = type("S", (strategy_cls,), {})
@@ -115,7 +115,7 @@ def test_nom_protege_non_reaffectable_sur_la_classe_ni_sur_l_instance(
     assert enter(s) is True  # rien n'a changé
 
 
-def test_mode_non_reaffectable_apres_la_construction(strategy_cls: Any) -> None:
+def test_mode_cannot_be_reassigned_after_construction(strategy_cls: Any) -> None:
     s = strategy_cls({"dry_run": False})
     with pytest.raises(TypeError):
         s._boot_dry_run = True
@@ -123,7 +123,7 @@ def test_mode_non_reaffectable_apres_la_construction(strategy_cls: Any) -> None:
     assert enter(s) is False
 
 
-def test_classe_placee_avant_la_base_ne_masque_aucun_nom_protege(strategy_cls: Any) -> None:
+def test_class_placed_before_the_base_does_not_shadow_any_protected_name(strategy_cls: Any) -> None:
     for name in ("confirm_trade_entry", "_entry_allowed", "_intact"):
         mixin = type("Mixin", (), {name: lambda *a, **k: True})
         with pytest.raises(TypeError, match=name):
@@ -131,7 +131,9 @@ def test_classe_placee_avant_la_base_ne_masque_aucun_nom_protege(strategy_cls: A
 
 
 @pytest.mark.parametrize("name", ["_entry_allowed", "_boot_dry_run", "leverage"])
-def test_hook_refuse_si_un_nom_protege_est_masque_malgre_tout(strategy_cls: Any, name: str) -> None:
+def test_hook_rejects_when_a_protected_name_is_shadowed_anyway(
+    strategy_cls: Any, name: str
+) -> None:
     """Écritures qui évitent `__setattr__` (inaccessibles à une stratégie contrôlée) : le hook
     constate à l'appel que le type ne résout plus les noms de la base, et refuse."""
     sub = type("S", (strategy_cls,), {})
@@ -145,7 +147,7 @@ def test_hook_refuse_si_un_nom_protege_est_masque_malgre_tout(strategy_cls: Any,
         assert enter(s2) is False
 
 
-def test_les_ecritures_du_moteur_sur_la_strategie_restent_possibles(strategy_cls: Any) -> None:
+def test_engine_writes_to_the_strategy_remain_possible(strategy_cls: Any) -> None:
     sub: Any = type("S", (strategy_cls,), {"stoploss": -0.1})
     s = sub({"dry_run": True})
     s.stoploss, s.dp, s.wallets = -0.05, object(), None  # StrategyResolver, FreqtradeBot
@@ -153,7 +155,7 @@ def test_les_ecritures_du_moteur_sur_la_strategie_restent_possibles(strategy_cls
     assert enter(s) is True
 
 
-def test_attributs_exiges_par_freqtrade_restent_redefinissables(strategy_cls: Any) -> None:
+def test_attributes_required_by_freqtrade_remain_overridable(strategy_cls: Any) -> None:
     sub = type(
         "S",
         (strategy_cls,),
@@ -163,7 +165,7 @@ def test_attributs_exiges_par_freqtrade_restent_redefinissables(strategy_cls: An
     assert sub({"dry_run": True}).timeframe == "5m"
 
 
-def test_noms_proteges_statique_et_execution_concordent(strategy_cls: Any) -> None:
+def test_protected_names_agree_between_static_and_runtime(strategy_cls: Any) -> None:
     import sys
 
     from centrade_freqtrade.checks import PROTECTED_NAMES

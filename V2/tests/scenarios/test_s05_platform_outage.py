@@ -13,7 +13,7 @@ from sqlalchemy import select
 from worker_support import RunnerDouble, alerts, commands, container, instance, spy
 
 
-async def test_s05_plateforme_arretee_5_minutes_puis_relancee(stack: Stack) -> None:
+async def test_s05_platform_outage_of_5_minutes_then_restart(stack: Stack) -> None:
     w = stack.world
     c = await stack.client("operator")
     iid = str((await create_instance(c))["id"])

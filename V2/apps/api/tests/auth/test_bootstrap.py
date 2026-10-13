@@ -22,7 +22,7 @@ async def no_admin(session_factory: async_sessionmaker[AsyncSession]) -> None:
 
 
 @pytest.mark.usefixtures("no_admin")
-async def test_cree_le_premier_admin_qui_peut_se_connecter(
+async def test_creates_the_first_admin_who_can_log_in(
     session_factory: async_sessionmaker[AsyncSession],
     settings: Settings,
     client: httpx.AsyncClient,
@@ -63,7 +63,7 @@ async def test_cree_le_premier_admin_qui_peut_se_connecter(
 
 
 @pytest.mark.usefixtures("no_admin")
-async def test_refuse_s_il_existe_deja_un_admin(
+async def test_refuses_when_an_admin_already_exists(
     session_factory: async_sessionmaker[AsyncSession], settings: Settings
 ) -> None:
     await bootstrap.create_first_admin(
@@ -88,7 +88,7 @@ async def test_refuse_s_il_existe_deja_un_admin(
     ("email", "password"),
     [("sans-arobase", PASSWORD), ("", PASSWORD), (EMAIL, "court"), (EMAIL, "x" * 11)],
 )
-async def test_refuse_un_identifiant_ou_un_mot_de_passe_faible(
+async def test_refuses_an_invalid_username_or_weak_password(
     session_factory: async_sessionmaker[AsyncSession],
     settings: Settings,
     email: str,

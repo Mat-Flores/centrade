@@ -6,7 +6,7 @@ from centrade_fake.engine import Failure
 from centrade_worker.testing import T0
 
 
-async def test_i01_etat_affiche_porte_horodatage_observation(stack: Stack) -> None:
+async def test_i01_displayed_state_carries_observation_timestamp(stack: Stack) -> None:
     c = await stack.client("operator")
     created = await create_instance(c)
     await stack.world.worker.run_once()  # déploiement, puis premier relevé
@@ -20,7 +20,7 @@ async def test_i01_etat_affiche_porte_horodatage_observation(stack: Stack) -> No
     assert page["server_time"] and any(i["id"] == created["id"] for i in page["items"])
 
 
-async def test_i01_etat_perime_au_dela_du_seuil(stack: Stack) -> None:
+async def test_i01_state_is_stale_beyond_threshold(stack: Stack) -> None:
     c = await stack.client("operator")
     created = await create_instance(c)
     await stack.world.worker.run_once()
@@ -34,7 +34,7 @@ async def test_i01_etat_perime_au_dela_du_seuil(stack: Stack) -> None:
     assert inst["state"]["observed_at"] and inst["server_time"] > inst["state"]["observed_at"]
 
 
-async def test_i01_etat_inconnu_affiche_inconnu(stack: Stack) -> None:
+async def test_i01_unknown_state_is_displayed_as_unknown(stack: Stack) -> None:
     c = await stack.client("operator")
     created = await create_instance(c, failures=["silent"])
     await stack.world.worker.run_once()
@@ -51,7 +51,7 @@ async def test_i01_etat_inconnu_affiche_inconnu(stack: Stack) -> None:
     assert after["state"]["value"] == "unknown" and after["observed_mode"]["value"] == "unknown"
 
 
-async def test_i01_etat_voulu_jamais_presente_comme_observe(stack: Stack) -> None:
+async def test_i01_desired_state_is_never_shown_as_observed(stack: Stack) -> None:
     c = await stack.client("operator")
     created = await create_instance(c)  # jamais observé : le worker n'a pas tourné
     assert created["desired_state"] == "exits_only"

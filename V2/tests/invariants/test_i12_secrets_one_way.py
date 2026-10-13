@@ -16,7 +16,7 @@ S = "SENTINELLE-{}-0xDEADBEEF"
 
 
 @pytest.fixture
-def sortie() -> Iterator[io.StringIO]:
+def output() -> Iterator[io.StringIO]:
     buf = io.StringIO()
     configure_logging(stream=buf)
     yield buf
@@ -24,9 +24,9 @@ def sortie() -> Iterator[io.StringIO]:
     logging.getLogger().handlers.clear()
 
 
-def test_i12_logs_masquent_les_valeurs_sentinelles(sortie: io.StringIO) -> None:
-    sentinelles = [S.format(i) for i in range(1, 36)]
-    s = iter(sentinelles)
+def test_i12_logs_mask_sentinel_values(output: io.StringIO) -> None:
+    sentinels = [S.format(i) for i in range(1, 36)]
+    s = iter(sentinels)
     log = structlog.get_logger()
 
     # Par nom de clé, à plat, dans des structures imbriquées et sous différentes casses.
@@ -86,18 +86,18 @@ def test_i12_logs_masquent_les_valeurs_sentinelles(sortie: io.StringIO) -> None:
             except RuntimeError:
                 log.exception("trace")
 
-    reste = len(list(s))
-    assert reste < 5  # presque toutes les sentinelles ont servi
-    sortie_texte = sortie.getvalue()
-    for sentinelle in sentinelles[: len(sentinelles) - reste]:
-        assert sentinelle not in sortie_texte, sentinelle
-    assert "401" in sortie_texte and "status_code" in sortie_texte  # `status_code` reste lisible
-    assert "@redis:6379/0" in sortie_texte and "@postgres:5432/centrade" in sortie_texte
-    assert MASK in sortie_texte
-    assert "visible-001" in sortie_texte  # on masque les secrets, pas tout le reste
+    leftover = len(list(s))
+    assert leftover < 5  # presque toutes les sentinelles ont servi
+    output_text = output.getvalue()
+    for sentinel in sentinels[: len(sentinels) - leftover]:
+        assert sentinel not in output_text, sentinel
+    assert "401" in output_text and "status_code" in output_text  # `status_code` reste lisible
+    assert "@redis:6379/0" in output_text and "@postgres:5432/centrade" in output_text
+    assert MASK in output_text
+    assert "visible-001" in output_text  # on masque les secrets, pas tout le reste
 
 
-async def test_i12_erreur_sql_sans_les_parametres(migrated_url: str) -> None:
+async def test_i12_sql_error_omits_parameters(migrated_url: str) -> None:
     engine = make_engine(migrated_url)
     try:
         async with engine.connect() as c:

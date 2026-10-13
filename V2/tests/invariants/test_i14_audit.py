@@ -26,7 +26,7 @@ async def _write(factory: async_sessionmaker[AsyncSession], n: int) -> None:
         )
 
 
-async def test_i14_journal_d_audit_inalterable(
+async def test_i14_audit_log_is_tamper_proof(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     for n in range(3):
@@ -66,7 +66,7 @@ async def test_i14_journal_d_audit_inalterable(
         assert await verify_chain(s) is None
 
 
-async def test_i14_ecritures_concurrentes_sans_fourche(
+async def test_i14_concurrent_writes_do_not_fork_the_chain(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     await asyncio.gather(*(_write(session_factory, n) for n in range(12)))
@@ -74,7 +74,7 @@ async def test_i14_ecritures_concurrentes_sans_fourche(
         assert await verify_chain(s) is None
 
 
-def test_i14_empreinte_deterministe_et_sans_valeur() -> None:
+def test_i14_fingerprint_is_deterministic_and_carries_no_value() -> None:
     assert fingerprint({"a": 1, "b": 2}) == fingerprint({"b": 2, "a": 1})
     assert "secret-sentinelle" not in fingerprint({"k": "secret-sentinelle"})
 
@@ -85,7 +85,7 @@ async def _audit_for(stack: Stack, *targets: str) -> list[AuditLog]:
         return list(rows)
 
 
-async def test_i14_toute_action_ecrit_une_ligne_d_audit_avec_auteur(stack: Stack) -> None:
+async def test_i14_every_action_writes_an_audit_row_with_its_author(stack: Stack) -> None:
     changing = {
         (m, p)
         for ctx in iter_route_contexts(stack.app.routes)
@@ -144,7 +144,7 @@ async def test_i14_toute_action_ecrit_une_ligne_d_audit_avec_auteur(stack: Stack
     assert humans and all(r.actor == f"user:{me['id']}" for r in humans), me
 
 
-async def test_i14_action_d_automatisme_attribuee_a_son_auteur(stack: Stack) -> None:
+async def test_i14_automation_action_is_attributed_to_its_author(stack: Stack) -> None:
     c = await stack.client("operator")
     created = await create_instance(c)
     iid = created["id"]

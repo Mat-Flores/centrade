@@ -63,7 +63,7 @@ async def _command(stack: Stack, iid: str, type_: str, args: dict[str, Any] | No
     return cmd.id
 
 
-async def test_fermeture_d_une_position_envoyee_et_verifiee_par_l_instantane(stack: Stack) -> None:
+async def test_position_close_is_sent_and_verified_by_the_snapshot(stack: Stack) -> None:
     c, iid, ref = await _trading(stack)
     w = stack.world
     target = (await get(c, f"/api/v1/positions?instance_id={iid}"))["items"][0]
@@ -82,7 +82,7 @@ async def test_fermeture_d_une_position_envoyee_et_verifiee_par_l_instantane(sta
     assert (await w.fake.status(ref)).state == "running"  # ni pause ni arrêt
 
 
-async def test_annulation_d_un_ordre_d_entree_envoyee_et_verifiee(stack: Stack) -> None:
+async def test_entry_order_cancel_is_sent_and_verified(stack: Stack) -> None:
     c, iid, ref = await _trading(stack)
     w = stack.world
     (order,) = [
@@ -103,7 +103,7 @@ async def test_annulation_d_un_ordre_d_entree_envoyee_et_verifiee(stack: Stack) 
     assert held  # les positions ne sont pas touchées
 
 
-async def test_annulation_refuse_un_ordre_qui_n_est_pas_une_entree(stack: Stack) -> None:
+async def test_cancel_rejects_an_order_that_is_not_an_entry(stack: Stack) -> None:
     c, iid, ref = await _trading(stack)
     w = stack.world
     exit_order = EngineOrder(
@@ -137,7 +137,7 @@ async def test_annulation_refuse_un_ordre_qui_n_est_pas_une_entree(stack: Stack)
     assert exit_order.order_id in {o.order_id for o in (await w.fake.snapshot(ref)).orders}
 
 
-async def test_i04_fermeture_et_annulation_jamais_retenues_par_la_verification_de_f9(
+async def test_i04_close_and_cancel_are_never_held_back_by_the_f9_check(
     stack: Stack,
 ) -> None:
     c, iid, ref = await _trading(stack)
@@ -173,7 +173,7 @@ async def test_i04_fermeture_et_annulation_jamais_retenues_par_la_verification_d
         assert (await get(c, f"/api/v1/commands/{cid}"))["status"] == "verified"
 
 
-async def test_fermeture_sans_reponse_du_moteur_expire_et_se_voit(stack: Stack) -> None:
+async def test_close_without_engine_response_times_out_and_is_visible(stack: Stack) -> None:
     c, iid, ref = await _trading(stack)
     w = stack.world
     position_id = (await w.fake.snapshot(ref)).positions[0].position_id

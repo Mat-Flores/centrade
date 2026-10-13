@@ -26,7 +26,7 @@ async def _rows(url: str, sql: str) -> list[Any]:
         await engine.dispose()
 
 
-def test_migration_head_hypertable_et_downgrade(
+def test_migration_head_hypertable_and_downgrade(
     pg_url: str, make_alembic_config: Callable[[str], Config]
 ) -> None:
     asyncio.run(_rows(pg_url, "CREATE DATABASE migtest"))
@@ -62,7 +62,9 @@ async def _instance(s: AsyncSession) -> Any:
     return iid
 
 
-async def test_instances_mode_immuable(session_factory: async_sessionmaker[AsyncSession]) -> None:
+async def test_instances_mode_is_immutable(
+    session_factory: async_sessionmaker[AsyncSession],
+) -> None:
     async with session_factory() as s, s.begin():
         iid = await _instance(s)
     async with session_factory() as s:
@@ -70,7 +72,7 @@ async def test_instances_mode_immuable(session_factory: async_sessionmaker[Async
             await s.execute(text("UPDATE instances SET mode = 'live' WHERE id = :i"), {"i": iid})
 
 
-async def test_events_unicite_instance_seq_ts(
+async def test_events_are_unique_per_instance_seq_ts(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     ins = (
@@ -85,7 +87,7 @@ async def test_events_unicite_instance_seq_ts(
             await s.execute(text(ins), {"id": uuid7(), "i": iid})
 
 
-def test_downgrade_0003_avec_deux_positions_sur_le_meme_instrument(
+def test_downgrade_0003_with_two_positions_on_the_same_instrument(
     pg_url: str, make_alembic_config: Callable[[str], Config]
 ) -> None:
     asyncio.run(_rows(pg_url, "CREATE DATABASE migdown"))
@@ -114,7 +116,7 @@ def test_downgrade_0003_avec_deux_positions_sur_le_meme_instrument(
     command.upgrade(cfg, "head")
 
 
-def test_migration_0005_montee_descente_et_donnees_m1(
+def test_migration_0005_upgrade_downgrade_and_m1_data(
     pg_url: str, make_alembic_config: Callable[[str], Config]
 ) -> None:
     asyncio.run(_rows(pg_url, "CREATE DATABASE mig0005"))
@@ -152,7 +154,7 @@ async def _version(s: AsyncSession) -> Any:
     return sid, vid
 
 
-async def test_strategy_versions_immuable_sauf_statut(
+async def test_strategy_versions_are_immutable_except_status(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     async with session_factory() as s, s.begin():
@@ -173,7 +175,7 @@ async def test_strategy_versions_immuable_sauf_statut(
         )
 
 
-async def test_strategy_versions_unicite_strategie_numero(
+async def test_strategy_versions_are_unique_per_strategy_number(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     async with session_factory() as s, s.begin():
@@ -188,7 +190,7 @@ async def test_strategy_versions_unicite_strategie_numero(
             )  # fmt: skip
 
 
-async def test_orders_client_order_id_unique(
+async def test_orders_client_order_id_is_unique(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     ins = (

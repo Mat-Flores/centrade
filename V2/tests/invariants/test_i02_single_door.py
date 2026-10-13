@@ -16,7 +16,7 @@ modes = st.sampled_from(get_args(Mode))
 
 
 @given(modes)
-def test_i02_config_generee_desactive_interfaces_natives(mode: Mode) -> None:
+def test_i02_generated_config_disables_native_interfaces(mode: Mode) -> None:
     spec = make_spec(mode)
     values = render_config(spec).values
     doc = json.loads(config_file(spec))
@@ -29,14 +29,14 @@ def test_i02_config_generee_desactive_interfaces_natives(mode: Mode) -> None:
 
 
 @given(modes)
-def test_i02_entree_manuelle_forcee_desactivee(mode: Mode) -> None:
+def test_i02_manual_entry_is_forced_off(mode: Mode) -> None:
     values = render_config(make_spec(mode)).values
     assert values["force_entry_enable"] == "false"  # /forceenter refusé par le moteur
     assert values["position_adjustment_enable"] == "false"  # renfort sans hook fermé
     assert values["initial_state"] == "paused"
 
 
-def test_i02_moteur_ne_joint_que_risk_et_recepteur(tmp_path: Path) -> None:
+def test_i02_engine_reaches_only_risk_and_receiver(tmp_path: Path) -> None:
     """Le conteneur de moteur n'est que sur `engines` (interne), sans port publié ; ni la base,
     ni le bus, ni l'API, ni Docker n'y sont joignables. Membres de `engines` : le worker (récepteur
     d'événements) ; le Risk service s'y ajoute à M3."""

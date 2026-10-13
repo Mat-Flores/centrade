@@ -41,11 +41,11 @@ def _url(path: str) -> str:
     return re.sub(r"\{[^}]+\}", DUMMY_ID, path)
 
 
-def test_la_liste_blanche_ne_contient_que_des_routes_existantes() -> None:
+def test_allowlist_contains_only_existing_routes() -> None:
     assert set(_routes(create_app())) >= PUBLIC | PRE_SESSION_ONLY
 
 
-async def test_toute_route_hors_liste_blanche_exige_une_session(
+async def test_every_route_outside_the_allowlist_requires_a_session(
     app: FastAPI, client: httpx.AsyncClient
 ) -> None:
     checked = 0
@@ -58,7 +58,7 @@ async def test_toute_route_hors_liste_blanche_exige_une_session(
     assert checked >= 3  # logout, me, totp au moins : le parcours n'est pas vide
 
 
-async def test_la_pre_session_n_ouvre_aucune_route_protegee(
+async def test_pre_session_opens_no_protected_route(
     app: FastAPI, client: httpx.AsyncClient, make_account: MakeAccount
 ) -> None:
     account = await make_account()

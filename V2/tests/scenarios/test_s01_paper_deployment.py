@@ -21,7 +21,7 @@ MANIFEST = {
 }
 
 
-async def test_s01_deploiement_paper_de_bout_en_bout(stack: Stack) -> None:
+async def test_s01_paper_deployment_end_to_end(stack: Stack) -> None:
     w = stack.world
     admin = await stack.client("admin")
     r = await admin.post(

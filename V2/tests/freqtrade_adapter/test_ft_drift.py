@@ -70,13 +70,13 @@ def _mutate(key: str, v: Any) -> Any:
     return {**v, first: _mutate(first, v[first])}
 
 
-def test_aucune_derive_sur_une_configuration_conforme() -> None:
+def test_no_drift_on_a_conforming_config() -> None:
     for spec in (make_spec(), make_trailing_spec(), make_spec("live")):
         assert drift(render_config(spec), show_config(spec)) == []
 
 
 @given(st.sampled_from(OBSERVABLE_KEYS))
-def test_derive_rapportee_pour_chaque_cle_possedee_modifiee(key: str) -> None:
+def test_drift_is_reported_for_every_modified_owned_key(key: str) -> None:
     spec = make_trailing_spec()
     eff = show_config(spec)
     src = {"exchange.name": "exchange", "exchange.pair_whitelist": "pair_whitelist"}.get(key, key)
@@ -85,7 +85,7 @@ def test_derive_rapportee_pour_chaque_cle_possedee_modifiee(key: str) -> None:
 
 
 @given(st.sampled_from(OBSERVABLE_KEYS))
-def test_cle_observable_absente_est_une_derive(key: str) -> None:
+def test_missing_observable_key_is_a_drift(key: str) -> None:
     spec = make_trailing_spec()
     eff = show_config(spec)
     eff.pop(
@@ -94,7 +94,7 @@ def test_cle_observable_absente_est_une_derive(key: str) -> None:
     assert [d.key for d in drift(render_config(spec), eff)] == [key]
 
 
-def test_cle_non_possedee_ignoree_et_defauts_du_moteur_toleres() -> None:
+def test_unowned_key_is_ignored_and_engine_defaults_are_tolerated() -> None:
     spec = make_spec()
     eff = show_config(spec)
     eff.update(state="running", timeframe="1h", version="9999", use_custom_stoploss=None)
@@ -106,14 +106,14 @@ def test_cle_non_possedee_ignoree_et_defauts_du_moteur_toleres() -> None:
     assert drift(render_config(spec), eff) == []
 
 
-def test_formes_equivalentes_ne_sont_pas_des_derives() -> None:
+def test_equivalent_forms_are_not_drifts() -> None:
     spec = make_spec()
     eff = show_config(spec)
     eff.update(stake_amount="50.0", available_capital=150, stoploss=-0.050)
     assert drift(render_config(spec), eff) == []
 
 
-def test_cles_non_observables_sont_documentees() -> None:
+def test_unobservable_keys_are_documented() -> None:
     assert set(OWNED_KEYS) - set(OBSERVABLE_KEYS) == {
         "db_url", "initial_state", "tradable_balance_ratio", "cancel_open_orders_on_exit",
         "api_server.enabled", "api_server.listen_ip_address", "api_server.listen_port",
@@ -123,7 +123,7 @@ def test_cles_non_observables_sont_documentees() -> None:
     }  # fmt: skip
 
 
-def test_derive_sur_un_reglage_d_execution_imbrique() -> None:
+def test_drift_on_a_nested_execution_setting() -> None:
     spec = make_spec()
     eff = show_config(spec)
     eff["entry_pricing"] = {**eff["entry_pricing"], "price_side": "same"}
@@ -135,7 +135,7 @@ def test_derive_sur_un_reglage_d_execution_imbrique() -> None:
     assert [d.key for d in drift(render_config(spec), eff)] == ["entry_pricing"]
 
 
-def test_valeur_relue_d_une_forme_inattendue_est_une_derive_pas_une_erreur() -> None:
+def test_reread_value_of_an_unexpected_shape_is_a_drift_not_an_error() -> None:
     spec = make_spec()
     for odd in ("pas un dictionnaire", 3, [1], {"entry": {"imbriqué": 1}}):
         eff = show_config(spec)

@@ -21,7 +21,7 @@ from worker_support import RunnerDouble, alerts, commands, container, instance, 
 
 @pytest.mark.docker
 @needs_docker
-async def test_i09_arret_du_worker_ne_touche_aucun_conteneur(docker_stack: Stack) -> None:  # noqa: F811
+async def test_i09_worker_shutdown_touches_no_container(docker_stack: Stack) -> None:  # noqa: F811
     runner = docker_stack.runner()
     spec = docker_stack.spec()
     await runner.create(spec)
@@ -42,7 +42,7 @@ async def test_i09_arret_du_worker_ne_touche_aucun_conteneur(docker_stack: Stack
 
 @pytest.mark.docker
 @needs_docker
-async def test_i09_adoption_sans_redemarrage(docker_stack: Stack) -> None:  # noqa: F811
+async def test_i09_adoption_does_not_restart_the_container(docker_stack: Stack) -> None:  # noqa: F811
     spec = docker_stack.spec()
     old = docker_stack.runner()
     await old.create(spec)
@@ -78,7 +78,7 @@ def _restarted(w: World, runner: RunnerDouble | None = None) -> Worker:
     )
 
 
-async def test_i09_arret_du_worker_sans_effet_sur_les_instances(stack: ApiStack) -> None:
+async def test_i09_worker_shutdown_has_no_effect_on_instances(stack: ApiStack) -> None:
     iid = await _running(stack)
     w = stack.world
     runner = RunnerDouble([container(ref_of(iid).instance_id, "x")])
@@ -107,7 +107,7 @@ async def test_i09_arret_du_worker_sans_effet_sur_les_instances(stack: ApiStack)
     assert len(await commands(w, iid)) == n_commands
 
 
-async def test_i09_redemarrage_plateforme_ne_redemarre_aucune_instance(stack: ApiStack) -> None:
+async def test_i09_platform_restart_restarts_no_instance(stack: ApiStack) -> None:
     iid = await _running(stack)
     w = stack.world
     row = await instance(w, iid)
@@ -128,7 +128,7 @@ async def test_i09_redemarrage_plateforme_ne_redemarre_aucune_instance(stack: Ap
     assert await alerts(w, iid) == []
 
 
-async def test_i09_sorties_passees_pendant_la_panne_resynchronisees_sans_doublon(
+async def test_i09_exits_made_during_outage_are_resynced_without_duplicates(
     stack: ApiStack,
 ) -> None:
     iid = await _running(stack)
@@ -175,7 +175,7 @@ async def test_i09_sorties_passees_pendant_la_panne_resynchronisees_sans_doublon
     assert len(seqs) == len(set(seqs)) and len(orders) == len(set(orders))
 
 
-async def test_i09_conteneur_orphelin_signale_et_intact(stack: ApiStack) -> None:
+async def test_i09_orphan_container_is_reported_and_left_intact(stack: ApiStack) -> None:
     from centrade_core.ids import uuid7
 
     w = stack.world
@@ -193,7 +193,7 @@ async def test_i09_conteneur_orphelin_signale_et_intact(stack: ApiStack) -> None
     assert runner.calls == ["adopt", "adopt"] and calls == []  # ni arrêté, ni supprimé
 
 
-async def test_i09_empreinte_d_etiquette_differente_et_conteneur_manquant_signales(
+async def test_i09_different_label_fingerprint_and_missing_container_are_reported(
     stack: ApiStack,
 ) -> None:
     from centrade_core.engine.contract import EngineUnreachable

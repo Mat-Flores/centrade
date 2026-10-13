@@ -45,7 +45,7 @@ async def _order_status(w: World, ev: CanonicalEvent) -> str | None:
         )
 
 
-async def test_bus_non_acquitte_relivre_apres_redemarrage(redis_url: str) -> None:
+async def test_unacknowledged_bus_message_is_redelivered_after_restart(redis_url: str) -> None:
     r = Redis.from_url(redis_url, decode_responses=True)
     await r.flushdb()
     a = Bus(r, "g", "a")
@@ -62,7 +62,7 @@ async def test_bus_non_acquitte_relivre_apres_redemarrage(redis_url: str) -> Non
     await r.aclose()
 
 
-async def test_ingestion_idempotente_par_id_et_par_seq(migrated_url: str, redis_url: str) -> None:
+async def test_ingestion_is_idempotent_by_id_and_by_seq(migrated_url: str, redis_url: str) -> None:
     async with World(migrated_url, redis_url) as w:
         ref = await w.new_instance(seed=2)
         w.step(ref, 10)
@@ -84,7 +84,7 @@ async def test_ingestion_idempotente_par_id_et_par_seq(migrated_url: str, redis_
             ) == T0  # posé à la réception
 
 
-async def test_trou_et_desordre_detectes(migrated_url: str, redis_url: str) -> None:
+async def test_gap_and_disorder_are_detected(migrated_url: str, redis_url: str) -> None:
     async with World(migrated_url, redis_url) as w:
         ref = await w.new_instance(seed=2)
         w.step(ref, 10)
@@ -94,7 +94,7 @@ async def test_trou_et_desordre_detectes(migrated_url: str, redis_url: str) -> N
         assert (await ingest(w.sessions, evs[1], T0)).anomaly == "out_of_order"
 
 
-async def test_redemarrage_au_milieu_d_un_lot_sans_perte_ni_doublon(
+async def test_restart_in_the_middle_of_a_batch_loses_and_duplicates_nothing(
     migrated_url: str, redis_url: str
 ) -> None:
     async with World(migrated_url, redis_url, consumer="avant") as w:
@@ -117,7 +117,7 @@ async def test_redemarrage_au_milieu_d_un_lot_sans_perte_ni_doublon(
         assert await _pending(w.redis, EVENTS_STREAM, "worker") == 0
 
 
-async def test_moteur_injoignable_unknown_et_valeurs_non_rafraichies(
+async def test_unreachable_engine_is_unknown_and_values_are_not_refreshed(
     migrated_url: str, redis_url: str
 ) -> None:
     from centrade_core.models.trading import Alert, Instance, Position
@@ -175,9 +175,7 @@ async def test_moteur_injoignable_unknown_et_valeurs_non_rafraichies(
         assert inst.observed_at == T0 + timedelta(seconds=125)
 
 
-async def test_releve_vieilli_garde_son_heure_d_observation(
-    migrated_url: str, redis_url: str
-) -> None:
+async def test_aged_snapshot_keeps_its_observation_time(migrated_url: str, redis_url: str) -> None:
     from centrade_core.models.trading import Instance, Position
 
     async with World(migrated_url, redis_url) as w:
@@ -196,7 +194,7 @@ async def test_releve_vieilli_garde_son_heure_d_observation(
         assert rows and all(p.observed_at == stale for p in rows)
 
 
-async def test_battement_expire_et_arret_propre(migrated_url: str, redis_url: str) -> None:
+async def test_heartbeat_expires_and_shutdown_is_clean(migrated_url: str, redis_url: str) -> None:
     async with World(migrated_url, redis_url) as w:
         assert await w.redis.get(HEARTBEAT_KEY) is None
         await w.worker.run_once()
@@ -206,17 +204,17 @@ async def test_battement_expire_et_arret_propre(migrated_url: str, redis_url: st
         stop = asyncio.Event()
         tours = 0
 
-        async def un_tour() -> None:
+        async def one_tick() -> None:
             nonlocal tours
             tours += 1
             stop.set()  # équivalent d'un SIGTERM reçu pendant le tour
 
-        w.worker.run_once = un_tour  # type: ignore[method-assign]
+        w.worker.run_once = one_tick  # type: ignore[method-assign]
         await asyncio.wait_for(w.worker.run(stop), timeout=5)
         assert tours == 1
 
 
-async def test_message_acquitte_seulement_apres_un_traitement_reussi(
+async def test_message_is_acknowledged_only_after_successful_processing(
     migrated_url: str, redis_url: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     async with World(migrated_url, redis_url) as w:
@@ -246,7 +244,7 @@ async def test_message_acquitte_seulement_apres_un_traitement_reussi(
         assert await _pending(w.redis, EVENTS_STREAM, "worker") == 0
 
 
-async def test_evenement_tardif_ne_fait_pas_reculer_un_ordre(
+async def test_late_event_does_not_move_an_order_backwards(
     migrated_url: str, redis_url: str
 ) -> None:
     async with World(migrated_url, redis_url) as w:
@@ -257,7 +255,7 @@ async def test_evenement_tardif_ne_fait_pas_reculer_un_ordre(
         assert await _order_status(w, filled) == "filled"
 
 
-async def test_ordre_local_ouvert_que_le_moteur_ne_connait_plus_devient_unknown(
+async def test_open_local_order_unknown_to_the_engine_becomes_unknown(
     migrated_url: str, redis_url: str
 ) -> None:
     async with World(migrated_url, redis_url) as w:

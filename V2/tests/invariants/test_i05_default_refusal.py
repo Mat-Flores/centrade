@@ -26,7 +26,7 @@ READY = {"resume_entries": {"exits_only", "running"}, "start": {"stopped", "erro
     age_s=st.none() | st.integers(-100_000, 100_000),  # négatif : relevé daté du futur
     stale_after_s=st.integers(1, 3600),
 )
-def test_i05_regle_de_refus_de_ce_qui_augmente_le_risque(
+def test_i05_risk_increasing_actions_are_rejected_by_default(
     type_: str,
     mode: str,
     state: str,
@@ -80,7 +80,7 @@ async def _ready(stack: Stack) -> tuple[httpx.AsyncClient, str, list[str]]:
     ("failure", "word"),
     [(Failure.LIE_MODE, "mode"), (Failure.SLOW, "périmé"), (Failure.SILENT, "inconnu")],
 )
-async def test_i05_reprise_reverifiee_juste_avant_l_envoi(
+async def test_i05_resume_is_rechecked_just_before_dispatch(
     stack: Stack, failure: Failure, word: str
 ) -> None:
     c, iid, calls = await _ready(stack)
@@ -97,7 +97,7 @@ async def test_i05_reprise_reverifiee_juste_avant_l_envoi(
     assert (await stack.world.fake.status(ref_of(iid))).state == "exits_only"
 
 
-async def test_i05_reprise_perimee_ne_part_jamais(stack: Stack) -> None:
+async def test_i05_stale_resume_is_never_dispatched(stack: Stack) -> None:
     c, iid, calls = await _ready(stack)
     r = await act(c, iid, "resume-entries")
     stack.world.clock.advance(stack.settings.deadline_resume_entries_s + 1)  # worker figé
@@ -107,7 +107,7 @@ async def test_i05_reprise_perimee_ne_part_jamais(stack: Stack) -> None:
     assert calls == []
 
 
-async def test_i05_l_envoi_lui_meme_ecarte_une_reprise_perimee(stack: Stack) -> None:
+async def test_i05_dispatch_itself_drops_a_stale_resume(stack: Stack) -> None:
     """Même si l'étape d'expiration du tour a échoué, une reprise périmée ne part pas."""
     c, iid, calls = await _ready(stack)
     r = await act(c, iid, "resume-entries")
@@ -117,7 +117,7 @@ async def test_i05_l_envoi_lui_meme_ecarte_une_reprise_perimee(stack: Stack) -> 
     assert cmd["status"] == "requested" and calls == []
 
 
-async def test_i05_reprise_acceptee_et_verifiee_quand_rien_ne_s_y_oppose(stack: Stack) -> None:
+async def test_i05_resume_is_accepted_and_verified_when_nothing_opposes_it(stack: Stack) -> None:
     c, iid, calls = await _ready(stack)
     r = await act(c, iid, "resume-entries")
     await stack.world.worker.run_once()
@@ -125,7 +125,7 @@ async def test_i05_reprise_acceptee_et_verifiee_quand_rien_ne_s_y_oppose(stack: 
     assert calls == ["resume_entries"]
 
 
-async def test_i05_demarrage_refuse_sauf_instance_arretee(stack: Stack) -> None:
+async def test_i05_start_is_rejected_unless_the_instance_is_stopped(stack: Stack) -> None:
     c, iid, _ = await _ready(stack)
     w = stack.world
     r = await act(c, iid, "start")  # déjà en marche : rien à démarrer

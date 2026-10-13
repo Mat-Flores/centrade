@@ -83,7 +83,7 @@ def quick(w: World, **kw: Any) -> Worker:
     return w.worker
 
 
-async def test_moteur_lent_ne_retarde_ni_la_pause_d_une_autre_instance_ni_le_battement(
+async def test_slow_engine_delays_neither_another_instances_pause_nor_the_heartbeat(
     migrated_url: str, redis_url: str
 ) -> None:
     async with World(migrated_url, redis_url) as w:
@@ -119,7 +119,7 @@ async def test_moteur_lent_ne_retarde_ni_la_pause_d_une_autre_instance_ni_le_bat
         await worker.aclose()
 
 
-async def test_exception_dans_la_tache_d_une_instance_n_empeche_pas_les_autres(
+async def test_exception_in_one_instances_task_does_not_stop_the_others(
     migrated_url: str, redis_url: str
 ) -> None:
     async with World(migrated_url, redis_url) as w:
@@ -149,7 +149,7 @@ async def test_exception_dans_la_tache_d_une_instance_n_empeche_pas_les_autres(
         assert await w.redis.get(HEARTBEAT_KEY) == w.clock.now.isoformat()
 
 
-async def test_erreur_du_contrat_au_releve_laisse_l_instance_unknown_sans_casser_le_tour(
+async def test_contract_error_on_snapshot_leaves_the_instance_unknown_without_breaking_the_tick(
     migrated_url: str, redis_url: str
 ) -> None:
     """Constat 11 : historique des trades clos au-delà du plafond de relecture de l'adaptateur."""
@@ -172,7 +172,7 @@ async def test_erreur_du_contrat_au_releve_laisse_l_instance_unknown_sans_casser
         assert await w.redis.get(HEARTBEAT_KEY) is not None
 
 
-async def test_evenements_d_une_instance_en_erreur_n_interrompent_pas_ceux_des_autres(
+async def test_events_of_a_failing_instance_do_not_interrupt_those_of_the_others(
     migrated_url: str, redis_url: str
 ) -> None:
     async with World(migrated_url, redis_url) as w:
@@ -195,7 +195,7 @@ async def test_evenements_d_une_instance_en_erreur_n_interrompent_pas_ceux_des_a
         assert await w.redis.get(HEARTBEAT_KEY) is not None  # le battement ne dépend d'aucun moteur
 
 
-async def test_ce_qui_reduit_le_risque_part_avant_ce_qui_l_augmente(
+async def test_risk_reducing_actions_go_out_before_risk_increasing_ones(
     migrated_url: str, redis_url: str
 ) -> None:
     async with World(migrated_url, redis_url) as w:
@@ -222,7 +222,7 @@ async def test_ce_qui_reduit_le_risque_part_avant_ce_qui_l_augmente(
         assert await status_of(w, resume) == "verified"
 
 
-async def test_instance_de_m1_sans_empreinte_rechargee_par_le_chemin_de_deploiement(
+async def test_m1_instance_without_fingerprint_is_reloaded_through_the_deploy_path(
     migrated_url: str, redis_url: str
 ) -> None:
     async with World(migrated_url, redis_url) as w:
@@ -246,7 +246,7 @@ async def test_instance_de_m1_sans_empreinte_rechargee_par_le_chemin_de_deploiem
         assert await status_of(w, resume) == "verified"
 
 
-async def test_digest_en_base_different_de_celui_de_l_adaptateur_refuse_le_deploiement(
+async def test_stored_digest_differing_from_the_adapters_rejects_the_deploy(
     migrated_url: str, redis_url: str
 ) -> None:
     pinned = "sha256:" + "a" * 64
@@ -298,7 +298,7 @@ class _Runner:
     ("container_status", "removed"),
     [(None, True), ("exited", True), ("restarting", False), ("running", False)],
 )
-async def test_identifiants_retires_quand_l_instance_est_observee_arretee_sans_conteneur(
+async def test_credentials_are_removed_when_the_instance_is_observed_stopped_without_container(
     migrated_url: str,
     redis_url: str,
     tmp_path: Path,
@@ -330,7 +330,9 @@ async def test_identifiants_retires_quand_l_instance_est_observee_arretee_sans_c
         assert cleaned == ([ref.instance_id] if removed else [])  # une fois par arrêt observé
 
 
-async def test_moteur_plante_muet_garde_ses_identifiants(migrated_url: str, redis_url: str) -> None:
+async def test_crashed_silent_engine_keeps_its_credentials(
+    migrated_url: str, redis_url: str
+) -> None:
     """État inconnu : aucun nettoyage, le doute ne détruit rien."""
     async with World(migrated_url, redis_url) as w:
         ref = await w.new_instance()

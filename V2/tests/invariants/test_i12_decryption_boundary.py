@@ -70,7 +70,7 @@ def _violations(source: str) -> list[str]:
     return found
 
 
-def test_i12_aucun_module_de_l_api_n_importe_le_dechiffrement() -> None:
+def test_i12_no_api_module_imports_decryption() -> None:
     modules = sorted(API.rglob("*.py"))
     assert len(modules) > 10
     for path in modules:
@@ -93,7 +93,7 @@ def test_i12_aucun_module_de_l_api_n_importe_le_dechiffrement() -> None:
         assert _violations(bad), bad
 
 
-def test_i12_l_api_demarree_ne_charge_pas_le_dechiffrement() -> None:
+def test_i12_started_api_does_not_load_decryption() -> None:
     """Y compris par un import indirect : le module du worker n'est pas chargé par l'API."""
     code = (
         "import sys, centrade_api.main\n"
@@ -126,7 +126,7 @@ class _Probe:
         return self.outcome
 
 
-async def test_i12_la_valeur_saisie_ne_ressort_nulle_part(
+async def test_i12_entered_value_appears_nowhere(
     stack: Stack, logs: io.StringIO, caplog: pytest.LogCaptureFixture
 ) -> None:
     s = [SENTINEL.format(i) for i in range(12)]
@@ -204,7 +204,7 @@ async def test_i12_la_valeur_saisie_ne_ressort_nulle_part(
     assert "TEST-SECRET" not in repr(vars(account))
 
 
-async def test_i12_cle_remise_au_seul_moteur_de_l_instance_live_du_compte(
+async def test_i12_key_is_handed_only_to_the_engine_of_the_accounts_live_instance(
     keyed_instance: Any, session_factory: async_sessionmaker[AsyncSession], tmp_path: Path
 ) -> None:
     _, live, trade, api = await keyed_instance(mode="live")
@@ -241,7 +241,7 @@ async def test_i12_cle_remise_au_seul_moteur_de_l_instance_live_du_compte(
     assert os.listdir(tmp_path) == []
 
 
-async def test_i12_cle_de_lecture_jamais_remise_a_un_moteur(
+async def test_i12_read_key_is_never_handed_to_an_engine(
     keyed_instance: Any, session_factory: async_sessionmaker[AsyncSession], tmp_path: Path
 ) -> None:
     account_id, live, _, _ = await keyed_instance(mode="live")
@@ -265,7 +265,7 @@ async def test_i12_cle_de_lecture_jamais_remise_a_un_moteur(
         await s.rollback()
 
 
-async def test_i12_fichier_d_instance_droits_restreints_atomique_puis_supprime(
+async def test_i12_instance_file_is_restricted_atomic_then_deleted(
     keyed_instance: Any,
     session_factory: async_sessionmaker[AsyncSession],
     tmp_path: Path,
@@ -326,7 +326,7 @@ async def test_i12_fichier_d_instance_droits_restreints_atomique_puis_supprime(
     assert list(target.iterdir()) == []
 
 
-async def test_i12_echec_d_ecriture_ne_laisse_aucun_fichier(
+async def test_i12_write_failure_leaves_no_file(
     keyed_instance: Any,
     session_factory: async_sessionmaker[AsyncSession],
     tmp_path: Path,

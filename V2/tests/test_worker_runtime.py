@@ -52,7 +52,7 @@ async def _secret_ref(sessions: Sessions, instance_id: UUID) -> UUID | None:
         return await s.scalar(select(Instance.engine_secret_ref).where(Instance.id == instance_id))
 
 
-async def test_identifiants_crees_au_deploiement_relus_et_renouveles(
+async def test_credentials_created_at_deploy_are_reread_and_renewed(
     session_factory: Sessions, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     caplog.set_level(logging.DEBUG)
@@ -85,7 +85,7 @@ async def test_identifiants_crees_au_deploiement_relus_et_renouveles(
         assert value not in caplog.text and value not in repr(second)
 
 
-async def test_identifiants_lies_a_l_instance_et_a_la_cle_maitre(
+async def test_credentials_are_bound_to_the_instance_and_the_master_key(
     session_factory: Sessions, tmp_path: Path
 ) -> None:
     rt = _runtime(session_factory, tmp_path)
@@ -110,7 +110,7 @@ async def test_identifiants_lies_a_l_instance_et_a_la_cle_maitre(
             await rt.issue_credentials(mine, names)
 
 
-async def test_fichiers_d_instance_ecrits_en_0400_puis_identifiants_retires(
+async def test_instance_files_are_written_as_0400_then_credentials_removed(
     session_factory: Sessions, tmp_path: Path
 ) -> None:
     rt = _runtime(session_factory, tmp_path)
@@ -148,7 +148,7 @@ async def test_fichiers_d_instance_ecrits_en_0400_puis_identifiants_retires(
     "name",
     ["../evasion.py", "sous/dossier.py", "/etc/passwd", ".cache", "", CREDENTIALS_FILE, "a\x00b"],
 )
-async def test_nom_de_fichier_hors_du_dossier_de_l_instance_refuse(
+async def test_file_name_outside_the_instance_folder_is_rejected(
     session_factory: Sessions, tmp_path: Path, name: str
 ) -> None:
     rt = _runtime(session_factory, tmp_path)
@@ -159,7 +159,7 @@ async def test_nom_de_fichier_hors_du_dossier_de_l_instance_refuse(
     assert not (tmp_path / str(iid)).exists() and os.listdir(tmp_path) == []
 
 
-def test_utilisateur_du_conteneur_explicite_et_jamais_dans_le_groupe_root(
+def test_container_user_is_explicit_and_never_in_the_root_group(
     session_factory: Sessions, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     rt = _runtime(session_factory, tmp_path)

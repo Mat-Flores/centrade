@@ -30,7 +30,7 @@ def method(stmt: str) -> str:
     return BODY + "    def f(self, x):\n" + textwrap.indent(stmt, " " * 8) + "\n"
 
 
-def test_strategies_reelles_acceptees() -> None:
+def test_real_strategies_are_accepted() -> None:
     assert check_strategy_source((SMA_DIR / "SmaCross.py").read_text(), "SmaCross") == []
     assert check_strategy_source(STRATEGY, "EnterEveryCandle") == []  # celle de l'essai réel
 
@@ -69,7 +69,7 @@ ORDINARY = (
 )
 
 
-def test_strategie_d_indicateurs_ordinaire_acceptee() -> None:
+def test_ordinary_indicator_strategy_is_accepted() -> None:
     assert check(ORDINARY) == []
 
 
@@ -85,7 +85,7 @@ def test_strategie_d_indicateurs_ordinaire_acceptee() -> None:
         HEAD + "class M(ControlPlaneStrategy): pass\nclass S(M, object): pass",
     ],
 )
-def test_heritage_direct_indirect_et_alias_acceptes(src: str) -> None:
+def test_direct_indirect_and_aliased_inheritance_are_accepted(src: str) -> None:
     assert check(src) == []
 
 
@@ -127,19 +127,19 @@ def test_heritage_direct_indirect_et_alias_acceptes(src: str) -> None:
         HEAD + "class S(ControlPlaneStrategy):\n    class Interne: pass",
     ],
 )
-def test_heritage_absent_ou_trompeur_refuse(src: str) -> None:
+def test_missing_or_misleading_inheritance_is_rejected(src: str) -> None:
     assert check(src)
 
 
 @pytest.mark.parametrize("hook", sorted(PLATFORM_HOOKS))
-def test_chaque_hook_redefini_est_refuse(hook: str) -> None:
+def test_every_overridden_hook_is_rejected(hook: str) -> None:
     for body in (f"def {hook}(self, *a, **k): return True", f"async def {hook}(self): pass",
                  f"{hook} = lambda *a, **k: True", f"{hook}: object = None"):  # fmt: skip
         assert any(hook in e for e in check(BODY + f"    {body}"))
     assert check(HEAD + f"class S(ControlPlaneStrategy): pass\nS.{hook} = print")
 
 
-def test_hook_redefini_dans_une_classe_intermediaire_est_refuse() -> None:
+def test_hook_overridden_in_an_intermediate_class_is_rejected() -> None:
     src = (
         HEAD + "class M(ControlPlaneStrategy):\n    def leverage(self): return 5\nclass S(M): pass"
     )
@@ -215,7 +215,7 @@ def program(wrapper: str, stmt: str) -> str:
     return src
 
 
-def test_le_gabarit_est_accepte_avec_un_nom_inoffensif() -> None:
+def test_template_is_accepted_with_a_harmless_name() -> None:
     """Garde-fou de la propriété : seul le nom visé fait refuser le programme."""
     for wrapper in WRAPPERS:
         for form in NAME_FORMS:
@@ -224,7 +224,7 @@ def test_le_gabarit_est_accepte_avec_un_nom_inoffensif() -> None:
 
 @pytest.mark.parametrize("form", NAME_FORMS)
 @pytest.mark.parametrize("name", ["confirm_trade_entry", "ControlPlaneStrategy", "_entry_allowed"])
-def test_chaque_forme_de_liaison_d_un_nom_protege_est_refusee(form: str, name: str) -> None:
+def test_every_binding_form_of_a_protected_name_is_rejected(form: str, name: str) -> None:
     errors = check(program("{S}", form.format(T=name)))
     assert any(name in e for e in errors), errors
 
@@ -245,7 +245,7 @@ def test_chaque_forme_de_liaison_d_un_nom_protege_est_refusee(form: str, name: s
         "v[0].stoploss",  # valeur imposée par la configuration : pas de réécriture à chaud
     ],
 )
-def test_chaque_forme_d_ecriture_visant_la_plateforme_est_refusee(form: str, target: str) -> None:
+def test_every_write_form_targeting_the_platform_is_rejected(form: str, target: str) -> None:
     assert check(program("{S}", form.format(T=target)))
 
 
@@ -269,7 +269,7 @@ def offending_programs(draw: st.DrawFn) -> tuple[str, str]:
 
 @settings(max_examples=400, deadline=None)
 @given(offending_programs())
-def test_toute_liaison_ou_ecriture_d_un_nom_protege_est_refusee(case: tuple[str, str]) -> None:
+def test_any_binding_or_write_of_a_protected_name_is_rejected(case: tuple[str, str]) -> None:
     src, name = case
     assert any(name in e for e in check(src)), src
 
@@ -289,7 +289,7 @@ def test_toute_liaison_ou_ecriture_d_un_nom_protege_est_refusee(case: tuple[str,
         "def f(self):\n        del self._boot_dry_run",
     ],
 )
-def test_noms_internes_de_la_base_refuses(member: str) -> None:
+def test_internal_base_names_are_rejected(member: str) -> None:
     assert check(BODY + f"    {member}")
 
 
@@ -343,7 +343,7 @@ def test_noms_internes_de_la_base_refuses(member: str) -> None:
         "x.config['dry_run'] = True",
     ],
 )
-def test_modification_ou_alias_de_la_config_refuse(stmt: str) -> None:
+def test_config_modification_or_alias_is_rejected(stmt: str) -> None:
     assert check(method(stmt))
 
 
@@ -364,7 +364,7 @@ def test_modification_ou_alias_de_la_config_refuse(stmt: str) -> None:
         "if self.config.get('a') and (x or self.config['b']):\n    pass",
     ],
 )
-def test_lecture_de_la_config_reste_permise(stmt: str) -> None:
+def test_reading_the_config_remains_allowed(stmt: str) -> None:
     assert check(method(stmt)) == []
 
 
@@ -378,7 +378,7 @@ def test_lecture_de_la_config_reste_permise(stmt: str) -> None:
      "shutil", "pathlib", "io", "threading", "types", "numpy.ctypeslib", "pandas.io.common",
      "un_module_inconnu"],
 )  # fmt: skip
-def test_tout_module_hors_liste_blanche_est_refuse_meme_sous_alias(module: str) -> None:
+def test_any_module_outside_the_allowlist_is_rejected_even_under_an_alias(module: str) -> None:
     base = HEAD + "class S(ControlPlaneStrategy): pass\n"
     parent, _, leaf = module.rpartition(".")
     lines = [f"import {module}", f"import {module} as x", f"def f():\n    import {module}",
@@ -394,7 +394,7 @@ modnames = st.from_regex(r"[a-z_][a-z0-9_]{0,8}(\.[a-z_][a-z0-9_]{0,8}){0,2}", f
 
 
 @given(modnames, st.sampled_from(["import {m}", "import {m} as x", "from {m} import y"]))
-def test_refus_par_defaut_de_tout_import(module: str, form: str) -> None:
+def test_every_import_is_rejected_by_default(module: str, form: str) -> None:
     src = HEAD + "class S(ControlPlaneStrategy): pass\n" + form.format(m=module)
     try:
         ast.parse(src)
@@ -439,7 +439,7 @@ def test_refus_par_defaut_de_tout_import(module: str, form: str) -> None:
         "import math as m\nimport logging as m",
     ],
 )
-def test_acces_a_un_module_par_un_module_autorise_refuse(line: str) -> None:
+def test_module_access_through_an_allowed_module_is_rejected(line: str) -> None:
     assert check(HEAD + f"class S(ControlPlaneStrategy): pass\n{line}")
 
 
@@ -455,11 +455,11 @@ def test_acces_a_un_module_par_un_module_autorise_refuse(line: str) -> None:
      "import math as eval", "for vars in []: pass", "lambda open: 0",
      "global v", "def f():\n    nonlocal v"],
 )  # fmt: skip
-def test_noms_hors_liste_blanche_refuses(line: str) -> None:
+def test_names_outside_the_allowlist_are_rejected(line: str) -> None:
     assert check(HEAD + f"v = 1\nclass S(ControlPlaneStrategy): pass\n{line}")
 
 
-def test_la_liste_blanche_de_builtins_ne_contient_aucun_acces_dynamique() -> None:
+def test_builtins_allowlist_contains_no_dynamic_access() -> None:
     assert ALLOWED_BUILTINS <= set(dir(builtins))
     assert not ALLOWED_BUILTINS & {
         "getattr", "setattr", "delattr", "eval", "exec", "compile", "open", "__import__", "vars",
@@ -486,7 +486,7 @@ def test_la_liste_blanche_de_builtins_ne_contient_aucun_acces_dynamique() -> Non
      # la classe ne se nomme que comme base : pas d'appel de méthode avec un autre `self`
      "S.f(self.dp)", "ControlPlaneStrategy.confirm_trade_entry", "S", "f"],
 )  # fmt: skip
-def test_acces_dynamique_prive_ou_detourne_refuse(expr: str) -> None:
+def test_private_or_diverted_dynamic_access_is_rejected(expr: str) -> None:
     assert check(method(f"return {expr}"))
 
 
@@ -510,11 +510,11 @@ def test_acces_dynamique_prive_ou_detourne_refuse(expr: str) -> None:
         BODY + "    @staticmethod\n    def h(self):\n        return self._exchange",
     ],
 )
-def test_self_ne_designe_que_l_instance(src: str) -> None:
+def test_self_only_designates_the_instance(src: str) -> None:
     assert check(src)
 
 
-def test_attributs_prives_de_self_et_decorateurs_usuels_permis() -> None:
+def test_private_self_attributes_and_usual_decorators_are_allowed() -> None:
     src = (
         "from freqtrade.strategy import informative\n"
         + BODY
@@ -540,18 +540,18 @@ def test_attributs_prives_de_self_et_decorateurs_usuels_permis() -> None:
         "self.max_open_trades = 100",
     ],
 )
-def test_ecritures_d_attributs_refusees(stmt: str) -> None:
+def test_attribute_writes_are_rejected(stmt: str) -> None:
     assert check(method(stmt))
 
 
-def test_noms_proteges_derives_de_la_base() -> None:
+def test_protected_names_are_derived_from_the_base() -> None:
     assert {"_entry_allowed", "confirm_trade_entry", "_boot_dry_run", "__init__"} <= PROTECTED_NAMES
     assert set(PLATFORM_HOOKS) <= PROTECTED_NAMES
     assert not {"timeframe", "stoploss", "minimal_roi", "populate_indicators"} & PROTECTED_NAMES
 
 
 # --- manifest ----------------------------------------------------------------------------------
-def test_validate_manifest_valide() -> None:
+def test_validate_accepts_a_valid_manifest() -> None:
     assert validate(sma_manifest(), {"fast": 5, "slow": 20, "pairs": ["x"]}).ok
 
 
@@ -559,11 +559,11 @@ def test_validate_manifest_valide() -> None:
     "params",
     [{"fast": 1}, {"fast": "5"}, {"fast": True}, {"inconnu": 1}, {"fast": 5.5}],
 )
-def test_validate_parametres_non_conformes(params: dict[str, object]) -> None:
+def test_validate_rejects_non_conforming_parameters(params: dict[str, object]) -> None:
     assert not validate(sma_manifest(), params).ok
 
 
-def test_validate_exits_et_mode() -> None:
+def test_validate_checks_exits_and_mode() -> None:
     assert not validate(sma_manifest(stoploss=Decimal(0)), {}).ok
     assert not validate(sma_manifest(stoploss=Decimal(-1)), {}).ok
     assert not validate(sma_manifest(trailing={"enabled": True}), {}).ok

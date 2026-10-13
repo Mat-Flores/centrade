@@ -40,7 +40,7 @@ async def _user(factory: Factory, account: Account) -> User:
         return (await s.execute(select(User).where(User.id == account.id))).scalar_one()
 
 
-async def test_mot_de_passe_puis_totp_ouvre_une_session_complete(
+async def test_password_then_totp_opens_a_full_session(
     client: httpx.AsyncClient, make_account: MakeAccount, clock: FakeClock
 ) -> None:
     account = await make_account("operator")
@@ -65,7 +65,7 @@ async def test_mot_de_passe_puis_totp_ouvre_une_session_complete(
     assert me.headers["cache-control"] == "no-store"
 
 
-async def test_cookie_de_pre_session_distinct_et_court(
+async def test_pre_session_cookie_is_distinct_and_short_lived(
     client: httpx.AsyncClient, make_account: MakeAccount
 ) -> None:
     r = await client.post(LOGIN, json=_creds(await make_account()))
@@ -74,7 +74,7 @@ async def test_cookie_de_pre_session_distinct_et_court(
         assert attribute in cookie
 
 
-async def test_identifiant_insensible_a_la_casse_et_aux_espaces(
+async def test_username_ignores_case_and_surrounding_spaces(
     client: httpx.AsyncClient, make_account: MakeAccount
 ) -> None:
     account = await make_account()
@@ -84,7 +84,7 @@ async def test_identifiant_insensible_a_la_casse_et_aux_espaces(
     assert r.status_code == 200
 
 
-async def test_pas_de_session_complete_sans_totp(
+async def test_no_full_session_without_totp(
     client: httpx.AsyncClient, make_account: MakeAccount, session_factory: Factory
 ) -> None:
     account = await make_account()
@@ -98,7 +98,7 @@ async def test_pas_de_session_complete_sans_totp(
     assert await _stages(session_factory, account) == ["pre_totp"]
 
 
-async def test_compte_sans_secret_totp_ne_peut_ouvrir_aucune_session(
+async def test_account_without_totp_secret_cannot_open_any_session(
     client: httpx.AsyncClient, make_account: MakeAccount, session_factory: Factory
 ) -> None:
     account = await make_account(with_totp=False)
@@ -110,7 +110,7 @@ async def test_compte_sans_secret_totp_ne_peut_ouvrir_aucune_session(
     assert await _stages(session_factory, account) == []
 
 
-async def test_pre_session_presentee_comme_session_est_refusee(
+async def test_pre_session_presented_as_session_is_rejected(
     client: httpx.AsyncClient, make_account: MakeAccount
 ) -> None:
     await client.post(LOGIN, json=_creds(await make_account()))
@@ -121,7 +121,7 @@ async def test_pre_session_presentee_comme_session_est_refusee(
     assert (await client.get(ME)).status_code == 401
 
 
-async def test_pre_session_expire_apres_cinq_minutes(
+async def test_pre_session_expires_after_five_minutes(
     client: httpx.AsyncClient, make_account: MakeAccount, clock: FakeClock
 ) -> None:
     account = await make_account()
@@ -133,7 +133,7 @@ async def test_pre_session_expire_apres_cinq_minutes(
     assert r.status_code == 401
 
 
-async def test_rotation_entre_pre_session_et_session(
+async def test_token_rotates_between_pre_session_and_session(
     client: httpx.AsyncClient, make_account: MakeAccount, clock: FakeClock, session_factory: Factory
 ) -> None:
     account = await make_account()
@@ -160,7 +160,7 @@ async def test_rotation_entre_pre_session_et_session(
     assert (await client.post(TOTP, json={"code": account.code(clock.now)})).status_code == 401
 
 
-async def test_jeton_de_session_en_clair_jamais_en_base(
+async def test_session_token_is_never_stored_in_clear(
     client: httpx.AsyncClient, make_account: MakeAccount, sign_in: SignIn, session_factory: Factory
 ) -> None:
     account = await make_account()
@@ -186,7 +186,7 @@ async def test_jeton_de_session_en_clair_jamais_en_base(
     assert stored == hashlib.sha256(token.encode()).hexdigest()
 
 
-async def test_code_totp_rejoue_refuse(
+async def test_replayed_totp_code_is_rejected(
     make_client: MakeClient, make_account: MakeAccount, clock: FakeClock
 ) -> None:
     account = await make_account()
@@ -207,7 +207,7 @@ async def test_code_totp_rejoue_refuse(
     assert (await second.post(TOTP, json={"code": account.code(clock.now)})).status_code == 200
 
 
-async def test_code_totp_accepte_a_un_pas_pres_seulement(
+async def test_totp_code_is_accepted_within_one_step_only(
     client: httpx.AsyncClient, make_account: MakeAccount, clock: FakeClock
 ) -> None:
     account = await make_account()
@@ -218,7 +218,7 @@ async def test_code_totp_accepte_a_un_pas_pres_seulement(
     assert (await client.post(TOTP, json={"code": account.code(clock.now, -1)})).status_code == 200
 
 
-async def test_code_de_recuperation_utilisable_une_seule_fois(
+async def test_recovery_code_is_usable_only_once(
     make_client: MakeClient, make_account: MakeAccount, session_factory: Factory
 ) -> None:
     account = await make_account()
@@ -244,7 +244,7 @@ async def test_code_de_recuperation_utilisable_une_seule_fois(
     assert other.status_code == 200
 
 
-async def test_code_de_recuperation_en_clair_jamais_en_base(
+async def test_recovery_code_is_never_stored_in_clear(
     make_account: MakeAccount, session_factory: Factory
 ) -> None:
     account = await make_account()
@@ -259,7 +259,7 @@ async def test_code_de_recuperation_en_clair_jamais_en_base(
         assert secret.replace("-", "") not in dump
 
 
-async def test_verrouillage_progressif_apres_echecs_repetes(
+async def test_lockout_grows_progressively_after_repeated_failures(
     client: httpx.AsyncClient, make_account: MakeAccount, clock: FakeClock, session_factory: Factory
 ) -> None:
     account = await make_account()
@@ -288,7 +288,7 @@ async def test_verrouillage_progressif_apres_echecs_repetes(
     assert (user.failed_attempts, user.locked_until) == (0, None)
 
 
-async def test_echecs_totp_repetes_verrouillent_le_compte(
+async def test_repeated_totp_failures_lock_the_account(
     client: httpx.AsyncClient, make_account: MakeAccount, clock: FakeClock, session_factory: Factory
 ) -> None:
     account = await make_account()
@@ -304,7 +304,7 @@ async def test_echecs_totp_repetes_verrouillent_le_compte(
     assert (await client.post(LOGIN, json=_creds(account))).status_code == 401
 
 
-async def test_compte_verrouille_avec_pre_session_vivante_n_ouvre_rien(
+async def test_locked_account_with_live_pre_session_opens_nothing(
     client: httpx.AsyncClient, make_account: MakeAccount, clock: FakeClock, session_factory: Factory
 ) -> None:
     # État que le code ne produit pas lui-même (verrou posé à la main) : refus quand même.
@@ -321,7 +321,7 @@ async def test_compte_verrouille_avec_pre_session_vivante_n_ouvre_rien(
     assert await _stages(session_factory, account) == []
 
 
-async def test_envois_simultanes_du_meme_facteur_n_ouvrent_qu_une_session(
+async def test_concurrent_submissions_of_the_same_factor_open_only_one_session(
     make_client: MakeClient, make_account: MakeAccount, clock: FakeClock, session_factory: Factory
 ) -> None:
     account = await make_account()
@@ -340,7 +340,7 @@ async def test_envois_simultanes_du_meme_facteur_n_ouvrent_qu_une_session(
             await s.execute(delete(Session).where(Session.user_id == account.id))
 
 
-async def test_echecs_simultanes_sont_tous_comptes(
+async def test_concurrent_failures_are_all_counted(
     make_client: MakeClient, make_account: MakeAccount, session_factory: Factory
 ) -> None:
     account = await make_account()
@@ -355,7 +355,7 @@ async def test_echecs_simultanes_sont_tous_comptes(
     assert user.locked_until is not None
 
 
-async def test_mauvais_codes_simultanes_sont_tous_comptes(
+async def test_concurrent_wrong_codes_are_all_counted(
     make_client: MakeClient, make_account: MakeAccount, clock: FakeClock, session_factory: Factory
 ) -> None:
     account = await make_account()
@@ -377,7 +377,7 @@ async def test_mauvais_codes_simultanes_sont_tous_comptes(
     assert await _stages(session_factory, account) == []
 
 
-async def test_reponse_identique_que_le_compte_existe_ou_non(
+async def test_response_is_identical_whether_or_not_the_account_exists(
     client: httpx.AsyncClient, make_account: MakeAccount, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     account = await make_account()
@@ -403,7 +403,7 @@ async def test_reponse_identique_que_le_compte_existe_ou_non(
     assert verifications[1] is None
 
 
-async def test_logout_ferme_la_session(
+async def test_logout_closes_the_session(
     client: httpx.AsyncClient, make_account: MakeAccount, sign_in: SignIn, session_factory: Factory
 ) -> None:
     account = await make_account()
@@ -419,7 +419,7 @@ async def test_logout_ferme_la_session(
     assert (await client.get(ME)).status_code == 401
 
 
-async def test_nouvelle_connexion_purge_les_sessions_expirees(
+async def test_new_login_purges_expired_sessions(
     client: httpx.AsyncClient,
     make_account: MakeAccount,
     sign_in: SignIn,
@@ -440,7 +440,7 @@ async def test_nouvelle_connexion_purge_les_sessions_expirees(
     assert count == 1
 
 
-async def test_limitation_de_debit_par_ip(
+async def test_login_is_rate_limited_per_ip(
     make_client: MakeClient, make_account: MakeAccount, clock: FakeClock
 ) -> None:
     account = await make_account()
@@ -471,7 +471,7 @@ async def test_limitation_de_debit_par_ip(
         {"username": "a" * 300, "password": "x"},
     ],
 )
-async def test_login_valide_strictement_ses_entrees(
+async def test_login_strictly_validates_its_inputs(
     client: httpx.AsyncClient, body: dict[str, str]
 ) -> None:
     r = await client.post(LOGIN, json=body)

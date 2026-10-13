@@ -34,9 +34,7 @@ async def _deposit(
     )
 
 
-async def test_la_strategie_d_exemple_est_acceptee_de_bout_en_bout(
-    as_user: AsUser, sma: Dep
-) -> None:
+async def test_example_strategy_is_accepted_end_to_end(as_user: AsUser, sma: Dep) -> None:
     c = await as_user("operator")
     sid = await _strategy(c)
     r = await _deposit(c, sid, *sma)
@@ -74,22 +72,22 @@ def _mut(path: str, value: Any) -> Any:
 
 
 REFUSALS = {
-    "classe sans la base": lambda m, c: (m, c.replace("(ControlPlaneStrategy)", "(object)")),
-    "hook redéfini": lambda m, c: (
+    "class without the base": lambda m, c: (m, c.replace("(ControlPlaneStrategy)", "(object)")),
+    "overridden hook": lambda m, c: (
         m,
         c + "\n    def confirm_trade_entry(self, *a, **k):\n        return True\n",
     ),
-    "import interdit": lambda m, c: (m, "import socket\n" + c),
-    "sans stoploss": _no_stoploss,
+    "forbidden import": lambda m, c: (m, "import socket\n" + c),
+    "no stoploss": _no_stoploss,
     "trading_mode futures": _mut("trading_mode", "futures"),
-    "moteur inconnu": _mut("engine", "inconnu"),
-    "défaut hors schéma": _mut("params_schema.properties.fast.default", 1),
-    "stoploss flottant": _mut("exits.stoploss", -0.05),
+    "unknown engine": _mut("engine", "inconnu"),
+    "default outside schema": _mut("params_schema.properties.fast.default", 1),
+    "float stoploss": _mut("exits.stoploss", -0.05),
 }
 
 
 @pytest.mark.parametrize("case", sorted(REFUSALS))
-async def test_une_version_refusee_n_est_pas_enregistree(
+async def test_rejected_version_is_not_stored(
     case: str, as_user: AsUser, sma: Dep, session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     c = await as_user("operator")
@@ -104,7 +102,7 @@ async def test_une_version_refusee_n_est_pas_enregistree(
     assert listing["items"] == []
 
 
-async def test_les_motifs_sont_listes(as_user: AsUser, sma: Dep) -> None:
+async def test_rejection_reasons_are_listed(as_user: AsUser, sma: Dep) -> None:
     c = await as_user("operator")
     sid = await _strategy(c)
     code = "import socket\n" + sma[1].replace("(ControlPlaneStrategy)", "(object)")
@@ -112,7 +110,7 @@ async def test_les_motifs_sont_listes(as_user: AsUser, sma: Dep) -> None:
     assert r.status_code == 422 and len(r.json()["detail"]) >= 2
 
 
-async def test_aucune_route_ne_modifie_une_version(as_user: AsUser, sma: Dep, app: FastAPI) -> None:
+async def test_no_route_modifies_a_version(as_user: AsUser, sma: Dep, app: FastAPI) -> None:
     c = await as_user("operator")
     sid = await _strategy(c)
     await _deposit(c, sid, *sma)
@@ -144,7 +142,7 @@ async def test_aucune_route_ne_modifie_une_version(as_user: AsUser, sma: Dep, ap
     }
 
 
-async def test_meme_depot_meme_cle_ne_cree_pas_de_seconde_version(
+async def test_same_submission_with_same_key_creates_no_second_version(
     as_user: AsUser, sma: Dep
 ) -> None:
     c = await as_user("operator")
@@ -159,16 +157,14 @@ async def test_meme_depot_meme_cle_ne_cree_pas_de_seconde_version(
     assert other.status_code == 422  # même clé, autre contenu : échec bruyant
 
 
-async def test_deux_depots_concurrents_obtiennent_deux_numeros(as_user: AsUser, sma: Dep) -> None:
+async def test_two_concurrent_submissions_get_two_numbers(as_user: AsUser, sma: Dep) -> None:
     c = await as_user("operator")
     sid = await _strategy(c)
     rs = await asyncio.gather(*(_deposit(c, sid, sma[0], sma[1] + f"\n# {i}") for i in range(4)))
     assert sorted(r.json()["version"] for r in rs) == [1, 2, 3, 4]
 
 
-async def test_code_hash_depend_du_code_et_du_manifest_et_de_rien_d_autre(
-    as_user: AsUser, sma: Dep
-) -> None:
+async def test_code_hash_depends_on_code_and_manifest_only(as_user: AsUser, sma: Dep) -> None:
     c = await as_user("operator")
     m, code = sma
     sid = await _strategy(c)
@@ -180,7 +176,7 @@ async def test_code_hash_depend_du_code_et_du_manifest_et_de_rien_d_autre(
     assert len({base, other_code, other_manifest}) == 3
 
 
-async def test_statuts_et_rbac_et_audit(
+async def test_statuses_rbac_and_audit(
     as_user: AsUser, sma: Dep, session_factory: async_sessionmaker[AsyncSession]
 ) -> None:
     op, viewer = await as_user("operator"), await as_user("viewer")
@@ -212,7 +208,7 @@ async def test_statuts_et_rbac_et_audit(
     assert all(r.actor.startswith("user:") for r in ours)
 
 
-async def test_pagination_des_strategies(as_user: AsUser) -> None:
+async def test_strategies_are_paginated(as_user: AsUser) -> None:
     c = await as_user("operator")
     for _ in range(3):
         await _strategy(c)
@@ -224,7 +220,7 @@ async def test_pagination_des_strategies(as_user: AsUser) -> None:
     assert {i["id"] for i in nxt["items"]}.isdisjoint(i["id"] for i in page["items"])
 
 
-async def test_doublon_de_nom_et_strategie_inconnue(as_user: AsUser, sma: Dep) -> None:
+async def test_duplicate_name_and_unknown_strategy_are_rejected(as_user: AsUser, sma: Dep) -> None:
     c = await as_user("operator")
     await _strategy(c, "dup")
     assert (await c.post("/api/v1/strategies", json={"name": "dup"})).status_code == 409
@@ -232,7 +228,7 @@ async def test_doublon_de_nom_et_strategie_inconnue(as_user: AsUser, sma: Dep) -
     assert (await c.get(f"/api/v1/strategies/{uuid4()}/versions/1")).status_code == 404
 
 
-def test_l_api_du_registre_ne_nomme_aucun_moteur(app: FastAPI) -> None:
+def test_registry_api_names_no_engine(app: FastAPI) -> None:
     doc = app.openapi()
     paths = {p: v for p, v in doc["paths"].items() if p.startswith("/api/v1/strategies")}
     assert paths

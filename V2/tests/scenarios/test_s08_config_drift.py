@@ -9,7 +9,7 @@ from centrade_fake.engine import Failure
 from worker_support import alerts, commands, instance, spy
 
 
-async def test_s08_derive_detectee_en_60_s_sorties_seules_alerte_critique(stack: Stack) -> None:
+async def test_s08_drift_detected_within_60_s_exits_only_critical_alert(stack: Stack) -> None:
     w = stack.world
     c = await stack.client("operator")
     iid = str((await create_instance(c))["id"])
@@ -67,7 +67,7 @@ async def test_s08_derive_detectee_en_60_s_sorties_seules_alerte_critique(stack:
     assert (await instance(w, iid)).drift == []
 
 
-async def test_s08_cle_possedee_absente_de_la_relecture_est_une_derive(stack: Stack) -> None:
+async def test_s08_owned_key_missing_from_the_reread_is_drift(stack: Stack) -> None:
     """Jamais d'ignorance silencieuse : une clé que l'adaptateur ne relit pas, sans la déclarer."""
     w = stack.world
     c = await stack.client("operator")

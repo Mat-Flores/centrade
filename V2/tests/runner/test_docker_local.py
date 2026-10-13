@@ -12,7 +12,7 @@ from runner.support import BUSYBOX_DIGEST, Stack, docker_stack, needs_docker  # 
 pytestmark = [pytest.mark.docker, needs_docker]
 
 
-async def test_cycle_complet_par_le_gabarit(docker_stack: Stack) -> None:  # noqa: F811
+async def test_full_lifecycle_through_the_container_template(docker_stack: Stack) -> None:  # noqa: F811
     runner = docker_stack.runner()
     spec = docker_stack.spec()
     created = await runner.create(spec)
@@ -50,7 +50,7 @@ async def test_cycle_complet_par_le_gabarit(docker_stack: Stack) -> None:  # noq
     await runner.remove(spec.instance_id)
 
 
-async def test_adoption_par_une_nouvelle_instance_sans_redemarrage(docker_stack: Stack) -> None:  # noqa: F811
+async def test_adoption_by_a_new_instance_leaves_containers_running(docker_stack: Stack) -> None:  # noqa: F811
     first = docker_stack.runner()
     spec = docker_stack.spec()
     await first.create(spec)
@@ -64,25 +64,25 @@ async def test_adoption_par_une_nouvelle_instance_sans_redemarrage(docker_stack:
     await first.remove(spec.instance_id)
 
 
-async def test_digest_different_refuse_sans_telechargement(docker_stack: Stack) -> None:  # noqa: F811
+async def test_different_digest_is_rejected_without_pulling(docker_stack: Stack) -> None:  # noqa: F811
     spec = docker_stack.spec(digest="sha256:" + "0" * 64)
     with pytest.raises(CommandRejected):
         await docker_stack.runner().create(spec)
     assert await docker_stack.runner().inspect(spec.instance_id) is None
 
 
-async def test_admission_refusee_au_dela_de_la_memoire_de_l_hote(docker_stack: Stack) -> None:  # noqa: F811
+async def test_admission_is_rejected_beyond_host_memory(docker_stack: Stack) -> None:  # noqa: F811
     host = docker_stack.raw.info()["MemTotal"]
     spec = docker_stack.spec(memory_bytes=host + 1)
     with pytest.raises(CommandRejected, match="insuffisante"):
         await docker_stack.runner().create(spec)
 
 
-async def test_arret_d_un_conteneur_absent_sans_erreur(docker_stack: Stack) -> None:  # noqa: F811
+async def test_stopping_a_missing_container_does_not_fail(docker_stack: Stack) -> None:  # noqa: F811
     await docker_stack.runner().stop(uuid4())
 
 
-async def test_socket_proxy_refuse_tout_sauf_les_conteneurs(docker_stack: Stack) -> None:  # noqa: F811
+async def test_socket_proxy_rejects_everything_but_containers(docker_stack: Stack) -> None:  # noqa: F811
     base = docker_stack.proxy_url.replace("tcp://", "http://")
     runner = docker_stack.runner()
     spec = docker_stack.spec()

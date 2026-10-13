@@ -159,7 +159,7 @@ async def _commands(stack: Stack, iid: UUID, type_: str) -> list[Command]:
 # --- création -----------------------------------------------------------------------------
 
 
-async def test_creation_paper_depuis_le_registre_ecrit_une_commande_de_deploiement(
+async def test_paper_creation_from_the_registry_writes_a_deploy_command(
     stack: Stack,
 ) -> None:
     vid, aid = await _seed(stack)
@@ -186,7 +186,7 @@ async def test_creation_paper_depuis_le_registre_ecrit_une_commande_de_deploieme
         ({"account_id": None, "strategy_version_id": None}, 201),  # création simulée de M1
     ],
 )
-async def test_creation_refus_et_compatibilite(
+async def test_creation_rejections_and_compatibility(
     stack: Stack, over: dict[str, Any], status: int
 ) -> None:
     vid, aid = await _seed(stack)
@@ -198,7 +198,9 @@ async def test_creation_refus_et_compatibilite(
     assert r.status_code == status, r.text
 
 
-async def test_creation_refuse_compte_live_version_retiree_moteur_inconnu(stack: Stack) -> None:
+async def test_creation_rejects_live_account_retired_version_and_unknown_engine(
+    stack: Stack,
+) -> None:
     c = await stack.client("operator")
     vid, aid = await _seed(stack, acct="live")
     assert (await c.post(I, json=_body(vid, aid), headers=_key())).status_code == 409
@@ -213,7 +215,9 @@ async def test_creation_refuse_compte_live_version_retiree_moteur_inconnu(stack:
     assert (await c.post(I, json=half, headers=_key())).status_code == 422
 
 
-async def test_creation_idempotente_et_cle_reutilisee_avec_un_autre_corps(stack: Stack) -> None:
+async def test_creation_is_idempotent_and_key_reused_with_another_body_is_rejected(
+    stack: Stack,
+) -> None:
     vid, aid = await _seed(stack)
     c = await stack.client("operator")
     body, h = _body(vid, aid), _key()
@@ -235,7 +239,7 @@ async def test_creation_idempotente_et_cle_reutilisee_avec_un_autre_corps(stack:
         )
 
 
-def test_aucune_route_ne_modifie_le_mode(stack: Stack) -> None:
+def test_no_route_changes_the_mode(stack: Stack) -> None:
     from fastapi.routing import iter_route_contexts
 
     for ctx in iter_route_contexts(stack.app.routes):
@@ -246,7 +250,7 @@ def test_aucune_route_ne_modifie_le_mode(stack: Stack) -> None:
 # --- détail -------------------------------------------------------------------------------
 
 
-async def test_detail_derive_et_configuration_effective_datees_ou_inconnues(stack: Stack) -> None:
+async def test_detail_drift_and_effective_config_are_dated_or_unknown(stack: Stack) -> None:
     c = await stack.client("operator")
     inst = await _instance(stack)
     d = await get(c, f"{I}/{inst.id}")
@@ -272,7 +276,7 @@ async def test_detail_derive_et_configuration_effective_datees_ou_inconnues(stac
 # --- lectures de trading ------------------------------------------------------------------
 
 
-async def test_lectures_positions_ordres_trades(stack: Stack) -> None:
+async def test_reads_of_positions_orders_and_trades(stack: Stack) -> None:
     c = await stack.client("viewer")
     acct = await _seed(stack)
     inst = await _instance(stack, account_id=acct[1])
@@ -334,7 +338,7 @@ async def test_lectures_positions_ordres_trades(stack: Stack) -> None:
     assert rest["items"][0]["id"] != page["items"][0]["id"]
 
 
-async def test_flux_relaie_ordres_positions_trades(stack: Stack) -> None:
+async def test_stream_relays_orders_positions_and_trades(stack: Stack) -> None:
     inst = await _instance(stack)
     pos, order = _position(inst), _order(inst, "exit")
     await _row(stack, pos)
@@ -350,7 +354,7 @@ async def test_flux_relaie_ordres_positions_trades(stack: Stack) -> None:
 
 
 @pytest.mark.parametrize("intent", get_args(Intent))
-async def test_annuler_un_ordre_seulement_si_c_est_une_entree(stack: Stack, intent: str) -> None:
+async def test_cancel_an_order_only_if_it_is_an_entry(stack: Stack, intent: str) -> None:
     c = await stack.client("operator")
     inst = await _instance(stack)
     order = await _row(stack, _order(inst, intent))
@@ -365,7 +369,7 @@ async def test_annuler_un_ordre_seulement_si_c_est_une_entree(stack: Stack, inte
         assert cmds == []
 
 
-async def test_annuler_un_ordre_deja_clos_ou_inconnu_est_refuse(stack: Stack) -> None:
+async def test_cancelling_an_already_closed_or_unknown_order_is_rejected(stack: Stack) -> None:
     c = await stack.client("operator")
     inst = await _instance(stack)
     done = await _row(stack, _order(inst, "entry", status="filled"))
@@ -374,7 +378,7 @@ async def test_annuler_un_ordre_deja_clos_ou_inconnu_est_refuse(stack: Stack) ->
 
 
 @pytest.mark.parametrize("stale", [False, True])
-async def test_fermeture_acceptee_meme_si_l_etat_observe_est_inconnu_ou_perime(
+async def test_close_is_accepted_even_if_observed_state_is_unknown_or_stale(
     stack: Stack, stale: bool
 ) -> None:
     c = await stack.client("operator")
@@ -397,7 +401,7 @@ async def test_fermeture_acceptee_meme_si_l_etat_observe_est_inconnu_ou_perime(
     assert (await c.post(f"/api/v1/positions/{uuid4()}/close", headers=_key())).status_code == 404
 
 
-async def test_rbac_viewer_refuse_et_audit_avec_auteur(stack: Stack) -> None:
+async def test_rbac_viewer_is_rejected_and_audit_records_the_author(stack: Stack) -> None:
     inst = await _instance(stack)
     pos = await _row(stack, _position(inst))
     order = await _row(stack, _order(inst, "entry"))
@@ -417,7 +421,7 @@ async def test_rbac_viewer_refuse_et_audit_avec_auteur(stack: Stack) -> None:
     assert all(r.actor == f"user:{me['id']}" for r in rows)
 
 
-async def test_openapi_sans_nom_de_moteur_ni_creation_d_ordre(stack: Stack) -> None:
+async def test_openapi_has_no_engine_name_and_no_order_creation(stack: Stack) -> None:
     c = httpx.AsyncClient(transport=httpx.ASGITransport(app=stack.app), base_url="http://t")
     spec = (await c.get("/api/v1/openapi.json")).json()
     await c.aclose()
@@ -429,7 +433,7 @@ async def test_openapi_sans_nom_de_moteur_ni_creation_d_ordre(stack: Stack) -> N
     ]
 
 
-async def test_lignes_portent_le_mode_voulu_et_le_mode_observe_distincts(stack: Stack) -> None:
+async def test_rows_carry_distinct_desired_mode_and_observed_mode(stack: Stack) -> None:
     c = await stack.client("viewer")
     seen = stack.world.clock.now
     inst = await _instance(stack, observed_mode="live", observed_at=seen)
@@ -445,7 +449,7 @@ async def test_lignes_portent_le_mode_voulu_et_le_mode_observe_distincts(stack: 
         )
 
 
-async def test_cancelable_seulement_pour_une_entree_ouverte(stack: Stack) -> None:
+async def test_cancelable_only_for_an_open_entry(stack: Stack) -> None:
     c = await stack.client("viewer")
     inst = await _instance(stack)
     for intent in get_args(Intent):

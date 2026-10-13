@@ -72,7 +72,7 @@ async def _secret_count(stack: Stack) -> int:
         return int(await s.scalar(select(func.count()).select_from(Secret)) or 0)
 
 
-async def test_creation_et_liste_argent_en_chaines_decimales(stack: Stack) -> None:
+async def test_account_creation_and_list_return_money_as_decimal_strings(stack: Stack) -> None:
     admin = await stack.client("admin")
     created = await _account(admin)
     assert created["capital_cap"] == "1500.5" and created["type"] == "live"
@@ -106,7 +106,7 @@ async def test_creation_et_liste_argent_en_chaines_decimales(stack: Stack) -> No
         assert (await admin.post(A, json={**LIVE, **bad})).status_code == 422, bad
 
 
-async def test_rbac_viewer_et_operator_refuses_sur_les_ecritures(stack: Stack) -> None:
+async def test_rbac_viewer_and_operator_are_rejected_on_writes(stack: Stack) -> None:
     admin = await stack.client("admin")
     aid = (await _account(admin))["id"]
     before = await _secret_count(stack)
@@ -123,7 +123,7 @@ async def test_rbac_viewer_et_operator_refuses_sur_les_ecritures(stack: Stack) -
     assert await _secret_count(stack) == before
 
 
-async def test_totp_ancien_refuse_pour_ajouter_ou_remplacer_une_cle(stack: Stack) -> None:
+async def test_old_totp_is_rejected_for_adding_or_replacing_a_key(stack: Stack) -> None:
     admin = await stack.client("admin")
     aid = (await _account(admin))["id"]
     assert (await admin.put(f"{A}/{aid}/secret", json=KEY)).status_code == 200
@@ -135,7 +135,7 @@ async def test_totp_ancien_refuse_pour_ajouter_ou_remplacer_une_cle(stack: Stack
     assert (await _row(stack, aid)).secret_ref == before.secret_ref
 
 
-async def test_requete_d_une_autre_origine_refusee(stack: Stack) -> None:
+async def test_request_from_another_origin_is_rejected(stack: Stack) -> None:
     admin = await stack.client("admin")
     aid = (await _account(admin))["id"]
     r = await admin.put(
@@ -144,7 +144,7 @@ async def test_requete_d_une_autre_origine_refusee(stack: Stack) -> None:
     assert r.status_code == 403 and (await _row(stack, aid)).secret_ref is None
 
 
-async def test_put_ecriture_seule_reponse_sans_valeur_ni_derive(stack: Stack) -> None:
+async def test_put_is_write_only_and_response_has_no_value_or_derivative(stack: Stack) -> None:
     admin = await stack.client("admin")
     aid = (await _account(admin))["id"]
     r = await admin.put(f"{A}/{aid}/secret", json=KEY)
@@ -180,7 +180,7 @@ async def test_put_ecriture_seule_reponse_sans_valeur_ni_derive(stack: Stack) ->
     assert (await admin.put(f"{A}/{uuid4()}/secret", json=KEY)).status_code == 404
 
 
-async def test_un_compte_paper_ne_recoit_aucune_cle(stack: Stack) -> None:
+async def test_a_paper_account_receives_no_key(stack: Stack) -> None:
     admin = await stack.client("admin")
     aid = (await _account(admin, type="paper"))["id"]
     before = await _secret_count(stack)
@@ -189,7 +189,7 @@ async def test_un_compte_paper_ne_recoit_aucune_cle(stack: Stack) -> None:
     assert await _secret_count(stack) == before
 
 
-async def test_sonde_par_defaut_non_verifie(stack: Stack) -> None:
+async def test_probe_defaults_to_unverified(stack: Stack) -> None:
     """Sans venue réelle : `permissions_verified_at` reste vide, `ip_restricted` inconnu."""
     admin = await stack.client("admin")
     aid = (await _account(admin))["id"]
@@ -217,7 +217,7 @@ async def test_sonde_par_defaut_non_verifie(stack: Stack) -> None:
         ({"trading": True, "withdrawal": False}, "unverified"),
     ],
 )
-async def test_decision_du_test_de_permissions(
+async def test_permissions_check_decision(
     stack: Stack, monkeypatch: pytest.MonkeyPatch, outcome: Any, expected: str
 ) -> None:
     from centrade_api.accounts import permissions
@@ -248,7 +248,7 @@ perm = st.one_of(st.none(), st.booleans())
 
 
 @given(trading=perm, withdrawal=perm, ip=perm, usage=st.sampled_from(get_args(KeyUsage)))
-def test_verdict_refus_par_defaut(
+def test_verdict_is_rejected_by_default(
     trading: bool | None, withdrawal: bool | None, ip: bool | None, usage: KeyUsage
 ) -> None:
     result = verdict(
@@ -261,7 +261,7 @@ def test_verdict_refus_par_defaut(
         assert result == "refused"
 
 
-def test_verdict_reponse_incomplete_non_verifiee() -> None:
+def test_verdict_of_an_incomplete_response_is_unverified() -> None:
     for junk in (None, {}, "ok", True, object()):
         assert verdict(junk, "trade") == "unverified"  # type: ignore[arg-type]
     # Des valeurs « vraies » qui ne sont pas des booléens ne valent pas permission constatée.
@@ -271,7 +271,7 @@ def test_verdict_reponse_incomplete_non_verifiee() -> None:
     )
 
 
-async def test_rotation_reussie_bascule_puis_revoque_l_ancienne(stack: Stack) -> None:
+async def test_successful_rotation_switches_then_revokes_the_old_key(stack: Stack) -> None:
     admin = await stack.client("admin")
     aid = (await _account(admin))["id"]
     assert (await admin.post(f"{A}/{aid}/rotate", json=KEY)).status_code == 409  # rien à remplacer
@@ -301,7 +301,7 @@ async def test_rotation_reussie_bascule_puis_revoque_l_ancienne(stack: Stack) ->
         60.0,
     ],
 )
-async def test_rotation_en_echec_ancienne_cle_intacte(
+async def test_failed_rotation_leaves_the_old_key_intact(
     stack: Stack, monkeypatch: pytest.MonkeyPatch, outcome: Any
 ) -> None:
     from centrade_api.accounts import permissions
@@ -335,7 +335,7 @@ async def test_rotation_en_echec_ancienne_cle_intacte(
     assert last.actor == f"user:{stack.last_account.id}"  # type: ignore[union-attr]
 
 
-async def test_chaque_ecriture_est_auditee_avec_son_auteur(stack: Stack) -> None:
+async def test_every_write_is_audited_with_its_author(stack: Stack) -> None:
     admin = await stack.client("admin")
     actor = f"user:{stack.last_account.id}"  # type: ignore[union-attr]
     aid = (await _account(admin))["id"]

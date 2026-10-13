@@ -25,7 +25,7 @@ async def _running(stack: Stack, **params: object) -> tuple[httpx.AsyncClient, s
     return c, str(inst["id"])
 
 
-class _RedisEnPanne:
+class _BrokenRedis:
     """Tout appel échoue comme un Redis injoignable."""
 
     def __getattr__(self, name: str) -> Any:
@@ -36,7 +36,7 @@ class _RedisEnPanne:
 
 
 @pytest.mark.parametrize("action", sorted(REDUCTIONS))
-async def test_i04_commande_de_reduction_n_expire_jamais_avant_l_envoi(
+async def test_i04_risk_reducing_command_never_expires_before_dispatch(
     stack: Stack, action: str
 ) -> None:
     c, iid = await _running(stack)
@@ -52,7 +52,7 @@ async def test_i04_commande_de_reduction_n_expire_jamais_avant_l_envoi(
     assert datetime.fromisoformat(cmd["deadline_at"]) > datetime.fromisoformat(cmd["dispatched_at"])
 
 
-async def test_i04_echeance_de_la_pause_court_depuis_l_envoi(stack: Stack) -> None:
+async def test_i04_pause_deadline_runs_from_dispatch(stack: Stack) -> None:
     c, iid = await _running(stack, failures=["ignore_pause"])
     cid = (await act(c, iid, "pause-entries")).json()["command_id"]
     w = stack.world
@@ -67,10 +67,10 @@ async def test_i04_echeance_de_la_pause_court_depuis_l_envoi(stack: Stack) -> No
     assert cmd["status"] == "timed_out" and cmd["dispatched_at"] is not None
 
 
-async def test_i04_panne_du_bus_n_empeche_ni_l_envoi_ni_le_releve(stack: Stack) -> None:
+async def test_i04_bus_outage_blocks_neither_dispatch_nor_snapshot(stack: Stack) -> None:
     c, iid = await _running(stack)
     w = stack.world
-    broken: Any = _RedisEnPanne()
+    broken: Any = _BrokenRedis()
     w.worker = Worker(
         adapters={"fake": w.fake},
         sessions=w.sessions,
@@ -91,7 +91,7 @@ async def test_i04_panne_du_bus_n_empeche_ni_l_envoi_ni_le_releve(stack: Stack) 
     assert datetime.fromisoformat(inst["state"]["observed_at"]) == w.clock.now  # relevé du tour
 
 
-async def test_i04_erreur_sur_une_instance_n_empeche_pas_les_autres(stack: Stack) -> None:
+async def test_i04_error_on_one_instance_does_not_block_the_others(stack: Stack) -> None:
     c, broken_id = await _running(stack)
     healthy = (await create_instance(c))["id"]
     w = stack.world
@@ -118,7 +118,7 @@ async def test_i04_erreur_sur_une_instance_n_empeche_pas_les_autres(stack: Stack
     assert datetime.fromisoformat(inst["state"]["observed_at"]) == w.clock.now
 
 
-async def test_i04_echec_d_ecriture_pour_une_commande_n_empeche_pas_d_envoyer_les_autres(
+async def test_i04_write_failure_for_one_command_does_not_block_dispatching_the_others(
     stack: Stack,
 ) -> None:
     c, first = await _running(stack)
@@ -148,7 +148,7 @@ async def test_i04_echec_d_ecriture_pour_une_commande_n_empeche_pas_d_envoyer_le
         assert (await w.fake.status(ref_of(iid))).state == "exits_only"
 
 
-async def test_i04_pause_envoyee_meme_si_le_moteur_etait_muet_au_tour_precedent(
+async def test_i04_pause_is_dispatched_even_if_engine_was_silent_on_previous_tick(
     stack: Stack,
 ) -> None:
     c, iid = await _running(stack)

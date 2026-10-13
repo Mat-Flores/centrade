@@ -32,7 +32,7 @@ async def _running(stack: Stack, **params: object) -> tuple[httpx.AsyncClient, s
     return c, inst["id"]
 
 
-async def test_i08_commande_non_faite_sans_effet_observe(stack: Stack) -> None:
+async def test_i08_command_is_not_done_without_an_observed_effect(stack: Stack) -> None:
     c, iid = await _running(stack, failures=["ignore_pause"])
     assert (await get(c, f"/api/v1/instances/{iid}"))["state"]["value"] == "running"
     r = await act(c, iid, "pause-entries")
@@ -51,7 +51,7 @@ async def test_i08_commande_non_faite_sans_effet_observe(stack: Stack) -> None:
     assert (await get(c, f"/api/v1/commands/{cid}"))["status"] == "timed_out"
 
 
-async def test_i08_commande_sans_reponse_passe_timed_out(stack: Stack) -> None:
+async def test_i08_command_without_response_becomes_timed_out(stack: Stack) -> None:
     c, iid = await _running(stack)
     stack.world.fake.set_failure(ref_of(iid), Failure.SILENT)
     r = await act(c, iid, "flatten")
@@ -73,7 +73,7 @@ async def test_i08_commande_sans_reponse_passe_timed_out(stack: Stack) -> None:
     assert (await get(c, f"/api/v1/commands/{cid}"))["status"] == "timed_out"
 
 
-async def test_i08_pas_de_verification_sur_un_releve_anterieur_a_l_accuse(stack: Stack) -> None:
+async def test_i08_no_verification_on_snapshot_older_than_the_ack(stack: Stack) -> None:
     c, iid = await _running(stack)
     w = stack.world
     w.fake.set_failure(ref_of(iid), Failure.SLOW)  # le moteur obéit, mais ses relevés datent
@@ -89,7 +89,7 @@ async def test_i08_pas_de_verification_sur_un_releve_anterieur_a_l_accuse(stack:
     assert (await get(c, f"/api/v1/commands/{cid}"))["status"] == "verified"
 
 
-async def test_i08_pause_et_flatten_passent_devant_une_instance_occupee(stack: Stack) -> None:
+async def test_i08_pause_and_flatten_go_through_a_busy_instance(stack: Stack) -> None:
     c, iid = await _running(stack)
     w = stack.world
     w.fake.set_failure(ref_of(iid), Failure.SILENT)
@@ -107,7 +107,7 @@ async def test_i08_pause_et_flatten_passent_devant_une_instance_occupee(stack: S
         assert (await get(c, f"/api/v1/commands/{cid}"))["status"] == "verified"
 
 
-async def test_i08_empreinte_d_audit_de_l_expiration_porte_le_statut_precedent(
+async def test_i08_expiry_audit_fingerprint_carries_the_previous_status(
     stack: Stack,
 ) -> None:
     c, iid = await _running(stack)
@@ -187,7 +187,7 @@ LEGAL = {
 
 @settings(max_examples=40, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(path=st.lists(st.sampled_from(STATUSES), max_size=8))
-def test_i08_cycle_de_vie_de_la_commande_est_ordonne(migrated_url: str, path: list[Status]) -> None:
+def test_i08_command_lifecycle_is_ordered(migrated_url: str, path: list[Status]) -> None:
     """Quelle que soit la suite de transitions tentées sur la vraie table : jamais en arrière,
     jamais de saut d'étape, et un état terminal ne change plus."""
     asyncio.run(_lifecycle(migrated_url, path))

@@ -51,7 +51,7 @@ async def _run(
     steps=st.integers(1, 40),
     data=st.data(),
 )
-def test_rejouer_dupliquer_permuter_laisse_les_projections_inchangees(
+def test_replaying_duplicating_or_permuting_events_leaves_projections_unchanged(
     migrated_url: str, redis_url: str, seed: int, steps: int, data: st.DataObject
 ) -> None:
     perm = data.draw(st.randoms(use_true_random=False))
@@ -80,7 +80,7 @@ def test_rejouer_dupliquer_permuter_laisse_les_projections_inchangees(
     lost=st.lists(st.booleans(), min_size=130, max_size=130),
     order=st.randoms(use_true_random=False),
 )
-def test_perdre_une_partie_des_evenements_ne_fausse_pas_les_projections(
+def test_losing_some_events_does_not_corrupt_projections(
     migrated_url: str, redis_url: str, seed: int, steps: int, lost: list[bool], order: object
 ) -> None:
     def pick(events: list[CanonicalEvent]) -> list[CanonicalEvent]:

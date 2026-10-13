@@ -16,7 +16,7 @@ async def _next(gen: AsyncGenerator[ServerSentEvent]) -> ServerSentEvent:
     return await asyncio.wait_for(gen.__anext__(), 5)
 
 
-async def test_s10_commande_sans_reponse_timed_out_visible_jamais_verified(stack: Stack) -> None:
+async def test_s10_unanswered_command_is_timed_out_visible_never_verified(stack: Stack) -> None:
     from centrade_core.models import Session
 
     w = stack.world

@@ -64,7 +64,7 @@ def _refused(response: httpx.Response) -> dict[str, object]:
     return body
 
 
-async def test_code_valide_rafraichit_le_totp_de_la_session(
+async def test_valid_code_refreshes_the_session_totp(
     client: httpx.AsyncClient,
     make_account: MakeAccount,
     sign_in: SignIn,
@@ -94,7 +94,7 @@ async def test_code_valide_rafraichit_le_totp_de_la_session(
     assert (await client.post(DANGEROUS)).status_code == 403
 
 
-async def test_code_faux_refuse_sans_rien_rafraichir_ni_fermer_la_session(
+async def test_wrong_code_is_rejected_without_refreshing_or_closing_the_session(
     client: httpx.AsyncClient,
     make_account: MakeAccount,
     sign_in: SignIn,
@@ -118,7 +118,7 @@ async def test_code_faux_refuse_sans_rien_rafraichir_ni_fermer_la_session(
     assert (await _actions(session_factory, account))[-1] == ("auth.totp_confirm.failed", author)
 
 
-async def test_code_rejoue_refuse_comme_un_code_faux(
+async def test_replayed_code_is_rejected_like_a_wrong_code(
     client: httpx.AsyncClient,
     make_account: MakeAccount,
     sign_in: SignIn,
@@ -149,7 +149,7 @@ async def test_code_rejoue_refuse_comme_un_code_faux(
     assert from_login == replayed == wrong
 
 
-async def test_code_de_recuperation_refuse_et_non_consomme(
+async def test_recovery_code_is_rejected_and_not_consumed(
     client: httpx.AsyncClient,
     make_account: MakeAccount,
     sign_in: SignIn,
@@ -170,7 +170,7 @@ async def test_code_de_recuperation_refuse_et_non_consomme(
     assert user.failed_attempts == 3  # compté comme tout autre refus
 
 
-async def test_sans_session_complete_refuse(
+async def test_request_without_full_session_is_rejected(
     client: httpx.AsyncClient, make_account: MakeAccount, clock: FakeClock, session_factory: Factory
 ) -> None:
     account = await make_account()
@@ -191,7 +191,7 @@ async def test_sans_session_complete_refuse(
     assert (user.failed_attempts, user.totp_last_step) == (0, None)  # le code n'a pas été lu
 
 
-async def test_autre_origine_refusee(
+async def test_request_from_another_origin_is_rejected(
     make_client: MakeClient,
     make_account: MakeAccount,
     sign_in: SignIn,
@@ -217,7 +217,7 @@ async def test_autre_origine_refusee(
     assert (await legit.post(CONFIRM, json=code)).status_code == 204  # le code n'a pas été brûlé
 
 
-async def test_echecs_repetes_verrouillent_puis_un_code_valide_est_refuse(
+async def test_repeated_failures_lock_then_a_valid_code_is_rejected(
     client: httpx.AsyncClient,
     make_account: MakeAccount,
     sign_in: SignIn,
@@ -257,7 +257,7 @@ async def test_echecs_repetes_verrouillent_puis_un_code_valide_est_refuse(
     assert (await _user(session_factory, account)).failed_attempts == 5
 
 
-async def test_echecs_de_connexion_et_de_confirmation_partagent_le_meme_compteur(
+async def test_login_and_confirmation_failures_share_the_same_counter(
     make_client: MakeClient,
     make_account: MakeAccount,
     sign_in: SignIn,
@@ -279,7 +279,7 @@ async def test_echecs_de_connexion_et_de_confirmation_partagent_le_meme_compteur
     assert (await _user(session_factory, account)).failed_attempts == 5
 
 
-async def test_la_confirmation_ne_rafraichit_que_sa_session(
+async def test_confirmation_refreshes_only_its_own_session(
     make_client: MakeClient,
     make_account: MakeAccount,
     sign_in: SignIn,
@@ -305,7 +305,7 @@ async def test_la_confirmation_ne_rafraichit_que_sa_session(
     assert (await second.post(DANGEROUS)).status_code == 403
 
 
-async def test_un_meme_code_envoye_par_deux_sessions_n_en_rafraichit_qu_une(
+async def test_same_code_sent_by_two_sessions_refreshes_only_one(
     make_client: MakeClient,
     make_account: MakeAccount,
     sign_in: SignIn,
@@ -331,7 +331,7 @@ async def test_un_meme_code_envoye_par_deux_sessions_n_en_rafraichit_qu_une(
     assert len(fresh) == 1
 
 
-async def test_le_dernier_pas_est_relu_sous_verrou_et_non_tel_que_charge_par_la_session(
+async def test_last_step_is_reread_under_lock_not_as_loaded_by_the_session(
     app: FastAPI,
     client: httpx.AsyncClient,
     make_account: MakeAccount,
@@ -373,7 +373,7 @@ async def test_le_dernier_pas_est_relu_sous_verrou_et_non_tel_que_charge_par_la_
     assert session.totp_verified_at == opened.totp_verified_at
 
 
-async def test_la_confirmation_ne_prolonge_pas_la_session(
+async def test_confirmation_does_not_extend_the_session(
     client: httpx.AsyncClient, make_account: MakeAccount, sign_in: SignIn, clock: FakeClock
 ) -> None:
     account = await make_account()
@@ -389,7 +389,7 @@ async def test_la_confirmation_ne_prolonge_pas_la_session(
     assert (await client.get(ME)).status_code == 401
 
 
-async def test_session_inactive_depuis_30_minutes_ne_peut_pas_confirmer(
+async def test_session_inactive_for_30_minutes_cannot_confirm(
     client: httpx.AsyncClient, make_account: MakeAccount, sign_in: SignIn, clock: FakeClock
 ) -> None:
     account = await make_account()
@@ -399,7 +399,7 @@ async def test_session_inactive_depuis_30_minutes_ne_peut_pas_confirmer(
     assert (await client.post(CONFIRM, json={"code": account.code(clock.now)})).status_code == 401
 
 
-async def test_secret_totp_illisible_503_sans_compter_d_echec(
+async def test_unreadable_totp_secret_returns_503_without_counting_a_failure(
     client: httpx.AsyncClient,
     make_account: MakeAccount,
     sign_in: SignIn,
@@ -423,7 +423,7 @@ async def test_secret_totp_illisible_503_sans_compter_d_echec(
     assert (await _user(session_factory, account)).failed_attempts == 0
 
 
-async def test_corps_invalide_422_sans_renvoyer_la_valeur(
+async def test_invalid_body_returns_422_without_echoing_the_value(
     client: httpx.AsyncClient, make_account: MakeAccount, sign_in: SignIn
 ) -> None:
     await sign_in(client, await make_account())
@@ -434,7 +434,7 @@ async def test_corps_invalide_422_sans_renvoyer_la_valeur(
         assert "9" * 50 not in r.text
 
 
-async def test_le_code_saisi_n_apparait_ni_dans_les_logs_ni_dans_l_audit(
+async def test_submitted_code_appears_neither_in_logs_nor_in_audit(
     logs: io.StringIO,
     client: httpx.AsyncClient,
     make_account: MakeAccount,
@@ -500,7 +500,7 @@ assert _CURRENT is not None
     back=st.one_of(st.none(), st.integers(min_value=-3, max_value=3)),
     offset=st.integers(min_value=-3, max_value=3),
 )
-def test_propriete_un_pas_n_est_accepte_que_frais_et_proche(back: int | None, offset: int) -> None:
+def test_property_a_step_is_accepted_only_if_fresh_and_close(back: int | None, offset: int) -> None:
     """Accepté si et seulement si le pas est à un pas près de l'instant et après le dernier."""
     assert _CURRENT is not None
     last = None if back is None else _CURRENT + back
@@ -522,7 +522,7 @@ def test_propriete_un_pas_n_est_accepte_que_frais_et_proche(back: int | None, of
         st.sampled_from(_RECOVERY).map(lambda c: c.lower().replace("-", " ")),
     )
 )
-def test_propriete_rien_d_autre_qu_un_code_totp_n_est_accepte(code: str) -> None:
+def test_property_only_a_well_formed_totp_code_is_accepted(code: str) -> None:
     valid = {pyotp.TOTP(_SECRET).at(_NOW, o) for o in (-1, 0, 1)}
     user = _enrolled(None)
     hashes = list(user.recovery_code_hashes)

@@ -115,7 +115,7 @@ async def make(runner: DockerRunner, client: FakeClient, spec: ContainerSpec) ->
     return client.created[-1][1]
 
 
-async def test_gabarit_durcissement_complet(
+async def test_template_applies_full_hardening(
     runner: DockerRunner, client: FakeClient, spec: ContainerSpec
 ) -> None:
     kw = await make(runner, client, spec)
@@ -140,7 +140,7 @@ async def test_gabarit_durcissement_complet(
     }
 
 
-async def test_dossier_du_moteur_cree_au_nom_de_l_utilisateur_du_conteneur(
+async def test_engine_folder_is_created_as_the_container_user(
     runner: DockerRunner, client: FakeClient, spec: ContainerSpec
 ) -> None:
     await runner.create(replace(spec, user="10001:10002"))
@@ -151,7 +151,7 @@ async def test_dossier_du_moteur_cree_au_nom_de_l_utilisateur_du_conteneur(
     assert (entry.uid, entry.gid, entry.mode) == (10001, 10002, 0o700)
 
 
-async def test_gabarit_deux_montages_seulement(
+async def test_template_has_exactly_two_mounts(
     runner: DockerRunner, client: FakeClient, spec: ContainerSpec
 ) -> None:
     mounts = (await make(runner, client, spec))["mounts"]
@@ -164,7 +164,7 @@ async def test_gabarit_deux_montages_seulement(
 
 
 @pytest.mark.parametrize("name", ["API_KEY", "FREQTRADE__EXCHANGE__SECRET", "PATH", ""])
-async def test_variable_hors_liste_blanche_refusee(
+async def test_variable_outside_the_allowlist_is_rejected(
     runner: DockerRunner, spec: ContainerSpec, name: str
 ) -> None:
     assert name not in ENV_ALLOWED
@@ -175,7 +175,7 @@ async def test_variable_hors_liste_blanche_refusee(
 @pytest.mark.parametrize(
     "where", ["/", "/var/run/docker.sock", "/etc", "autre-instance", "traversee"]
 )
-async def test_montage_hors_des_deux_autorises_refuse(
+async def test_mount_outside_the_two_allowed_is_rejected(
     runner: DockerRunner, client: FakeClient, spec: ContainerSpec, tmp_path: Path, where: str
 ) -> None:
     other = tmp_path / "autre"
@@ -189,14 +189,14 @@ async def test_montage_hors_des_deux_autorises_refuse(
     assert client.created == []
 
 
-async def test_sous_dossier_absent_refuse(runner: DockerRunner, spec: ContainerSpec) -> None:
+async def test_missing_subfolder_is_rejected(runner: DockerRunner, spec: ContainerSpec) -> None:
     spec.files_dir.rmdir()  # Docker créerait un dossier root : on refuse
     with pytest.raises(CommandRejected):
         await runner.create(spec)
 
 
 @pytest.mark.parametrize("digest", ["", "latest", "sha256:abc", "sha256:" + "AB" * 32])
-async def test_digest_mal_forme_refuse(
+async def test_malformed_digest_is_rejected(
     runner: DockerRunner, spec: ContainerSpec, digest: str
 ) -> None:
     with pytest.raises(CommandRejected):
@@ -204,14 +204,14 @@ async def test_digest_mal_forme_refuse(
 
 
 @pytest.mark.parametrize("image", ["", "x@sha256:" + "a" * 64, "UPPER/x", "-x"])
-async def test_image_mal_formee_refusee(
+async def test_malformed_image_is_rejected(
     runner: DockerRunner, spec: ContainerSpec, image: str
 ) -> None:
     with pytest.raises(CommandRejected):
         await runner.create(replace(spec, image=image))
 
 
-async def test_digest_different_refuse_sans_telechargement(
+async def test_different_digest_is_rejected_without_pulling(
     runner: DockerRunner, client: FakeClient, spec: ContainerSpec
 ) -> None:
     client.missing_image = True  # le démon ne retrouve pas ce digest localement
@@ -220,7 +220,7 @@ async def test_digest_different_refuse_sans_telechargement(
 
 
 @pytest.mark.parametrize("user", ["root", "0:0", "0:1000", "1000:0", "1000", "ftuser:ftuser", ""])
-async def test_utilisateur_ou_groupe_root_ou_nom_refuse(
+async def test_root_or_unnamed_user_or_group_is_rejected(
     runner: DockerRunner, spec: ContainerSpec, user: str
 ) -> None:
     with pytest.raises(CommandRejected, match="utilisateur"):
@@ -228,13 +228,15 @@ async def test_utilisateur_ou_groupe_root_ou_nom_refuse(
 
 
 @pytest.mark.parametrize("field", ["memory_bytes", "nano_cpus"])
-async def test_plafond_nul_refuse(runner: DockerRunner, spec: ContainerSpec, field: str) -> None:
+async def test_zero_limit_is_rejected(
+    runner: DockerRunner, spec: ContainerSpec, field: str
+) -> None:
     with pytest.raises(CommandRejected, match="plafonds"):
         over: dict[str, Any] = {field: 0}
         await runner.create(replace(spec, **over))
 
 
-async def test_admission_refusee_au_dela_de_la_memoire(
+async def test_admission_is_rejected_beyond_memory(
     runner: DockerRunner, client: FakeClient, spec: ContainerSpec, tmp_path: Path
 ) -> None:
     client.mem_total = 2 * GIB
@@ -249,7 +251,7 @@ async def test_admission_refusee_au_dela_de_la_memoire(
     assert len(client.created) == 2
 
 
-async def test_admission_ignore_les_conteneurs_arretes(
+async def test_admission_ignores_stopped_containers(
     runner: DockerRunner, client: FakeClient, spec: ContainerSpec, tmp_path: Path
 ) -> None:
     client.mem_total = GIB
@@ -261,7 +263,7 @@ async def test_admission_ignore_les_conteneurs_arretes(
     await runner.create(replace(spec, instance_id=iid, files_dir=tmp_path / str(iid)))
 
 
-async def test_admission_refusee_si_memoire_illisible(
+async def test_admission_is_rejected_when_memory_is_unreadable(
     client: FakeClient, spec: ContainerSpec, tmp_path: Path
 ) -> None:
     client.mem_total = None
@@ -269,7 +271,7 @@ async def test_admission_refusee_si_memoire_illisible(
         await DockerRunner(runtime_dir=tmp_path, client=client).create(spec)
 
 
-async def test_admission_utilise_le_parametre_si_info_interdit(
+async def test_admission_uses_the_parameter_when_info_is_forbidden(
     client: FakeClient, spec: ContainerSpec, tmp_path: Path
 ) -> None:
     client.mem_total = None
@@ -280,7 +282,7 @@ async def test_admission_utilise_le_parametre_si_info_interdit(
         await small.create(spec)
 
 
-async def test_start_et_stop_idempotents(
+async def test_start_and_stop_are_idempotent(
     runner: DockerRunner, client: FakeClient, spec: ContainerSpec
 ) -> None:
     await runner.create(spec)
@@ -292,12 +294,12 @@ async def test_start_et_stop_idempotents(
     await runner.stop(uuid4())  # absent : pas d'erreur
 
 
-async def test_start_conteneur_absent_refuse(runner: DockerRunner) -> None:
+async def test_start_of_a_missing_container_is_rejected(runner: DockerRunner) -> None:
     with pytest.raises(CommandRejected):
         await runner.start(uuid4())
 
 
-async def test_adopt_rend_les_conteneurs_en_marche_sans_les_toucher(
+async def test_adopt_returns_running_containers_without_touching_them(
     runner: DockerRunner, client: FakeClient, spec: ContainerSpec
 ) -> None:
     await runner.create(spec)
@@ -310,7 +312,7 @@ async def test_adopt_rend_les_conteneurs_en_marche_sans_les_toucher(
     assert c.calls == []  # ni start, ni stop, ni remove
 
 
-async def test_remove_seulement_sur_demande(
+async def test_remove_happens_only_on_request(
     runner: DockerRunner, client: FakeClient, spec: ContainerSpec
 ) -> None:
     await runner.create(spec)
@@ -323,7 +325,7 @@ async def test_remove_seulement_sur_demande(
     await runner.remove(uuid4())  # absent : pas d'erreur
 
 
-async def test_erreurs_docker_traduites(
+async def test_docker_errors_are_translated(
     runner: DockerRunner,
     client: FakeClient,
     spec: ContainerSpec,
@@ -350,7 +352,7 @@ async def test_erreurs_docker_traduites(
         await runner.create(spec)
 
 
-def test_socket_brut_refuse(tmp_path: Path) -> None:
+def test_raw_socket_is_rejected(tmp_path: Path) -> None:
     with pytest.raises(ValueError, match="socket proxy"):
         DockerRunner("unix:///var/run/docker.sock", runtime_dir=tmp_path)
     with pytest.raises(ValueError):

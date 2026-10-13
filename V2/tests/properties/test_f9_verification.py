@@ -110,7 +110,7 @@ refusal_lists = st.lists(st.builds(Refusal, code=st.text(max_size=5), message=st
     drifts=drift_lists,
     recorded=st.sampled_from(PRINTS),
 )
-def test_f9_entrees_ouvertes_seulement_si_tout_concorde(
+def test_f9_entries_open_only_if_everything_matches(
     mode: str,
     spec_fp: str | None,
     status: InstanceStatus | None,
@@ -167,27 +167,27 @@ def _conforming() -> dict[str, object]:
 OLD = T0 - timedelta(seconds=STALE_S + 1)
 # Chaque dégradation d'un relevé conforme, et le motif qu'elle doit produire.
 DEGRADATIONS: dict[str, tuple[dict[str, object], str]] = {
-    "instance live": ({"spec": _spec("live", "fp-a")}, LIVE),
-    "état illisible": ({"status": None}, UNKNOWN),
-    "état inconnu": (
+    "live instance": ({"spec": _spec("live", "fp-a")}, LIVE),
+    "unreadable state": ({"status": None}, UNKNOWN),
+    "unknown state": (
         {"status": InstanceStatus(state="unknown", mode=None, observed_at=T0)},
         UNKNOWN,
     ),
-    "état périmé": (
+    "stale state": (
         {"status": InstanceStatus(state="exits_only", mode="paper", observed_at=OLD)},
         STALE,
     ),
-    "mode illisible": (
+    "unreadable mode": (
         {"status": InstanceStatus(state="exits_only", mode=None, observed_at=T0)},
         UNKNOWN,
     ),
-    "mode faux": (
+    "wrong mode": (
         {"status": InstanceStatus(state="exits_only", mode="live", observed_at=T0)},
         MODE,
     ),
-    "configuration non relue": ({"effective": None}, UNKNOWN),
-    "comparaison non faite": ({"drifts": None}, UNKNOWN),
-    "configuration périmée": (
+    "config not reread": ({"effective": None}, UNKNOWN),
+    "comparison not done": ({"drifts": None}, UNKNOWN),
+    "stale config": (
         {
             "effective": EffectiveConfig(
                 values={}, observed_at=OLD, fingerprint="fp-a", engine_version="1"
@@ -195,11 +195,11 @@ DEGRADATIONS: dict[str, tuple[dict[str, object], str]] = {
         },
         STALE,
     ),
-    "dérive": ({"drifts": (Drift(key="k", expected="1", observed="2"),)}, DRIFT),
-    "registre modifié": ({"spec": _spec("paper", "fp-b")}, FINGERPRINT),
-    "spécification sans déploiement": ({"spec": _spec("paper", None)}, FINGERPRINT),
-    "empreinte jamais enregistrée": ({"recorded_fingerprint": None}, FINGERPRINT),
-    "autre chose tourne": (
+    "drift": ({"drifts": (Drift(key="k", expected="1", observed="2"),)}, DRIFT),
+    "registry changed": ({"spec": _spec("paper", "fp-b")}, FINGERPRINT),
+    "spec without deployment": ({"spec": _spec("paper", None)}, FINGERPRINT),
+    "fingerprint never recorded": ({"recorded_fingerprint": None}, FINGERPRINT),
+    "something else is running": (
         {
             "effective": EffectiveConfig(
                 values={}, observed_at=T0, fingerprint="fp-b", engine_version="1"
@@ -207,11 +207,11 @@ DEGRADATIONS: dict[str, tuple[dict[str, object], str]] = {
         },
         FINGERPRINT,
     ),
-    "empreinte illisible": (
+    "unreadable fingerprint": (
         {"effective": EffectiveConfig(values={}, observed_at=T0, engine_version="1")},
         FINGERPRINT,
     ),
-    "autre version de moteur": (
+    "other engine version": (
         {
             "effective": EffectiveConfig(
                 values={}, observed_at=T0, fingerprint="fp-a", engine_version="2"
@@ -222,13 +222,13 @@ DEGRADATIONS: dict[str, tuple[dict[str, object], str]] = {
 }
 
 
-def test_f9_un_releve_conforme_ouvre_les_entrees() -> None:
+def test_f9_conforming_snapshot_opens_entries() -> None:
     # Sans ce témoin, la propriété suivante passerait avec une fonction qui refuse toujours.
     assert entry_refusals(**_conforming(), now=T0, stale_after_s=STALE_S) == ()  # type: ignore[arg-type]
 
 
 @given(names=st.lists(st.sampled_from(sorted(DEGRADATIONS)), min_size=1, unique=True))
-def test_f9_toute_degradation_d_un_releve_conforme_est_refusee(names: list[str]) -> None:
+def test_f9_any_degradation_of_a_conforming_snapshot_is_rejected(names: list[str]) -> None:
     case = _conforming()
     for name in names:
         case.update(DEGRADATIONS[name][0])
@@ -245,7 +245,7 @@ def test_f9_toute_degradation_d_un_releve_conforme_est_refusee(names: list[str])
     entries=st.none() | refusal_lists,
     stale_after_s=st.floats(0, 3600),
 )
-def test_f9_ne_retient_jamais_ce_qui_reduit_le_risque(
+def test_f9_never_holds_back_what_reduces_risk(
     type_: str,
     mode: str,
     status: InstanceStatus | None,
@@ -266,7 +266,7 @@ def test_f9_ne_retient_jamais_ce_qui_reduit_le_risque(
     status=statuses,
     entries=st.none() | refusal_lists,
 )
-def test_f9_ce_qui_augmente_le_risque_part_seulement_sans_aucun_doute(
+def test_f9_risk_increasing_actions_go_out_only_without_any_doubt(
     type_: str, mode: str, status: InstanceStatus | None, entries: tuple[Refusal, ...] | None
 ) -> None:
     out = command_refusals(
@@ -292,7 +292,7 @@ keys = st.sampled_from(("a", "b", "c", "d", "e"))
     unreadable=st.sets(keys),
     reported=st.sets(keys),
 )
-def test_f9_cle_possedee_absente_de_la_relecture_est_une_derive_sauf_declaree(
+def test_f9_owned_key_missing_from_readback_is_drift_unless_declared(
     generated: dict[str, str], read: set[str], unreadable: set[str], reported: set[str]
 ) -> None:
     config = EngineConfig(values=generated, unreadable=frozenset(unreadable))
@@ -305,7 +305,7 @@ def test_f9_cle_possedee_absente_de_la_relecture_est_une_derive_sauf_declaree(
     assert all(d.observed is None for d in out[len(by_adapter) :])
 
 
-def test_f9_reprise_refusee_si_la_verification_n_a_pas_eu_lieu() -> None:
+def test_f9_resume_is_rejected_if_verification_did_not_happen() -> None:
     """Le relevé a beau être parfait : sans résultat de vérification, rien ne part."""
     good = InstanceStatus(state="exits_only", mode="paper", observed_at=T0)
 
@@ -316,5 +316,5 @@ def test_f9_reprise_refusee_si_la_verification_n_a_pas_eu_lieu() -> None:
 
     assert refusals(()) == ()  # témoin : vérification passée, la reprise part
     assert [r.code for r in refusals(None)] == [UNKNOWN]
-    drift = (Refusal(DRIFT, "dérive"),)
+    drift = (Refusal(DRIFT, "drift"),)
     assert refusals(drift) == drift

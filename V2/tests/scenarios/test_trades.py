@@ -47,7 +47,7 @@ async def _rows(stack: Stack, iid: str) -> list[Trade]:
         return list(await s.scalars(select(Trade).where(Trade.instance_id == UUID(iid))))
 
 
-async def test_position_close_devient_une_ligne_avec_sa_cause(stack: Stack) -> None:
+async def test_closed_position_becomes_a_row_with_its_cause(stack: Stack) -> None:
     iid = str((await create_instance(await stack.client("operator")))["id"])
     notes = await _apply(stack, iid, _closed())
     (t,) = await _rows(stack, iid)
@@ -70,7 +70,7 @@ async def test_position_close_devient_une_ligne_avec_sa_cause(stack: Stack) -> N
     assert len(await _rows(stack, iid)) == 1
 
 
-async def test_cause_inconnue_ou_absente_est_unknown(stack: Stack) -> None:
+async def test_unknown_or_missing_cause_is_unknown(stack: Stack) -> None:
     iid = str((await create_instance(await stack.client("operator")))["id"])
     await _apply(
         stack,
@@ -83,7 +83,7 @@ async def test_cause_inconnue_ou_absente_est_unknown(stack: Stack) -> None:
     assert {t.entry_cause for t in rows} == {"unknown"}
 
 
-async def test_trade_clos_du_moteur_visible_dans_get_trades_avec_cause_et_mode(
+async def test_engine_closed_trade_is_visible_in_get_trades_with_cause_and_mode(
     stack: Stack,
 ) -> None:
     w = stack.world
@@ -126,7 +126,7 @@ async def test_trade_clos_du_moteur_visible_dans_get_trades_avec_cause_et_mode(
         assert t.pnl == (t.exit_price - t.entry_price) * t.quantity
 
 
-async def test_contrainte_exit_cause_en_base_egale_exit_causes(stack: Stack) -> None:
+async def test_exit_cause_db_constraint_equals_exit_causes(stack: Stack) -> None:
     async with stack.world.sessions() as s:
         defs = (
             await s.scalars(
@@ -153,7 +153,7 @@ async def test_contrainte_exit_cause_en_base_egale_exit_causes(stack: Stack) -> 
         ),
     ],
 )
-async def test_tri_pagine_utilise_son_index(stack: Stack, query: str, index: str) -> None:
+async def test_paged_sort_uses_its_index(stack: Stack, query: str, index: str) -> None:
     async with stack.world.sessions.begin() as s:
         await s.execute(text("SET LOCAL enable_seqscan = off"))  # tables vides
         plan = "\n".join((await s.scalars(text("EXPLAIN " + query))).all())

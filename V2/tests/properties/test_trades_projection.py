@@ -13,7 +13,7 @@ from hypothesis import strategies as st
 from sqlalchemy import select
 
 
-async def _lignes(w: World, ref: InstanceRef) -> frozenset[tuple[object, ...]]:
+async def _rows(w: World, ref: InstanceRef) -> frozenset[tuple[object, ...]]:
     """Toutes les colonnes d'une ligne `trades`, hors identifiants propres à la base."""
     async with w.sessions() as s:
         rows = (await s.scalars(select(Trade).where(Trade.instance_id == ref.instance_id))).all()
@@ -26,7 +26,7 @@ async def _lignes(w: World, ref: InstanceRef) -> frozenset[tuple[object, ...]]:
     )  # fmt: skip
 
 
-async def _attendu(w: World, ref: InstanceRef) -> frozenset[tuple[object, ...]]:
+async def _expected(w: World, ref: InstanceRef) -> frozenset[tuple[object, ...]]:
     return frozenset(
         (
             c.position_id, c.symbol, c.qty, c.entry_price, c.exit_price, c.entry_cause or "unknown",
@@ -48,27 +48,27 @@ async def _run(
         ref = await w.new_instance(seed=seed)
         w.step(ref, steps)
         events = await w.drain_engine(ref)
-        want = await _attendu(w, ref)
+        want = await _expected(w, ref)
 
         await w.publish(events)
         await w.worker.run_once()
-        assert await _lignes(w, ref) == want
+        assert await _rows(w, ref) == want
 
         await w.publish(pick(events))  # le même flux, abîmé, repassé après le premier tour
         await w.worker.run_once()
         again = w.make_worker("w2")  # redémarrage : un autre worker reprend l'instance
         again.register(ref)
         await again.run_once()
-        got = await _lignes(w, ref)
+        got = await _rows(w, ref)
         assert got == want
         await w.wipe(ref)  # ligne perdue : le relevé la restitue
         await again.run_once()
-        assert await _lignes(w, ref) == want
+        assert await _rows(w, ref) == want
 
 
 @settings(max_examples=25, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(seed=st.integers(0, 1000), steps=st.integers(1, 60), data=st.data())
-def test_trades_une_seule_ligne_par_position_close(
+def test_trades_projection_has_one_row_per_closed_position(
     migrated_url: str, redis_url: str, seed: int, steps: int, data: st.DataObject
 ) -> None:
     perm = data.draw(st.randoms(use_true_random=False))

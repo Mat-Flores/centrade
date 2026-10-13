@@ -27,7 +27,7 @@ def _section(n: int) -> str:
     return m.group(0) if m else ""
 
 
-def test_registre_couvre_i1_a_i14() -> None:
+def test_registry_covers_i1_to_i14() -> None:
     assert sorted(JALON_INVARIANTS) == list(range(1, 15))
     for n, jalon in JALON_INVARIANTS.items():
         section = _section(n)
@@ -36,7 +36,7 @@ def test_registre_couvre_i1_a_i14() -> None:
         assert re.search(rf"\btest_i{n:02d}_\w+", section), f"I{n} : aucun test_i{n:02d}_…"
 
 
-def test_registre_couvre_s1_a_s14() -> None:
+def test_registry_covers_s1_to_s14() -> None:
     assert sorted(JALON_SCENARIOS) == list(range(1, 15))
     for n, jalon in JALON_SCENARIOS.items():
         row = re.search(rf"^\|\s*S{n}\s*\|\s*(M\d)\s*\|\s*`([^`]*)`", DOC, re.M)

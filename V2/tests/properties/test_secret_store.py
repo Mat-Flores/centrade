@@ -28,7 +28,9 @@ def _open(nonce: bytes, ciphertext: bytes, **over: object) -> SecretStr:
 
 
 @given(value=values, secret_id=st.uuids(), owner=st.uuids(), usage=usages)
-def test_aller_retour(value: str, secret_id: UUID, owner: UUID, usage: core.Usage) -> None:
+def test_encrypt_decrypt_roundtrip(
+    value: str, secret_id: UUID, owner: UUID, usage: core.Usage
+) -> None:
     nonce, ct = core.encrypt_secret(
         KEY, secret_id=secret_id, usage=usage, owner=owner, value=SecretStr(value)
     )
@@ -46,7 +48,7 @@ def test_aller_retour(value: str, secret_id: UUID, owner: UUID, usage: core.Usag
 
 
 @given(value=values)
-def test_deux_chiffrements_de_la_meme_valeur_different(value: str) -> None:
+def test_two_encryptions_of_the_same_value_differ(value: str) -> None:
     args = {"secret_id": UUID(int=1), "usage": "trade", "owner": UUID(int=2)}
     a = core.encrypt_secret(KEY, value=SecretStr(value), **args)  # type: ignore[arg-type]
     b = core.encrypt_secret(KEY, value=SecretStr(value), **args)  # type: ignore[arg-type]
@@ -54,7 +56,7 @@ def test_deux_chiffrements_de_la_meme_valeur_different(value: str) -> None:
 
 
 @given(value=values, data=st.data())
-def test_chiffre_ou_nonce_altere_refuse(value: str, data: st.DataObject) -> None:
+def test_tampered_ciphertext_or_nonce_is_rejected(value: str, data: st.DataObject) -> None:
     nonce, ct = core.encrypt_secret(
         KEY, secret_id=UUID(int=1), usage="trade", owner=UUID(int=2), value=SecretStr(value)
     )
@@ -68,7 +70,9 @@ def test_chiffre_ou_nonce_altere_refuse(value: str, data: st.DataObject) -> None
 
 
 @given(value=values, other=st.uuids().filter(lambda u: u.int > 2), usage=usages)
-def test_chiffre_rejoue_ailleurs_refuse(value: str, other: UUID, usage: core.Usage) -> None:
+def test_ciphertext_replayed_elsewhere_is_rejected(
+    value: str, other: UUID, usage: core.Usage
+) -> None:
     """Autre identifiant, autre usage ou autre propriétaire : l'AAD ne correspond plus."""
     nonce, ct = core.encrypt_secret(
         KEY, secret_id=UUID(int=1), usage="trade", owner=UUID(int=2), value=SecretStr(value)
@@ -92,7 +96,7 @@ def test_chiffre_rejoue_ailleurs_refuse(value: str, other: UUID, usage: core.Usa
 
 
 @given(size=st.integers(0, 64).filter(lambda n: n != 32))
-def test_mauvaise_longueur_de_cle_refusee(size: int) -> None:
+def test_wrong_key_length_is_rejected(size: int) -> None:
     with pytest.raises(ValueError, match="32 octets"):
         core.encrypt_secret(
             bytes(size),
@@ -116,7 +120,7 @@ def test_mauvaise_longueur_de_cle_refusee(size: int) -> None:
 
 
 @given(version=st.integers().filter(lambda v: v != core.KEY_VERSION))
-def test_version_de_cle_inconnue_refusee(version: int) -> None:
+def test_unknown_key_version_is_rejected(version: int) -> None:
     nonce, ct = core.encrypt_secret(
         KEY, secret_id=UUID(int=1), usage="trade", owner=UUID(int=2), value=SecretStr("x")
     )
@@ -124,7 +128,7 @@ def test_version_de_cle_inconnue_refusee(version: int) -> None:
         _open(nonce, ct, key_version=version)
 
 
-def test_valeur_vide_ou_usage_inconnu_refuses() -> None:
+def test_empty_value_or_unknown_usage_is_rejected() -> None:
     args = {"secret_id": UUID(int=1), "owner": UUID(int=2)}
     with pytest.raises(ValueError, match="vide"):
         core.encrypt_secret(KEY, usage="trade", value=SecretStr(""), **args)
@@ -133,7 +137,7 @@ def test_valeur_vide_ou_usage_inconnu_refuses() -> None:
 
 
 @given(user=st.uuids(), secret=values)
-def test_totp_et_secrets_ne_se_dechiffrent_pas_l_un_pour_l_autre(user: UUID, secret: str) -> None:
+def test_totp_and_secrets_cannot_decrypt_each_other(user: UUID, secret: str) -> None:
     """Le déchiffrement du TOTP, seul accessible à l'API, n'ouvre aucune ligne de `secrets`."""
     for usage in USAGES:
         nonce, ct = core.encrypt_secret(
@@ -149,7 +153,7 @@ def test_totp_et_secrets_ne_se_dechiffrent_pas_l_un_pour_l_autre(user: UUID, sec
         _open(nonce, ct, secret_id=user, owner=user)
 
 
-def test_la_valeur_en_clair_ne_fuit_ni_par_repr_ni_par_serialisation() -> None:
+def test_plaintext_value_leaks_neither_via_repr_nor_serialization() -> None:
     sentinel = "TEST-SECRET-DO-NOT-USE-repr"
     nonce, ct = core.encrypt_secret(
         KEY, secret_id=UUID(int=1), usage="trade", owner=UUID(int=2), value=SecretStr(sentinel)

@@ -6,7 +6,7 @@ from typing import Any
 from centrade_core.engine.contract import EngineUnreachable
 from centrade_core.engine.types import InstanceRef
 from centrade_worker.testing import World
-from test_worker_parallele import request, status_of
+from test_worker_parallel import request, status_of
 from worker_support import alerts, commands, instance, spy
 
 
@@ -26,7 +26,7 @@ def failing_read(w: World, exc: Exception) -> tuple[list[int], Any]:
     return reads, restore
 
 
-async def test_exception_dans_la_verification_refuse_la_reprise_sans_rien_envoyer(
+async def test_exception_in_the_check_rejects_the_resume_and_sends_nothing(
     migrated_url: str, redis_url: str
 ) -> None:
     async with World(migrated_url, redis_url) as w:
@@ -50,7 +50,7 @@ async def test_exception_dans_la_verification_refuse_la_reprise_sans_rien_envoye
         assert (alert.status, alert.invariant) == ("open", "I5")
 
 
-async def test_relecture_en_echec_n_est_pas_retenue_comme_verification_faite(
+async def test_failed_reread_is_not_counted_as_a_completed_check(
     migrated_url: str, redis_url: str
 ) -> None:
     async with World(migrated_url, redis_url) as w:
@@ -78,7 +78,7 @@ async def test_relecture_en_echec_n_est_pas_retenue_comme_verification_faite(
         assert (await instance(w, ref.instance_id)).effective_config_at == w.clock.now
 
 
-async def test_relecture_impossible_sur_un_moteur_en_marche_alerte_et_pause_en_60_s(
+async def test_unreadable_running_engine_raises_an_alert_and_pauses_within_60_s(
     migrated_url: str, redis_url: str
 ) -> None:
     async with World(migrated_url, redis_url) as w:
@@ -116,7 +116,7 @@ async def test_relecture_impossible_sur_un_moteur_en_marche_alerte_et_pause_en_6
         assert (await alerts(w, ref.instance_id, "config_unreadable"))[0].status == "resolved"
 
 
-async def test_etat_halted_observe_alerte_et_retour_en_sorties_seules(
+async def test_observed_halted_state_raises_an_alert_and_returns_to_exits_only(
     migrated_url: str, redis_url: str
 ) -> None:
     async with World(migrated_url, redis_url) as w:

@@ -81,7 +81,7 @@ async def _strategy_of(stack: Stack, inst: Instance) -> UUID:
         return v.strategy_id
 
 
-async def test_filtre_strategy_id_ne_rend_que_les_instances_de_la_strategie(stack: Stack) -> None:
+async def test_strategy_id_filter_returns_only_that_strategys_instances(stack: Stack) -> None:
     await stack.world.worker.run_once()  # assure la ligne `engines` du moteur simulé
     a = await _instance(stack, strategy=True, account=False)
     await _instance(stack, strategy=True, account=False)
@@ -94,7 +94,7 @@ async def test_filtre_strategy_id_ne_rend_que_les_instances_de_la_strategie(stac
     assert len((await get(c, I))["items"]) >= 3
 
 
-async def test_lignes_de_trading_portent_le_compte(stack: Stack) -> None:
+async def test_trading_rows_carry_the_account(stack: Stack) -> None:
     await stack.world.worker.run_once()
     with_acc = await _instance(stack, strategy=False, account=True)
     without = await _instance(stack, strategy=False, account=False)
@@ -157,7 +157,7 @@ async def test_lignes_de_trading_portent_le_compte(stack: Stack) -> None:
         assert rows[str(without.id)]["account_label"] is None
 
 
-async def test_version_du_moteur_datee_ou_inconnue(stack: Stack) -> None:
+async def test_engine_version_is_dated_or_unknown(stack: Stack) -> None:
     await stack.world.worker.run_once()
     at = stack.world.clock.now
     seen = await _instance(

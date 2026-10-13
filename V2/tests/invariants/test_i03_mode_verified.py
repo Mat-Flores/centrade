@@ -15,7 +15,7 @@ from sqlalchemy.exc import DBAPIError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
-async def test_i03_mode_immuable_apres_creation(
+async def test_i03_mode_is_immutable_after_creation(
     session_factory: async_sessionmaker[AsyncSession],
 ) -> None:
     eid, iid = uuid7(), uuid7()
@@ -44,7 +44,7 @@ async def test_i03_mode_immuable_apres_creation(
                 )
 
 
-async def test_i03_paper_et_backtest_sans_cle_de_trading(
+async def test_i03_paper_and_backtest_never_get_a_trading_key(
     session_factory: async_sessionmaker[AsyncSession], tmp_path: Path, keyed_instance: Any
 ) -> None:
     """Même sur un compte live qui porte une clé : ni déchiffrée, ni écrite pour du paper."""
@@ -82,7 +82,7 @@ async def test_i03_paper_et_backtest_sans_cle_de_trading(
     same_key=st.booleans(),
     has_account=st.booleans(),
 )
-def test_i03_cle_de_trading_remise_seulement_si_tout_concorde(
+def test_i03_trading_key_is_handed_only_if_everything_matches(
     mode: str, account_type: str, same_account: bool, same_key: bool, has_account: bool
 ) -> None:
     from centrade_core.models.trading import Account, Instance, Secret
@@ -112,7 +112,7 @@ async def _running(stack: Any) -> tuple[Any, str]:
     return c, iid
 
 
-async def test_i03_ecart_de_mode_interdit_les_entrees_et_alerte(stack: Any) -> None:
+async def test_i03_mode_mismatch_forbids_entries_and_raises_an_alert(stack: Any) -> None:
     from centrade_api.testing import act, get, ref_of
     from centrade_fake.engine import Failure
     from worker_support import alerts, commands, instance, spy
@@ -158,7 +158,7 @@ async def test_i03_ecart_de_mode_interdit_les_entrees_et_alerte(stack: Any) -> N
     assert [a.status for a in await alerts(w, iid, "mode_mismatch")] == ["resolved", "open"]
 
 
-async def test_i03_mode_relu_a_chaque_demarrage(stack: Any) -> None:
+async def test_i03_mode_is_reread_at_every_start(stack: Any) -> None:
     """Arrêt puis relance, et redémarrage du worker : chaque démarrage observé relit le mode et
     la configuration, sans attendre la cadence."""
     from centrade_api.testing import act, ref_of

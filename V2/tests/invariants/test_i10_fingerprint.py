@@ -17,11 +17,11 @@ BASE: dict[str, Any] = {
 }
 
 
-def test_i10_meme_entree_meme_empreinte() -> None:
+def test_i10_same_input_gives_same_fingerprint() -> None:
     assert deployment_fingerprint(**BASE) == deployment_fingerprint(**dict(BASE))
 
 
-def test_i10_chaque_champ_change_l_empreinte() -> None:
+def test_i10_each_field_changes_the_fingerprint() -> None:
     ref = deployment_fingerprint(**BASE)
     changes: dict[str, Any] = {
         "code_hash": "d" * 64,
@@ -35,7 +35,7 @@ def test_i10_chaque_champ_change_l_empreinte() -> None:
         assert deployment_fingerprint(**{**BASE, key: value}) != ref, key
 
 
-def test_i10_le_mode_n_entre_pas_dans_l_empreinte() -> None:
+def test_i10_mode_is_not_part_of_the_fingerprint() -> None:
     paper = {"dry_run": True, "db_url": "sqlite:///paper.db", "bot_name": "p", "exchange": {"k": 1}}
     live = {"dry_run": False, "db_url": "sqlite:///live.db", "bot_name": "l", "exchange": {"k": 2}}
     shared = {"strategy": "sma-cross", "stoploss": "-0.05"}
@@ -56,7 +56,7 @@ json_values = st.recursive(
 
 
 @given(params=st.dictionaries(st.text(), json_values, max_size=5), seed=st.randoms())
-def test_i10_independant_de_l_ordre_des_cles(params: dict[str, Any], seed: Any) -> None:
+def test_i10_fingerprint_is_independent_of_key_order(params: dict[str, Any], seed: Any) -> None:
     items = list(params.items())
     seed.shuffle(items)
     a = deployment_fingerprint(**{**BASE, "params": params})
@@ -70,7 +70,7 @@ def test_i10_independant_de_l_ordre_des_cles(params: dict[str, Any], seed: Any) 
     a=st.dictionaries(st.text(), json_values, max_size=4),
     b=st.dictionaries(st.text(), json_values, max_size=4),
 )
-def test_i10_parametres_differents_empreintes_differentes(
+def test_i10_different_params_give_different_fingerprints(
     a: dict[str, Any], b: dict[str, Any]
 ) -> None:
     fa = deployment_fingerprint(**{**BASE, "params": a})
@@ -132,16 +132,16 @@ CHANGES: dict[str, Any] = {
     "code": lambda i, e, v: setattr(v, "code_hash", "d" * 64),
     "image": lambda i, e, v: setattr(e, "image", "img:2"),
     "digest": lambda i, e, v: setattr(e, "digest", "sha256:" + "b" * 64),
-    "paramètres": lambda i, e, v: setattr(i, "params", {"fast": 11}),
-    "politique de sortie": lambda i, e, v: setattr(v, "exits", {"stoploss": "-0.04"}),
-    "configuration générée": lambda i, e, v: setattr(
+    "params": lambda i, e, v: setattr(i, "params", {"fast": 11}),
+    "exit policy": lambda i, e, v: setattr(v, "exits", {"stoploss": "-0.04"}),
+    "generated config": lambda i, e, v: setattr(
         v, "manifest", {**v.manifest, "sizing": {"stake_amount": "60", "max_open_positions": 3}}
     ),
 }
 
 
 @given(names=st.lists(st.sampled_from(sorted(CHANGES)), min_size=1, unique=True))
-def test_i10_image_code_ou_configuration_differents_refusent_les_entrees(names: list[str]) -> None:
+def test_i10_different_image_code_or_config_rejects_entries(names: list[str]) -> None:
     from centrade_core.engine.types import EffectiveConfig, InstanceStatus
     from centrade_core.engine.verification import FINGERPRINT, entry_refusals
     from centrade_worker.guard import spec_for
@@ -180,7 +180,7 @@ def test_i10_image_code_ou_configuration_differents_refusent_les_entrees(names: 
     assert codes(changed) == {FINGERPRINT}
 
 
-def test_i10_champs_propres_au_mode_exclus_de_la_comparaison() -> None:
+def test_i10_mode_specific_fields_are_excluded_from_comparison() -> None:
     from centrade_core.ids import uuid7
     from centrade_worker.guard import spec_for
 
@@ -194,7 +194,7 @@ def test_i10_champs_propres_au_mode_exclus_de_la_comparaison() -> None:
     assert other.deployment.fingerprint == base.deployment.fingerprint  # … pas l'empreinte
 
 
-async def test_i10_empreinte_enregistree_au_deploiement_est_celle_de_ce_qui_tourne(
+async def test_i10_fingerprint_recorded_at_deploy_is_that_of_what_runs(
     stack: Any,
 ) -> None:
     from centrade_api.testing import act, create_instance, get, ref_of

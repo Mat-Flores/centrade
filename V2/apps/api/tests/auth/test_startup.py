@@ -33,7 +33,7 @@ def env(migrated_url: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> P
     return key
 
 
-def test_api_demarree_sert_l_authentification_sur_la_base(env: Path) -> None:
+def test_started_api_serves_authentication_on_the_database(env: Path) -> None:
     try:
         with TestClient(create_app(), base_url=ORIGIN, headers={"Origin": ORIGIN}) as client:
             response = client.post(
@@ -50,7 +50,7 @@ def test_api_demarree_sert_l_authentification_sur_la_base(env: Path) -> None:
 @pytest.mark.parametrize(
     "content", [None, "", "pas-du-base64", base64.b64encode(b"k" * 16).decode()]
 )
-def test_api_ne_demarre_pas_sans_cle_maitre_valide(env: Path, content: str | None) -> None:
+def test_api_does_not_start_without_a_valid_master_key(env: Path, content: str | None) -> None:
     if content is None:
         env.unlink()
     else:
@@ -62,7 +62,7 @@ def test_api_ne_demarre_pas_sans_cle_maitre_valide(env: Path, content: str | Non
         get_settings.cache_clear()
 
 
-def test_api_ne_demarre_pas_sans_chemin_de_cle_maitre(
+def test_api_does_not_start_without_a_master_key_path(
     env: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.delenv("CENTRADE_MASTER_KEY_FILE")

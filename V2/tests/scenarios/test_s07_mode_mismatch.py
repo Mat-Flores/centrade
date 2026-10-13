@@ -5,7 +5,7 @@ from centrade_api.testing import Stack, act, create_instance, get, ref_of
 from worker_support import alerts, commands, instance, spy
 
 
-async def test_s07_ecart_de_mode_entrees_jamais_ouvertes(stack: Stack) -> None:
+async def test_s07_mode_mismatch_never_opens_entries(stack: Stack) -> None:
     w = stack.world
     c = await stack.client("operator")
     calls = spy(w.fake)

@@ -59,7 +59,7 @@ async def _journey(make_client: MakeClient, account: Account, clock: FakeClock) 
     ]
 
 
-async def test_i12_aucune_valeur_sensible_dans_les_logs_d_un_parcours_complet(
+async def test_i12_no_sensitive_value_in_logs_of_a_full_journey(
     logs: io.StringIO,
     make_client: MakeClient,
     make_account: MakeAccount,
@@ -96,7 +96,7 @@ async def test_i12_aucune_valeur_sensible_dans_les_logs_d_un_parcours_complet(
     )
 
 
-async def test_i14_evenements_d_auth_laissent_une_ligne_d_audit_avec_auteur_et_ip(
+async def test_i14_auth_events_leave_an_audit_row_with_author_and_ip(
     make_client: MakeClient,
     make_account: MakeAccount,
     clock: FakeClock,
@@ -128,7 +128,7 @@ async def test_i14_evenements_d_auth_laissent_une_ligne_d_audit_avec_auteur_et_i
     ]
 
 
-async def test_i14_mot_de_passe_correct_sans_totp_laisse_une_trace(
+async def test_i14_correct_password_without_totp_leaves_a_trace(
     make_client: MakeClient,
     make_account: MakeAccount,
     session_factory: async_sessionmaker[AsyncSession],
@@ -150,7 +150,7 @@ async def test_i14_mot_de_passe_correct_sans_totp_laisse_une_trace(
     assert [tuple(r) for r in rows] == [("auth.password.accepted", f"user:{account.id}", IP)]
 
 
-async def test_i14_verrouillage_et_echec_sur_compte_inconnu_sont_audites(
+async def test_i14_lockout_and_failure_on_unknown_account_are_audited(
     make_client: MakeClient,
     make_account: MakeAccount,
     session_factory: async_sessionmaker[AsyncSession],

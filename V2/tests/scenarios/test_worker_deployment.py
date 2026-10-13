@@ -15,7 +15,7 @@ from sqlalchemy import select
 from worker_support import alerts, commands, instance, spy
 
 
-async def test_refus_d_admission_du_runner_devient_un_echec_lisible(stack: Stack) -> None:
+async def test_runner_admission_refusal_becomes_a_readable_failure(stack: Stack) -> None:
     w = stack.world
     c = await stack.client("operator")
 
@@ -33,7 +33,7 @@ async def test_refus_d_admission_du_runner_devient_un_echec_lisible(stack: Stack
     assert shown["state"]["value"] == "unknown" and shown["active_command"] is None
 
 
-async def test_code_refuse_par_l_adaptateur_n_est_jamais_deploye(stack: Stack) -> None:
+async def test_code_rejected_by_the_adapter_is_never_deployed(stack: Stack) -> None:
     """Une instance sans version de stratégie ne tourne que sur un moteur qui accepte de n'avoir
     aucun code : c'est l'adaptateur qui le dit, pas le worker."""
     w = stack.world
@@ -52,7 +52,7 @@ async def test_code_refuse_par_l_adaptateur_n_est_jamais_deploye(stack: Stack) -
 
 
 @pytest.mark.parametrize("type_", ["deploy", "resume_entries", "start"])
-async def test_instance_live_jamais_deployee_ni_reprise_avant_la_promotion(
+async def test_live_instance_is_never_deployed_or_resumed_before_promotion(
     migrated_url: str, redis_url: str, type_: str
 ) -> None:
     from datetime import timedelta
@@ -99,7 +99,7 @@ async def test_instance_live_jamais_deployee_ni_reprise_avant_la_promotion(
         assert [a.rule for a in await alerts(w, iid)] == ["entries_refused"]
 
 
-async def test_ordres_et_positions_annonces_au_flux_quand_ils_changent(
+async def test_orders_and_positions_are_announced_on_the_stream_when_they_change(
     stack: Stack, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     w = stack.world

@@ -7,7 +7,7 @@ from centrade_core.settings import Settings
 from pydantic import ValidationError
 
 
-def test_aucun_secret_par_defaut(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_no_secret_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
     for var in ("REDIS_URL", "POSTGRES_PASSWORD_FILE", "MASTER_KEY_FILE"):
         monkeypatch.delenv(f"CENTRADE_{var}", raising=False)
     with pytest.raises(ValidationError) as err:
@@ -16,7 +16,7 @@ def test_aucun_secret_par_defaut(monkeypatch: pytest.MonkeyPatch) -> None:
     assert {"postgres_password_file", "redis_url"} <= manquants
 
 
-def test_cle_maitre_facultative_mais_jamais_par_defaut(tmp_path: Path) -> None:
+def test_master_key_is_optional_but_never_defaulted(tmp_path: Path) -> None:
     """Le worker et les migrations n'en ont pas besoin (moindre privilège) ; qui la demande
     sans l'avoir reçue échoue."""
     s = Settings(redis_url="redis://r:6379/0", postgres_password_file=tmp_path / "pw")
@@ -25,7 +25,7 @@ def test_cle_maitre_facultative_mais_jamais_par_defaut(tmp_path: Path) -> None:
         s.master_key()
 
 
-def test_url_et_cle_lues_dans_les_fichiers(tmp_path: Path) -> None:
+def test_url_and_key_are_read_from_files(tmp_path: Path) -> None:
     pw, key = tmp_path / "pw", tmp_path / "key"
     pw.write_text("p@ss/w:rd\n")
     key.write_text(base64.b64encode(bytes(32)).decode())
@@ -39,7 +39,7 @@ def test_url_et_cle_lues_dans_les_fichiers(tmp_path: Path) -> None:
         s.master_key()
 
 
-def test_image_de_production_sans_modules_d_aide_aux_tests() -> None:
+def test_production_image_has_no_test_helper_modules() -> None:
     root = Path(__file__).resolve().parents[1]
     lines = (root / ".dockerignore").read_text(encoding="utf-8").splitlines()
     for helper in ("apps/api/centrade_api/testing.py", "apps/worker/centrade_worker/testing.py"):
@@ -51,7 +51,7 @@ def test_image_de_production_sans_modules_d_aide_aux_tests() -> None:
             assert ".testing" not in module.read_text(encoding="utf-8"), module
 
 
-def test_le_worker_ne_recoit_pas_la_cle_maitre() -> None:
+def test_worker_does_not_receive_the_master_key() -> None:
     root = Path(__file__).resolve().parents[1]
     compose = (root / "deploy/compose/core.yml").read_text(encoding="utf-8")
     # Blocs `  nom:` de la section `services:` ; pyyaml n'est pas une dépendance du projet.

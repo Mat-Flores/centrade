@@ -14,7 +14,7 @@ NOW = datetime(2026, 10, 10, 12, 0, 15, tzinfo=UTC)
 FULLWIDTH = "".join(chr(0xFF10 + d) for d in range(1, 7))  # chiffres pleine chasse
 
 
-def test_mot_de_passe_hache_en_argon2id_et_verifie() -> None:
+def test_password_is_hashed_with_argon2id_and_verified() -> None:
     hashed = security.hash_password("SENTINELLE-a")
 
     assert hashed.startswith("$argon2id$")
@@ -24,12 +24,12 @@ def test_mot_de_passe_hache_en_argon2id_et_verifie() -> None:
 
 
 @pytest.mark.parametrize("stored", [None, "", "pas-une-empreinte", "$argon2id$tronquee"])
-def test_empreinte_absente_ou_illisible_ne_verifie_jamais(stored: str | None) -> None:
+def test_missing_or_unreadable_hash_never_verifies(stored: str | None) -> None:
     assert security.verify_password(stored, "SENTINELLE-a") is False
     assert security.verify_password(stored, "") is False
 
 
-def test_empreinte_factice_ne_verifie_jamais_meme_avec_son_mot_de_passe(
+def test_dummy_hash_never_verifies_even_with_its_own_password(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(security, "_DUMMY_HASH", security.hash_password("SENTINELLE-factice"))
@@ -37,7 +37,7 @@ def test_empreinte_factice_ne_verifie_jamais_meme_avec_son_mot_de_passe(
     assert security.verify_password(None, "SENTINELLE-factice") is False
 
 
-def test_secret_totp_chiffre_avec_nonce_unique_et_lie_a_l_utilisateur() -> None:
+def test_totp_secret_is_encrypted_with_unique_nonce_and_bound_to_user() -> None:
     user, other = uuid7(), uuid7()
 
     nonce, ciphertext = security.encrypt_totp_secret(master_key=KEY, user_id=user, secret=SECRET)
@@ -62,7 +62,7 @@ def test_secret_totp_chiffre_avec_nonce_unique_et_lie_a_l_utilisateur() -> None:
             security.decrypt_totp_secret(**kwargs)  # type: ignore[arg-type]
 
 
-def test_cle_maitre_de_mauvaise_taille_refusee() -> None:
+def test_master_key_of_wrong_size_is_rejected() -> None:
     with pytest.raises(ValueError, match="32 octets"):
         security.encrypt_totp_secret(master_key=bytes(16), user_id=uuid7(), secret=SECRET)
     with pytest.raises(ValueError, match="32 octets"):
@@ -71,7 +71,7 @@ def test_cle_maitre_de_mauvaise_taille_refusee() -> None:
         )
 
 
-def test_pas_totp_accepte_a_un_pas_pres_et_renvoie_le_pas() -> None:
+def test_totp_step_is_accepted_within_one_step_and_returned() -> None:
     totp = pyotp.TOTP(SECRET)
     step = totp.timecode(NOW)
 
@@ -83,11 +83,11 @@ def test_pas_totp_accepte_a_un_pas_pres_et_renvoie_le_pas() -> None:
 
 
 @pytest.mark.parametrize("code", ["", "12345", "1234567", "abcdef", FULLWIDTH, "12 456", "-12345"])
-def test_code_totp_mal_forme_refuse(code: str) -> None:
+def test_malformed_totp_code_is_rejected(code: str) -> None:
     assert security.totp_step(SECRET, code, NOW) is None
 
 
-def test_codes_de_recuperation_aleatoires_et_haches() -> None:
+def test_recovery_codes_are_random_and_hashed() -> None:
     codes = security.new_recovery_codes()
 
     assert len(codes) == len(set(codes)) == 10
@@ -99,7 +99,7 @@ def test_codes_de_recuperation_aleatoires_et_haches() -> None:
     assert security.recovery_code_hash(codes[1]) != hashed
 
 
-def test_jetons_de_session_aleatoires_et_haches() -> None:
+def test_session_tokens_are_random_and_hashed() -> None:
     token = security.new_token()
 
     assert token != security.new_token()
@@ -107,7 +107,7 @@ def test_jetons_de_session_aleatoires_et_haches() -> None:
     assert token not in security.token_hash(token)
 
 
-def test_duree_de_verrouillage_progressive_et_bornee() -> None:
+def test_lockout_duration_is_progressive_and_capped() -> None:
     minutes = [throttle.lock_duration(n) for n in range(4, 11)]
 
     assert minutes[0] is None  # pas avant le 5e échec
@@ -115,7 +115,7 @@ def test_duree_de_verrouillage_progressive_et_bornee() -> None:
     assert throttle.lock_duration(10**9) == timedelta(minutes=15)  # ni débordement ni verrou infini
 
 
-def test_limiteur_de_debit_fenetre_fixe_par_cle() -> None:
+def test_rate_limiter_uses_a_fixed_window_per_key() -> None:
     limiter = throttle.RateLimiter(limit=2, window=timedelta(seconds=60))
 
     assert limiter.retry_after("a", NOW) is None
@@ -125,7 +125,7 @@ def test_limiteur_de_debit_fenetre_fixe_par_cle() -> None:
     assert limiter.retry_after("a", NOW + timedelta(seconds=60)) is None  # nouvelle fenêtre
 
 
-def test_limiteur_de_debit_ne_grossit_pas_sans_borne() -> None:
+def test_rate_limiter_does_not_grow_without_bound() -> None:
     limiter = throttle.RateLimiter(limit=1, window=timedelta(seconds=60))
 
     for n in range(throttle.RateLimiter.MAX_KEYS + 50):

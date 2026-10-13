@@ -26,7 +26,7 @@ async def _ready(stack: Stack, **params: object) -> tuple[httpx.AsyncClient, str
     return c, str(inst["id"])
 
 
-async def test_idempotence_meme_cle_meme_commande_autre_contenu_refuse(stack: Stack) -> None:
+async def test_same_key_replays_the_command_and_different_content_is_rejected(stack: Stack) -> None:
     c, iid = await _ready(stack)
     other = (await create_instance(c))["id"]
     r1 = await act(c, iid, "pause-entries", key="cle-idempotence-1")
@@ -45,7 +45,7 @@ async def test_idempotence_meme_cle_meme_commande_autre_contenu_refuse(stack: St
     assert missing.status_code == 422
 
 
-async def test_une_action_n_appelle_jamais_le_moteur(stack: Stack) -> None:
+async def test_an_action_never_calls_the_engine(stack: Stack) -> None:
     c, iid = await _ready(stack)
     calls: list[str] = []
     real = stack.world.fake.resume_entries
@@ -62,7 +62,7 @@ async def test_une_action_n_appelle_jamais_le_moteur(stack: Stack) -> None:
     assert calls == ["resume"]
 
 
-async def test_pause_passe_devant_et_remplace_la_reprise_en_attente(stack: Stack) -> None:
+async def test_pause_goes_first_and_replaces_the_pending_resume(stack: Stack) -> None:
     c, iid = await _ready(stack)
     resume = (await act(c, iid, "resume-entries")).json()["command_id"]
     pause = (await act(c, iid, "pause-entries")).json()["command_id"]
@@ -74,7 +74,7 @@ async def test_pause_passe_devant_et_remplace_la_reprise_en_attente(stack: Stack
     assert (await get(c, f"/api/v1/commands/{resume}"))["superseded_at"]
 
 
-async def test_une_commande_a_la_fois_par_instance(stack: Stack) -> None:
+async def test_only_one_command_at_a_time_per_instance(stack: Stack) -> None:
     c, iid = await _ready(stack)
     first = (await act(c, iid, "resume-entries")).json()["command_id"]
     second = (await act(c, iid, "stop")).json()["command_id"]
@@ -86,7 +86,9 @@ async def test_une_commande_a_la_fois_par_instance(stack: Stack) -> None:
     assert (await get(c, f"/api/v1/instances/{iid}"))["state"]["value"] == "stopped"
 
 
-async def test_reprise_refusee_si_etat_inconnu_perime_ou_mode_different(stack: Stack) -> None:
+async def test_resume_is_rejected_when_state_is_unknown_stale_or_in_another_mode(
+    stack: Stack,
+) -> None:
     w = stack.world
     c, iid = await _ready(stack)
 
@@ -113,7 +115,7 @@ async def test_reprise_refusee_si_etat_inconnu_perime_ou_mode_different(stack: S
     assert (await act(c, liar, "pause-entries")).status_code == 202
 
 
-async def test_commande_rejetee_par_l_adaptateur_passe_failed_avec_raison(stack: Stack) -> None:
+async def test_command_rejected_by_the_adapter_becomes_failed_with_a_reason(stack: Stack) -> None:
     c = await stack.client("operator")
     inst = await create_instance(c, failures=["panne-inconnue"])
     await stack.world.worker.run_once()
@@ -122,7 +124,7 @@ async def test_commande_rejetee_par_l_adaptateur_passe_failed_avec_raison(stack:
     assert deploy["failed_at"] and "panne-inconnue" in deploy["result"]["reason"]
 
 
-async def test_creation_validations_et_listes(stack: Stack) -> None:
+async def test_command_creation_validations_and_lists(stack: Stack) -> None:
     c = await stack.client("operator")
     body = {"name": f"n-{uuid4().hex[:8]}", "engine": "fake", "mode": "paper", "params": {}}
     assert (await c.post("/api/v1/instances", json=body)).status_code == 201
@@ -146,7 +148,7 @@ async def test_creation_validations_et_listes(stack: Stack) -> None:
     assert (await c.get("/api/v1/commands/" + str(uuid4()))).status_code == 404
 
 
-async def test_rbac_viewer_ne_peut_rien_commander_et_audit_reserve_a_l_admin(stack: Stack) -> None:
+async def test_rbac_viewer_cannot_command_and_audit_is_admin_only(stack: Stack) -> None:
     op = await stack.client("operator")
     iid = (await create_instance(op))["id"]
     viewer = await stack.client("viewer")
@@ -165,14 +167,14 @@ async def test_rbac_viewer_ne_peut_rien_commander_et_audit_reserve_a_l_admin(sta
     assert len(audit["items"]) == 3 and audit["next_cursor"]
 
 
-async def test_aucune_route_ni_schema_ne_nomme_un_moteur(stack: Stack) -> None:
+async def test_no_route_or_schema_names_an_engine(stack: Stack) -> None:
     spec = json.dumps(stack.app.openapi()).lower()
     assert "fake" not in spec and "freqtrade" not in spec
     paths = stack.app.openapi()["paths"]  # aucune création d'ordre ; l'annulation d'entrée existe
     assert not [p for p in paths if "order" in p and "post" in paths[p]]
 
 
-async def test_le_worker_recharge_les_instances_en_sorties_seules(stack: Stack) -> None:
+async def test_worker_reloads_instances_in_exits_only(stack: Stack) -> None:
     w = stack.world
     c, iid = await _ready(stack)
     await act(c, iid, "resume-entries")
@@ -187,7 +189,7 @@ async def test_le_worker_recharge_les_instances_en_sorties_seules(stack: Stack) 
     assert inst["state"]["value"] == "exits_only" and inst["desired_state"] == "running"
 
 
-async def test_sante_etendue_sans_session(stack: Stack) -> None:
+async def test_extended_health_requires_no_session(stack: Stack) -> None:
     anon = await stack.client(signed_in=False)
     down = (await anon.get("/api/v1/system/health")).json()
     assert down["status"] == "degraded" and down["checks"]["worker"]["status"] == "down"
@@ -210,7 +212,7 @@ class _JumpClock:
         return now + timedelta(hours=1) if self._n > self._after else now
 
 
-async def test_le_flux_se_ferme_quand_la_session_expire(stack: Stack) -> None:
+async def test_stream_closes_when_the_session_expires(stack: Stack) -> None:
     from centrade_api.core.deps import utcnow
 
     c = await stack.client("viewer")
@@ -223,7 +225,7 @@ async def test_le_flux_se_ferme_quand_la_session_expire(stack: Stack) -> None:
     assert (await c.get("/api/v1/instances")).status_code == 200  # session non touchée côté flux
 
 
-async def test_le_flux_exige_une_session_et_ne_repousse_pas_l_inactivite(stack: Stack) -> None:
+async def test_stream_requires_a_session_and_does_not_extend_inactivity(stack: Stack) -> None:
     anon = await stack.client(signed_in=False)
     assert (await anon.get("/api/v1/stream")).status_code == 401
     await _ready(stack)
@@ -261,7 +263,7 @@ async def test_le_flux_exige_une_session_et_ne_repousse_pas_l_inactivite(stack: 
     assert [ev async for ev in gen2] == []  # se termine sans rien envoyer
 
 
-async def test_filtre_de_statut_repetable_et_valide(stack: Stack) -> None:
+async def test_status_filter_is_repeatable_and_validated(stack: Stack) -> None:
     w = stack.world
     c, iid = await _ready(stack)
     verified = (await act(c, iid, "resume-entries")).json()["command_id"]
@@ -287,7 +289,7 @@ async def test_filtre_de_statut_repetable_et_valide(stack: Stack) -> None:
         assert (await c.get(f"/api/v1/commands?{query}")).status_code == 422, query
 
 
-async def test_limite_de_page_invalide_422(stack: Stack) -> None:
+async def test_invalid_page_limit_returns_422(stack: Stack) -> None:
     admin = await stack.client("admin")
     for path in ("instances", "commands", "events", "alerts", "audit"):
         for bad in ("abc", "0", "-1", "201", "1.5"):
@@ -296,7 +298,7 @@ async def test_limite_de_page_invalide_422(stack: Stack) -> None:
         assert (await admin.get(f"/api/v1/{path}?limit=200")).status_code == 200, path
 
 
-async def test_moteur_optionnel_a_la_creation(stack: Stack) -> None:
+async def test_engine_is_optional_at_creation(stack: Stack) -> None:
     c = await stack.client("operator")
     r = await c.post("/api/v1/instances", json={"name": f"n-{uuid4().hex[:8]}"})
     assert r.status_code == 201, r.text  # un seul moteur enregistré : le serveur le prend
@@ -318,7 +320,7 @@ async def test_moteur_optionnel_a_la_creation(stack: Stack) -> None:
             await s.execute(text("DELETE FROM engines WHERE id = :i"), {"i": other})
 
 
-async def test_params_bornes_et_dans_l_empreinte_d_audit(stack: Stack) -> None:
+async def test_params_are_bounded_and_included_in_the_audit_fingerprint(stack: Stack) -> None:
     c = await stack.client("operator")
     body = {"name": f"n-{uuid4().hex[:8]}", "params": {"x": "a" * 5000}}
     assert (await c.post("/api/v1/instances", json=body)).status_code == 422
@@ -343,7 +345,7 @@ async def test_params_bornes_et_dans_l_empreinte_d_audit(stack: Stack) -> None:
     )
 
 
-async def test_injection_de_pannes_refusee_par_defaut(stack: Stack) -> None:
+async def test_failure_injection_is_rejected_by_default(stack: Stack) -> None:
     w = stack.world
     assert stack.settings.engine_failure_injection is False
     w.fake = FakeEngine(clock=w.clock, seed=1, new_id=uuid7)  # réglage par défaut
@@ -374,7 +376,7 @@ async def _foreign_instance(stack: Stack, mode: str, state: str) -> str:
     return str(iid)
 
 
-async def test_roles_ce_qui_augmente_le_risque_hors_paper_exige_admin(stack: Stack) -> None:
+async def test_roles_anything_raising_risk_outside_paper_requires_admin(stack: Stack) -> None:
     op = await stack.client("operator")
     admin = await stack.client("admin")
     paper = (await create_instance(op))["id"]
