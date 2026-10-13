@@ -4,7 +4,7 @@ import {
   type IChartApi, type ISeriesApi, type ISeriesMarkersPluginApi, type SeriesMarker, type Time, type UTCTimestamp,
 } from "lightweight-charts";
 import { TIMEFRAMES, type Candle, type Timeframe, type Trade } from "../data/types";
-import { age, clock, dateTime, duration, price, signedMoney, signedPct, tfLabel } from "../lib/format";
+import { SEEN_TIP, age, clock, dateTime, duration, price, seen, signedMoney, signedPct, tfLabel } from "../lib/format";
 import { css, readPalette, watchTheme, type Palette } from "./colors";
 import { CAUSE_FR, candleIndexAt, overlaps } from "./geometry";
 import { TradeOverlay } from "./overlay";
@@ -172,16 +172,17 @@ export function TradingChart(props: TradingChartProps): JSX.Element {
   }, [focusNonce, focusTradeId]);
 
   const shown = useMemo(() => trades.filter((t) => overlaps(candles, t)), [trades, candles]);
-  const ageText = stale ? `Périmé depuis ${age(observedAgeSec).replace("il y a ", "")}` : `Constaté ${age(observedAgeSec)}`;
+  const ageText = stale ? `Périmé : aucune réponse depuis ${age(observedAgeSec).replace("il y a ", "")}` : seen(observedAgeSec);
 
   return (
     <div className="tc">
       <div className="tc-head">
-        <div className="tc-tfs" role="group" aria-label="Unité de temps">
+        <div className="tc-tfs pills" role="group" aria-label="Timeframe">
           {TIMEFRAMES.map((tf) => {
             const traded = tradedTimeframes.includes(tf);
             return (
-              <button key={tf} type="button" aria-pressed={tf === timeframe} className={`tc-tf${traded ? " is-traded" : ""}`} onClick={() => onTimeframe(tf)}>
+              <button key={tf} type="button" aria-pressed={tf === timeframe} className="pill" data-tip={traded ? "Timeframe tradé par le bot" : undefined} onClick={() => onTimeframe(tf)}>
+                {traded && <i className="pill-dot" aria-hidden="true" />}
                 {tfLabel(tf)}
                 {traded && <span className="tc-sr"> tradée par le bot</span>}
               </button>
@@ -189,8 +190,8 @@ export function TradingChart(props: TradingChartProps): JSX.Element {
           })}
         </div>
         <div className="tc-tags">
-          {simulated && <span className="tc-tag">simulé</span>}
-          <span className={`tc-tag${stale ? " is-stale" : ""}`}>{ageText}</span>
+          {simulated && <span className="tag-sim">Simulé</span>}
+          <span className={`xs ${stale ? "dn" : "dim"}`} data-tip={SEEN_TIP}>{ageText}</span>
         </div>
       </div>
       <div className={`tc-plot${stale ? " is-stale" : ""}`}>

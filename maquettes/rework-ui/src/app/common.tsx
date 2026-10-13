@@ -1,10 +1,9 @@
 import { useCallback, useState, type ReactNode } from "react";
 import type { Instance, Mode, ObservedState } from "../data/types";
 import type { State } from "../data/state";
-import { age, signedPct } from "../lib/format";
+import { age } from "../lib/format";
 
-/** Au-delà d'une heure sans observation, une valeur est périmée.
- *  À remplacer par `STALE_AFTER_SEC` de screens/instance/shared.tsx dès qu'il existe (même valeur, 3600). */
+/** Au-delà d'une heure sans réponse du bot, une valeur est périmée. */
 export const STALE_AFTER = 3600;
 export const LIVE_STATES: ObservedState[] = ["lancement", "verification", "actif", "achats_en_pause"];
 
@@ -20,26 +19,7 @@ export const OBSERVED_LABEL: Record<ObservedState, string> = {
 
 export const MODE_ORDER: Mode[] = ["reel", "test", "backtest"];
 
-export function Arrow({ up }: { up: boolean }) {
-  return (
-    <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true" className="arrow">
-      <path d={up ? "M4 1 7.5 7h-7z" : "M4 7 .5 1h7z"} fill="currentColor" />
-    </svg>
-  );
-}
-
-/** Variation signée : signe, flèche et couleur (vert / rouge, ou bleu pour ce qui est en cours). */
-export function Delta({ pct, blue }: { pct: number; blue?: boolean }) {
-  const text = signedPct(pct);
-  const zero = !/[+−]/.test(text);
-  const tone = blue ? "act" : zero ? "dim" : pct > 0 ? "up" : "dn";
-  return (
-    <span className={`delta ${tone}`}>
-      {!zero && <Arrow up={pct > 0} />}
-      {text}
-    </span>
-  );
-}
+export { Arrow, Delta } from "../ui/ui";
 
 /** Exécute une action du magasin ; un refus (Error en français) est gardé pour l'afficher sur place. */
 export function useAttempt(): [string | null, (fn: () => unknown) => boolean, () => void] {

@@ -3,6 +3,7 @@ import {
   INITIAL_CURSOR, actions, getState, resetStore, selectCandles, selectLog, selectStats, selectTrades, startClock, stopClock, subscribe,
 } from "./store";
 import { EPOCH } from "./sim";
+import { ftTemplate } from "./providers";
 
 const inst = (id: string) => getState().instances.find((i) => i.id === id)!;
 const wait = (ms: number) => vi.advanceTimersByTime(ms);
@@ -220,9 +221,20 @@ describe("promotion et bibliothèque", () => {
     expect(getState().keys).toHaveLength(2);
     const a = actions.addAutomation({ kind: "alerte", name: "Test", description: "d" });
     actions.removeAutomation(a.id);
-    const st = actions.addStrategy({ name: "N", description: "", timeframe: "1h", extraTimeframes: [], stopLossPct: 1, takeProfitPct: 2, params: {} });
+    const st = actions.addStrategy({ name: "N", description: "", provider: "freqtrade", className: "N", code: ftTemplate("N"), trailing: false, timeframe: "1h", extraTimeframes: [], stopLossPct: 1, takeProfitPct: 2, params: {} });
     actions.updateStrategy(st.id, { stopLossPct: 2 });
     actions.removeStrategy(st.id);
+  });
+  it("une stratégie ne sert que dans une instance de son provider", () => {
+    expect(() => actions.createInstance({ name: "N", mode: "test", keyId: null, provider: "nautilus" })).toThrow(/pas encore pris en charge/);
+    expect(() => actions.addStrategy({ name: "N", description: "", provider: "freqtrade", className: "N", code: "class N: pass", trailing: false, timeframe: "1h", extraTimeframes: [], stopLossPct: 1, takeProfitPct: 2, params: {} })).toThrow(/Contrôle du code/);
+    // une stratégie d'un autre provider, posée telle quelle dans l'état : l'affectation est refusée
+    const foreign = { ...getState().strategies[0], id: "strat-x", provider: "nautilus" as const };
+    getState().strategies.push(foreign);
+    expect(() => actions.addPair("inst-brouillon", "SOL/USDT", "strat-x")).toThrow(/NautilusTrader/);
+    expect(() => actions.setPairStrategy("inst-brouillon", "DOGE/USDT", "strat-x")).toThrow(/NautilusTrader/);
+    expect(() => actions.setProvider("inst-brouillon", "freqtrade")).not.toThrow();
+    expect(() => actions.setProvider("inst-swing", "nautilus")).toThrow();
   });
   it("indicateurs, couleurs", () => {
     expect(getState().enabledIndicators).toEqual(["winRate", "profitFactor", "maxDrawdownPct", "openPositions", "fees", "avgDurationSec"]);

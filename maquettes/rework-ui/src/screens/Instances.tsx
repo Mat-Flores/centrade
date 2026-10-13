@@ -3,13 +3,17 @@ import { actions, selectStats, useStore } from "../data/store";
 import type { State } from "../data/state";
 import type { Instance, Mode, PairStats } from "../data/types";
 import { go, href } from "../app/route";
-import { Button, Dialog, Field, ModeTag, Panel, SimTag, Term } from "../ui/ui";
-import { duration, money } from "../lib/format";
-import { ageOf, ageText, Arrow, Chevron, Delta, Empty, isStale, MODE_ORDER, OBSERVED_LABEL, PageHead, SectionHead, useAttempt } from "../app/common";
+import { Button, Dialog, Field, G, ModeTag, Panel, SimTag } from "../ui/ui";
+import { PROVIDERS, providerName } from "../data/providers";
+import type { ProviderId } from "../data/types";
+import { SEEN_TIP, duration, money, seen } from "../lib/format";
+import { ageOf, Arrow, Delta, Empty, isStale, MODE_ORDER, OBSERVED_LABEL, PageHead, SectionHead, useAttempt } from "../app/common";
+import { DataTable, fr } from "../app/table";
 
-const COLS = "minmax(140px,1.2fr) 230px minmax(110px,0.9fr) 140px 104px 104px 124px 76px 150px 28px";
-const MIN_W = "1200px";
-const HEAD = ["Nom", "État constaté", "Paires", "Solde", "Encaissé", "En cours", "Transactions", "Depuis", "", ""];
+// Huit colonnes en parts de largeur : le tableau tient toujours dans son cadre (voir app/table.tsx).
+const COLS = fr(2.2, 1.2, 1.4, 1.2, 1.2, 0.8, 1, 1.4);
+const HEAD = ["Nom", "État", "Solde", <G key="r" k="realized">Realized</G>, <G key="u" k="unrealized">Unrealized</G>, "Trades", "Depuis", ""];
+const RIGHT = [2, 3, 4, 5, 6], HIDE = [5, 6];
 
 const needsAttention = (i: Instance) => i.observed === "erreur" || i.command?.status === "echouee";
 const hasResult = (i: Instance) => i.mode !== "backtest" || i.backtest?.run.status === "termine";
@@ -28,9 +32,8 @@ function statusCell(i: Instance, s: State) {
   const failed = i.command?.status === "echouee";
   return (
     <>
-      <span className={`chip ${stale ? "warn" : TONE[i.observed] ?? ""}`}>
+      <span className={`chip ${stale ? "warn" : TONE[i.observed] ?? ""}`} data-tip={i.observed === "arrete" ? undefined : `${seen(ageOf(i, s))}.\n${SEEN_TIP}`}>
         <span className="st-word">{OBSERVED_LABEL[i.observed]}</span>
-        {i.observed !== "arrete" && <span className="age">{ageText(ageOf(i, s))}</span>}
       </span>
       {stale && <span className="warn small" style={{ marginLeft: 8 }}>périmé</span>}
       {failed ? <span className="dn small" style={{ marginLeft: 8 }}>échec</span> : pending && <span className="dim small" style={{ marginLeft: 8 }}>demandé</span>}
@@ -42,8 +45,8 @@ function RowAction({ i, run }: { i: Instance; run: (fn: () => unknown) => boolea
   const open = () => go({ page: "instance", id: i.id, tab: "tout" });
   if (i.mode === "backtest" || i.observed === "erreur" || i.observed === "inconnu") return <Button small onClick={open}>Ouvrir</Button>;
   if (i.observed === "arrete") return <Button small onClick={() => run(() => actions.start(i.id))}>Démarrer</Button>;
-  if (i.observed === "achats_en_pause") return <Button small onClick={() => run(() => actions.resumeEntries(i.id))}>Reprendre les achats</Button>;
-  if (i.observed === "actif") return <Button small onClick={() => run(() => actions.pauseEntries(i.id))}>Pause des achats</Button>;
+  if (i.observed === "achats_en_pause") return <Button small data-tip="Reprendre les achats" onClick={() => run(() => actions.resumeEntries(i.id))}>Reprendre</Button>;
+  if (i.observed === "actif") return <Button small data-tip="Mettre en pause les achats : le bot continue de gérer et de vendre ses positions" onClick={() => run(() => actions.pauseEntries(i.id))}>Pause achats</Button>;
   return <Button small disabled>Démarrage…</Button>;
 }
 
@@ -51,23 +54,23 @@ function Row({ i, s }: { i: Instance; s: State }) {
   const [err, run] = useAttempt();
   const st: PairStats = selectStats(s, i.id);
   const shown = hasResult(i);
-  const stale = isStale(i, s);
-  const figs = stale ? "dim-stale" : "";
+  const figs = isStale(i, s) ? "dim-stale" : "";
   const short = i.pairs.map((p) => p.pair.split("/")[0]);
   return (
-    <div role="row" className={`r tall ${needsAttention(i) ? "warn-row" : ""}`} style={{ gridTemplateColumns: COLS }}>
-      <span role="cell" className="r-name"><a className="cover" href={href({ page: "instance", id: i.id, tab: "tout" })}>{i.name}</a></span>
-      <span role="cell" className="t" style={{ overflow: "visible" }}>{statusCell(i, s)}</span>
-      <span role="cell" className="t" title={i.pairs.map((p) => p.pair).join(", ")}>
-        {i.pairs.length === 0 ? <span className="dim">Aucune paire</span> : <>{i.pairs.length} <span className="dim">· {short.slice(0, 3).join(" ")}{short.length > 3 ? ` +${short.length - 3}` : ""}</span></>}
+    <div role="row" className={`r tall ${needsAttention(i) ? "warn-row" : ""}`}>
+      <span role="cell" className="r-name">
+        <a className="cover" href={href({ page: "instance", id: i.id, tab: "tout" })}>{i.name}</a>
+        <span className="sec" data-tip={`${providerName(i.provider)} · ${i.pairs.map((p) => p.pair).join(", ") || "aucune paire"}`}>
+          {providerName(i.provider)} · {i.pairs.length === 0 ? "aucune paire" : <>{short.slice(0, 3).join(" ")}{short.length > 3 ? ` +${short.length - 3}` : ""}</>}
+        </span>
       </span>
+      <span role="cell" className="t">{statusCell(i, s)}</span>
       <span role="cell" className={`right ${figs}`}>{shown ? money(st.balance, i.currency) : "—"}</span>
-      <span role="cell" className={`right ${figs}`} title={shown ? `${money(st.realized, i.currency)} encaissés, frais déduits` : undefined}>{shown ? <Delta pct={st.realizedPct} /> : "—"}</span>
-      <span role="cell" className={`right ${figs}`} title={shown ? `${money(st.unrealized, i.currency)} sur les positions ouvertes` : undefined}>{shown ? <Delta pct={st.unrealizedPct} blue /> : "—"}</span>
-      <span role="cell" className={`right ${figs}`}>{shown ? st.trades + (st.openPositions ? ` (+${st.openPositions} ouv.)` : "") : "—"}</span>
-      <span role="cell" className="right">{i.startedAt ? duration(s.cursor - i.startedAt) : "—"}</span>
+      <span role="cell" className={`right ${figs}`}>{shown ? <Delta pct={st.realizedPct} amount={st.realized} currency={i.currency} /> : "—"}</span>
+      <span role="cell" className={`right ${figs}`}>{shown ? <Delta pct={st.unrealizedPct} amount={st.unrealized} currency={i.currency} blue /> : "—"}</span>
+      <span role="cell" className={`right hide-sm ${figs}`} data-tip={shown && st.openPositions ? `${st.trades} trades terminés, ${st.openPositions} position${st.openPositions > 1 ? "s" : ""} ouverte${st.openPositions > 1 ? "s" : ""}` : undefined}>{shown ? st.trades + (st.openPositions ? ` +${st.openPositions}` : "") : "—"}</span>
+      <span role="cell" className="right hide-sm" data-tip={i.startedAt ? `En marche depuis ${duration(s.cursor - i.startedAt)}` : undefined}>{i.startedAt ? duration(s.cursor - i.startedAt).split(" ").slice(0, 4).join(" ") : "—"}</span>
       <span role="cell" className="act-cell"><RowAction i={i} run={run} /></span>
-      <span role="cell" className="right"><Chevron /></span>
       {err && <span className="row-err" role="alert">{err}</span>}
     </div>
   );
@@ -79,28 +82,23 @@ function Totals({ rows, s }: { rows: Instance[]; s: State }) {
   const cur = [...new Set(stats.map((x) => x.i.currency))];
   const one = cur.length === 1;
   const start = stats.reduce((a, x) => a + x.i.startBalance, 0);
-  const pct = (f: (x: PairStats) => number) => (one && start > 0 ? (stats.reduce((a, x) => a + f(x.st), 0) / start) * 100 : NaN);
-  const realized = pct((x) => x.realized), open = pct((x) => x.unrealized);
+  const sum = (f: (x: PairStats) => number) => stats.reduce((a, x) => a + f(x.st), 0);
+  const delta = (f: (x: PairStats) => number, blue?: boolean) => (one && start > 0 ? <Delta pct={(sum(f) / start) * 100} amount={sum(f)} currency={cur[0]} blue={blue} /> : "—");
   return (
-    <div role="row" className="foot-row" style={{ gridTemplateColumns: COLS, minWidth: MIN_W }}>
-      <span role="cell" className="label" style={{ gridColumn: "1 / 4" }}>Total, ce mode seulement</span>
+    <div role="row" className="foot-row">
+      <span role="cell" className="label" style={{ gridColumn: "1 / 3" }}>Total, ce mode seulement</span>
       <span role="cell" className="right">{stats.length === 0 ? "—" : cur.map((c) => money(stats.filter((x) => x.i.currency === c).reduce((a, x) => a + x.st.balance, 0), c)).join(" + ")}</span>
-      <span role="cell" className="right">{Number.isNaN(realized) ? "—" : <Delta pct={realized} />}</span>
-      <span role="cell" className="right">{Number.isNaN(open) ? "—" : <Delta pct={open} blue />}</span>
-      <span role="cell" className="right">{stats.length ? stats.reduce((a, x) => a + x.st.trades, 0) : "—"}</span>
-      <span role="cell" />
-      <span role="cell" />
+      <span role="cell" className="right">{delta((x) => x.realized)}</span>
+      <span role="cell" className="right">{delta((x) => x.unrealized, true)}</span>
+      <span role="cell" className="right hide-sm">{stats.length ? sum((x) => x.trades) : "—"}</span>
+      <span role="cell" className="hide-sm" />
       <span role="cell" />
     </div>
   );
 }
 
-const MODE_TITLE: Record<Mode, string> = { reel: "Mode réel", test: "Mode test", backtest: "Backtest" };
-const MODE_TIP: Record<Mode, string> = {
-  reel: "Le bot trade avec l'argent du compte.",
-  test: "Le bot trade avec de l'argent fictif. Tous les chiffres sont simulés.",
-  backtest: "Le bot rejoue une période passée. Un backtest n'est pas une prévision.",
-};
+const MODE_TITLE: Record<Mode, string> = { reel: "Live", test: "Dry-run", backtest: "Backtest" };
+const MODE_KEY = { reel: "live", test: "dryRun", backtest: "backtest" } as const;
 
 const MODE_DESC: Record<Mode, string> = {
   reel: "Les bots qui tradent avec l'argent d'un vrai compte.",
@@ -114,7 +112,7 @@ function ModeTable({ mode, s, q, onCreate }: { mode: Mode; s: State; q: string; 
   return (
     <section aria-label={MODE_TITLE[mode]}>
       <SectionHead
-        title={<><Term tip={MODE_TIP[mode]} tech={mode === "reel" ? "live" : mode === "test" ? "paper, dry-run" : undefined}>{MODE_TITLE[mode]}</Term>{mode !== "reel" && <SimTag />}<span className="count">{total}</span></>}
+        title={<><G k={MODE_KEY[mode]} />{mode !== "reel" && <SimTag />}<span className="count">{total}</span></>}
         desc={MODE_DESC[mode]}
       />
       <Panel className="tbl">
@@ -132,17 +130,9 @@ function ModeTable({ mode, s, q, onCreate }: { mode: Mode; s: State; q: string; 
             </Empty>
           )
         ) : (
-          <div className="scroll-x" tabIndex={0} aria-label={`Instances, ${MODE_TITLE[mode]}`}>
-            <div role="table" aria-label={MODE_TITLE[mode]} style={{ minWidth: MIN_W }}>
-              <div role="rowgroup">
-                <div role="row" className="cols" style={{ gridTemplateColumns: COLS }}>
-                  {HEAD.map((h, n) => <span key={n} role="columnheader" className={n >= 3 && n <= 7 ? "right" : ""}>{h || <span className="sr">{n === 8 ? "Action" : "Ouvrir"}</span>}</span>)}
-                </div>
-              </div>
-              <div role="rowgroup">{rows.map((i) => <Row key={i.id} i={i} s={s} />)}</div>
-              <div role="rowgroup"><Totals rows={rows} s={s} /></div>
-            </div>
-          </div>
+          <DataTable label={`Instances, ${MODE_TITLE[mode]}`} cols={COLS} head={HEAD} right={RIGHT} hideNarrow={HIDE} foot={<Totals rows={rows} s={s} />}>
+            {rows.map((i) => <Row key={i.id} i={i} s={s} />)}
+          </DataTable>
         )}
       </Panel>
     </section>
@@ -157,16 +147,17 @@ function CreateDialog({ open, onClose }: { open: boolean; onClose: () => void })
   const [name, setName] = useState("");
   const [mode, setMode] = useState<"test" | "backtest">("test");
   const [keyId, setKeyId] = useState("");
+  const [provider, setProvider] = useState<ProviderId>("freqtrade");
   const [touched, setTouched] = useState(false);
   const [err, run, clear] = useAttempt();
-  useEffect(() => { if (open) { setName(""); setMode("test"); setKeyId(""); setTouched(false); clear(); } }, [open, clear]);
+  useEffect(() => { if (open) { setName(""); setMode("test"); setKeyId(""); setProvider("freqtrade"); setTouched(false); clear(); } }, [open, clear]);
   const nameErr = !name.trim() ? "Le nom est obligatoire." : names.includes(name.trim().toLowerCase()) ? "Une instance porte déjà ce nom. En choisir un autre." : undefined;
 
   const submit = () => {
     setTouched(true);
     if (nameErr) return;
     let id = "";
-    if (run(() => { id = actions.createInstance({ name, mode, keyId: mode === "test" && keyId ? keyId : null }).id; })) {
+    if (run(() => { id = actions.createInstance({ name, mode, provider, keyId: mode === "test" && keyId ? keyId : null }).id; })) {
       onClose();
       go({ page: "instance", id, tab: "tout" });
     }
@@ -181,11 +172,16 @@ function CreateDialog({ open, onClose }: { open: boolean; onClose: () => void })
         <Field label="Nom" required error={touched ? nameErr : undefined} hint="Visible dans la liste, le journal et la barre du haut.">
           <input className="input" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name && setTouched(true)} aria-invalid={touched && !!nameErr} placeholder="Par exemple : Swing majors" />
         </Field>
+        <Field label="Provider" hint="Le moteur de trading de l'instance. Il fixe les stratégies utilisables : une stratégie Freqtrade ne sert que dans une instance Freqtrade.">
+          <select className="select" value={provider} onChange={(e) => setProvider(e.target.value as ProviderId)}>
+            {PROVIDERS.map((p) => <option key={p.id} value={p.id} disabled={!p.ready}>{p.name}{p.ready ? "" : " (pas encore pris en charge)"}</option>)}
+          </select>
+        </Field>
         <fieldset className="opt-group">
           <legend>Mode</legend>
           <label className="opt">
             <input type="radio" name="mode" checked={mode === "test"} onChange={() => setMode("test")} />
-            <b>Mode test <SimTag /></b>
+            <b>Dry-run (mode test) <SimTag /></b>
             <span>Argent fictif sur un compte de test. Tous les chiffres sont simulés.</span>
           </label>
           <label className="opt">
@@ -224,7 +220,7 @@ export function Instances() {
   const attention = s.instances.filter(needsAttention);
   return (
     <div className="page">
-      <PageHead title="Instances" desc="Chaque instance est un environnement de trading : un mode, un compte, des paires et une stratégie par paire.">
+      <PageHead title="Instances" desc="Chaque instance est un environnement de trading : un provider, un mode, un compte, des paires et une stratégie par paire.">
         <Button variant="go" onClick={() => setCreating(true)}>Créer une instance</Button>
       </PageHead>
       {attention.length > 0 && (
@@ -237,7 +233,7 @@ export function Instances() {
         <input className="input filter" type="search" aria-label="Filtrer les instances par nom" placeholder="Filtrer par nom" value={q} onChange={(e) => setQ(e.target.value)} />
       )}
       {MODE_ORDER.map((m) => <ModeTable key={m} mode={m} s={s} q={q} onCreate={() => setCreating(true)} />)}
-      <p className="quiet">Les trois tableaux ne s'additionnent jamais : réel, test et backtest restent séparés. Les montants sont dans la devise de chaque compte, sans conversion.</p>
+      <p className="quiet">Les trois tableaux ne s'additionnent jamais : live, dry-run et backtest restent séparés. Les montants sont dans la devise de chaque compte, sans conversion. Un clic sur une variation l'affiche en devise plutôt qu'en %.</p>
       <CreateDialog open={creating} onClose={() => setCreating(false)} />
     </div>
   );

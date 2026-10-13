@@ -27,6 +27,10 @@ Décisions prises par l'opérateur le 12 octobre 2026, pendant le cadrage de la 
 | E8 | Solde | PnL jour et semaine, signe explicite (§9). | « 2 000,00 USDT ▲ +10,00 % » : résultat encaissé en vert ou rouge, variation en cours en bleu ; détail au clic. | §9 : décrire les deux variations et leur définition (réalisé net de frais ; latent sur positions ouvertes). |
 | E9 | Indicateurs | Liste fixe par écran (§9). | Indicateurs activables un par un, les importants actifs par défaut. | §9 : liste des indicateurs, définition de chacun, lesquels sont actifs par défaut. |
 
+| E10 | Provider | Aucun écran ne mentionne un moteur précis : uniquement `engine` et `capabilities` (§7). | Le provider (Freqtrade) est nommé à l'écran : étiquette de l'instance, filtre des stratégies, choix à la création. La fenêtre de création d'une stratégie est propre à chaque provider. | §7 et §9 : admettre le nom du moteur à l'écran, lu dans les données, et un formulaire de stratégie par adaptateur. La compatibilité stratégie-instance par moteur est déjà dans le SPEC (§4 F7 : comparaisons à l'intérieur d'un même moteur). |
+| E11 | Vocabulaire (révise E5) | Glossaire du §2. | Termes techniques en anglais à l'écran, expliqués en français au survol. | §2 : colonne « libellé d'interface » en anglais pour les termes techniques. Voir `VOCABULAIRE.md`. |
+| E12 | Accent en thème clair | Une seule couleur d'accent (§9). | En thème clair, l'accent est l'encre (boutons principaux, sélection) ; l'orange ne sert plus qu'aux avertissements et au mode test. Le thème sombre garde l'ambre. | §9 : préciser l'accent par thème. |
+
 ## Points que la maquette ne tranche pas
 
 - Comment le moteur fait tourner plusieurs stratégies dans une instance (E1) : à vérifier sur le tag Freqtrade épinglé avant tout portage (annexe C).

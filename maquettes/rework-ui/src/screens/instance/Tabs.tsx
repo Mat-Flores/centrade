@@ -3,7 +3,7 @@ import { motion } from "motion/react";
 import { go } from "../../app/route";
 import { selectStats, type State } from "../../data/store";
 import type { DataStatus, Instance } from "../../data/types";
-import { Delta } from "./shared";
+import { Delta } from "../../ui/ui";
 
 function dataTag(inst: Instance, pair: string): { text: string; full: string } | null {
   const d = inst.backtest?.data[pair];
@@ -28,14 +28,17 @@ export function Tabs({ inst, s, tab }: { inst: Instance; s: State; tab: string }
     <div className="tabs in-tabs" role="tablist" aria-label="Paires de l'instance" onKeyDown={onKey}>
       {ids.map((t) => {
         const on = t === tab;
-        const st = t === "tout" ? null : selectStats(s, inst.id, t);
-        const tag = t === "tout" ? null : dataTag(inst, t);
+        const pair = t === "tout" ? undefined : t;
+        const st = selectStats(s, inst.id, pair);
+        const tag = pair ? dataTag(inst, pair) : null;
+        // Variation du capital : celle de la paire, ou de toute l'instance sur « Tout ». En backtest, seulement une fois le résultat calculé.
+        const shown = pair ? !tag : inst.mode !== "backtest" || inst.backtest?.run.status === "termine";
         return (
           <button key={t} ref={(el) => { refs.current[t] = el; }} type="button" role="tab" id={`tab-${t}`} aria-selected={on} tabIndex={on ? 0 : -1} className="tab in-tab"
-            aria-label={st ? `${t}${tag ? `, ${tag.full}` : ""}` : undefined} onClick={() => open(t)}>
+            aria-label={tag ? `${t}, ${tag.full}` : undefined} onClick={() => open(t)}>
             {on && <motion.i layoutId={`ind-${inst.id}`} className="in-tab-ind" transition={{ duration: 0.22, ease: [0.2, 0.8, 0.2, 1] }} />}
             <span>{t === "tout" ? "Tout" : t}</span>
-            {st && !tag && <Delta value={st.realizedPct + st.unrealizedPct} tone="real" />}
+            {shown && <Delta pct={st.realizedPct + st.unrealizedPct} amount={st.realized + st.unrealized} currency={inst.currency} still />}
             {tag && <span className="tag" aria-hidden="true">{tag.text}</span>}
           </button>
         );

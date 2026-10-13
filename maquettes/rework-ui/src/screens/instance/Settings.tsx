@@ -4,7 +4,9 @@ import { href } from "../../app/route";
 import { actions, type State } from "../../data/store";
 import { EPOCH, PAIRS, SERIES_END } from "../../data/sim";
 import type { Instance } from "../../data/types";
-import { Button, Field } from "../../ui/ui";
+import { PROVIDERS, providerName } from "../../data/providers";
+import type { ProviderId } from "../../data/types";
+import { Button, Copy, Field, G } from "../../ui/ui";
 import { tfLabel } from "../../lib/format";
 import { KIND_LABEL, KIND_ORDER, groupByStrategy } from "./Composition";
 import { VersionList } from "./Dialogs";
@@ -33,13 +35,17 @@ const PCOLS = "minmax(0,1fr) minmax(0,1.6fr) 120px";
 function PairsPanel({ inst, s, editable, run }: { inst: Instance; s: State; editable: boolean; run: (fn: () => unknown) => void }) {
   const free = PAIRS.filter((p) => !inst.pairs.some((x) => x.pair === p));
   const [pair, setPair] = useState(free[0] ?? "");
-  const [strat, setStrat] = useState(s.strategies[0]?.id ?? "");
+  // Compatibilité : seules les stratégies du provider de l'instance sont proposées.
+  const usable = s.strategies.filter((x) => x.provider === inst.provider);
+  const [strat, setStrat] = useState(usable[0]?.id ?? "");
   useEffect(() => { if (!free.includes(pair)) setPair(free[0] ?? ""); }, [free.join("|")]);
+  useEffect(() => { if (!usable.some((x) => x.id === strat)) setStrat(usable[0]?.id ?? ""); }, [usable.map((x) => x.id).join("|")]);
   const groups = groupByStrategy(inst, s.strategies);
-  const opts = s.strategies.map((x) => <option key={x.id} value={x.id}>{x.name}</option>);
+  const opts = usable.map((x) => <option key={x.id} value={x.id}>{x.name}</option>);
+  const prov = providerName(inst.provider);
 
   return (
-    <Section title="Paires et stratégies" desc="Chaque paire suit une stratégie ; plusieurs paires peuvent partager la même."
+    <Section title="Paires et stratégies" desc={`Chaque paire suit une stratégie ${prov} ; plusieurs paires peuvent partager la même.`}
       extra={<span className="xs faint num">{inst.pairs.length} paire{inst.pairs.length > 1 ? "s" : ""} · {groups.length} stratégie{groups.length > 1 ? "s" : ""}</span>}>
       <div className="cols" style={{ gridTemplateColumns: PCOLS }}><span>Paire</span><span>Stratégie</span><span /></div>
       <div className="in-rows">
@@ -47,7 +53,7 @@ function PairsPanel({ inst, s, editable, run }: { inst: Instance; s: State; edit
           {groups.flatMap(({ strategy, pairs }) => [
             <motion.div layout key={`h-${strategy.id}`} className="in-grouph" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.2, ease }}>
               <span className="subtitle">{strategy.name}</span>
-              <span className="small dim num">{tfLabel(strategy.timeframe)} · stop-loss {plainPct(strategy.stopLossPct, 1)} · take-profit {plainPct(strategy.takeProfitPct, 1)} · {pairs.length} {pairs.length > 1 ? "paires" : "paire"}</span>
+              <span className="small dim num">{tfLabel(strategy.timeframe)} · <G k="stopLoss" /> {plainPct(strategy.stopLossPct, 1)} · <G k="takeProfit" /> {plainPct(strategy.takeProfitPct, 1)} · {pairs.length} {pairs.length > 1 ? "paires" : "paire"}</span>
             </motion.div>,
             ...pairs.map((p) => (
               <motion.div layout key={p} className="r in-prow" style={{ gridTemplateColumns: PCOLS, fontSize: 14 }}
@@ -68,9 +74,37 @@ function PairsPanel({ inst, s, editable, run }: { inst: Instance; s: State; edit
         <Field label="Stratégie de la nouvelle paire">
           <select className="select" disabled={!editable} value={strat} onChange={(e) => setStrat(e.target.value)}>{opts}</select>
         </Field>
-        <Button type="submit" disabled={!editable || !pair}>Ajouter la paire</Button>
+        <Button type="submit" disabled={!editable || !pair || !strat}>Ajouter la paire</Button>
       </form>
+      {usable.length === 0 && (
+        <div className="notice in-note-n" role="status">
+          Aucune stratégie {prov} dans la bibliothèque : une stratégie ne sert que dans une instance de son provider.{" "}
+          <a href={href({ page: "bibliotheque", tab: "strategies" })}>Créer une stratégie {prov}</a>
+        </div>
+      )}
       {!free.length && <div className="small faint in-note">Toutes les paires disponibles sont déjà dans l'instance.</div>}
+    </Section>
+  );
+}
+
+/** Le provider est l'écosystème de l'instance : il fixe le format des stratégies. Modifiable seulement sur une instance vierge. */
+function ProviderPanel({ inst, editable, run }: { inst: Instance; editable: boolean; run: (fn: () => unknown) => void }) {
+  const locked = !editable ? "Le provider ne change pas tant que l'instance tourne ou qu'elle est en mode réel."
+    : inst.startedAt !== null ? "Fixé depuis le premier démarrage. Pour en changer, créer une nouvelle instance."
+    : inst.pairs.length ? "Retirer d'abord les paires : leurs stratégies ne valent que pour ce provider." : null;
+  return (
+    <Section title="Provider" desc="Le moteur de trading qui fait tourner l'instance. Il détermine les stratégies utilisables : une stratégie Freqtrade ne sert que dans une instance Freqtrade.">
+      <div className="in-note in-prov">
+        <Field label="Provider de l'instance" hint={locked ?? "Modifiable tant que l'instance n'a ni paire ni démarrage."}>
+          <select className="select" disabled={!!locked} value={inst.provider} onChange={(e) => run(() => actions.setProvider(inst.id, e.target.value as ProviderId))}>
+            {PROVIDERS.map((p) => <option key={p.id} value={p.id} disabled={!p.ready}>{p.name}{p.ready ? "" : " (pas encore pris en charge)"}</option>)}
+          </select>
+        </Field>
+        <dl className="kv in-prov-kv">
+          <dt>Identifiant de l'instance</dt><dd><Copy value={inst.id} what="l'identifiant" /></dd>
+          <dt>Stratégies compatibles</dt><dd><a href={href({ page: "bibliotheque", tab: "strategies" })}>Voir dans la bibliothèque</a></dd>
+        </dl>
+      </div>
     </Section>
   );
 }
@@ -126,12 +160,12 @@ function AutomationsPanel({ inst, s, editable, run }: { inst: Instance; s: State
   );
 }
 
-function NumField({ label, value, onCommit, editable }: { label: string; value: number; onCommit: (n: number) => void; editable: boolean }) {
+function NumField({ label, tip, value, onCommit, editable }: { label: string; tip: string; value: number; onCommit: (n: number) => void; editable: boolean }) {
   const [v, setV] = useState(String(value));
   useEffect(() => setV(String(value)), [value]);
   const commit = () => { const n = Number(v.replace(",", ".")); if (Number.isFinite(n) && n !== value) onCommit(n); else setV(String(value)); };
   return (
-    <Field label={label}>
+    <Field label={label} hint={tip}>
       <input className="input num" inputMode="decimal" disabled={!editable} value={v} onChange={(e) => setV(e.target.value)} onBlur={commit} onKeyDown={(e) => e.key === "Enter" && commit()} />
     </Field>
   );
@@ -145,8 +179,8 @@ function BacktestPanel({ inst, editable, run }: { inst: Instance; editable: bool
       <div className="in-note in-bt-form">
         <Field label="Du"><input type="date" className="input num" {...bounds} disabled={!editable} value={day(bt.from)} onChange={(e) => e.target.value && run(() => actions.setBacktestConfig(inst.id, { from: parseDay(e.target.value) }))} /></Field>
         <Field label="Au"><input type="date" className="input num" {...bounds} disabled={!editable} value={day(bt.to)} onChange={(e) => e.target.value && run(() => actions.setBacktestConfig(inst.id, { to: parseDay(e.target.value) }))} /></Field>
-        <NumField label="Frais (%)" value={bt.feePct} editable={editable} onCommit={(n) => run(() => actions.setBacktestConfig(inst.id, { feePct: n }))} />
-        <NumField label="Glissement (%)" value={bt.slippagePct} editable={editable} onCommit={(n) => run(() => actions.setBacktestConfig(inst.id, { slippagePct: n }))} />
+        <NumField label="Fees (%)" tip="Frais de l'exchange, appliqués à chaque achat et à chaque vente." value={bt.feePct} editable={editable} onCommit={(n) => run(() => actions.setBacktestConfig(inst.id, { feePct: n }))} />
+        <NumField label="Slippage (%)" tip="Glissement : l'écart entre le prix attendu et le prix d'exécution." value={bt.slippagePct} editable={editable} onCommit={(n) => run(() => actions.setBacktestConfig(inst.id, { slippagePct: n }))} />
       </div>
       <p className="small faint in-note" style={{ paddingTop: 0, margin: 0 }}>Les dates tiennent dans les 30 jours de données disponibles. Toute modification efface le résultat précédent.</p>
     </Section>
@@ -167,6 +201,7 @@ export function Settings({ inst, s }: { inst: Instance; s: State }) {
         {notice && <div className="notice" role="status">{notice}</div>}
         {inst.mode === "reel" && !running && <div className="notice" role="status">Une instance en mode réel ne se modifie pas. Pour changer un réglage : modifier l'instance de test d'origine, puis repasser en réel.</div>}
         <ErrorStrip message={err} onClose={clear} />
+        <ProviderPanel inst={inst} editable={editable} run={run} />
         <PairsPanel inst={inst} s={s} editable={editable} run={run} />
         {inst.backtest && <BacktestPanel inst={inst} editable={!running} run={run} />}
         <AccountPanel inst={inst} s={s} editable={keyEditable} run={run} />

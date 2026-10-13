@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { age, clock, dateTime, duration, money, price, signedMoney, signedPct, tfLabel } from "./format";
+import { age, clock, dayOffset, seen, dateTime, duration, money, price, signedMoney, signedPct, tfLabel } from "./format";
 
 const NB = " ";
 describe("format", () => {
@@ -38,6 +38,14 @@ describe("format", () => {
     const t = Date.UTC(2026, 9, 12, 21, 42) / 1000;
     expect(clock(t)).toBe("17:42");
     expect(dateTime(t)).toBe("12 oct. 17:42");
+  });
+  it("seen et dayOffset (jours de calendrier à Toronto)", () => {
+    expect(seen(0)).toBe("Mis à jour à l'instant");
+    expect(seen(190)).toBe("Mis à jour il y a 3 min");
+    const t = Date.UTC(2026, 9, 13, 3, 50) / 1000; // 23:50 le 12 à Toronto
+    expect(dayOffset(t, t + 300)).toBe(0);
+    expect(dayOffset(t, t + 1200)).toBe(1);
+    expect(dayOffset(t, t + 86400 + 1200)).toBe(2);
   });
   it("tfLabel", () => {
     expect(["5m", "15m", "1h", "4h", "1j"].map((t) => tfLabel(t as never))).toEqual(["5 min", "15 min", "1 h", "4 h", "1 j"]);

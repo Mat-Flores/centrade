@@ -9,8 +9,8 @@ export const LIVE_FEE_PCT = 0.1;
 export const LIVE_SLIPPAGE_PCT = 0.05;
 
 export const CAUSE_LABEL: Record<ExitCause, string> = {
-  take_profit: "Objectif atteint", stop_loss: "Stop", trailing_stop: "Stop suiveur", signal: "Signal de la stratégie",
-  timeout: "Délai dépassé", manual: "Manuel", kill_switch: "Arrêt d'urgence", engine_protection: "Protection du bot", unknown: "Inconnue",
+  take_profit: "Take-profit", stop_loss: "Stop-loss", trailing_stop: "Trailing stop", signal: "Signal de la stratégie",
+  timeout: "Timeout", manual: "Manuel", kill_switch: "Arrêt d'urgence", engine_protection: "Protection du bot", unknown: "Inconnue",
 };
 
 const REFUSAL_REASONS = ["perte du jour atteinte", "trop de positions ouvertes", "données de prix trop anciennes"];

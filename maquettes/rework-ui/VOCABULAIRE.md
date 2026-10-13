@@ -1,6 +1,26 @@
 # Vocabulaire de l'interface
 
-Règle : un mot courant à l'écran, le terme technique en infobulle. Un mot déjà courant en français chez les traders n'est pas traduit.
+Règle (révisée le 13 octobre 2026, à la demande de l'opérateur) : un terme technique s'affiche en anglais, tel que les traders l'emploient, et s'explique en français au survol. Les mots courants, les actions et les commandes de sécurité restent en français.
+
+## Termes affichés en anglais
+
+| À l'écran | Explication au survol |
+| --- | --- |
+| Dry-run, Live, Backtest | Mode test, mode réel, rejeu d'une période passée. |
+| Provider | Le moteur de trading qui fait tourner l'instance. |
+| Timeframe | Unité de temps : la durée d'une bougie. |
+| Stop-loss, Take-profit, Trailing stop | Politique de sortie d'une stratégie. |
+| Realized PnL, Unrealized PnL | Résultat encaissé ; résultat en cours. |
+| Wins, Losses, Win rate, Profit factor, Expectancy, Average win, Average loss, Best trade, Worst trade | Indicateurs de performance. |
+| Max drawdown, Drawdown, Exposure, Stop distance | Indicateurs de risque. |
+| Open positions, Fees, Stake, Slippage | Activité et coûts. |
+| Sharpe ratio, Sortino ratio, Calmar ratio | Ratios. |
+
+Restent en français : Solde, Achat, Vente, Gain, Perte, En cours, Arrêt d'urgence, Tout vendre, Mettre en pause les achats, Passer en réel.
+
+« Constaté il y a 12 s » devient « Mis à jour il y a 12 s » (« Mis à jour à l'instant » sous 5 secondes), avec l'explication au survol : heure de la dernière réponse du bot.
+
+Le tableau ci-dessous garde la correspondance avec le glossaire du SPEC ; sa première colonne date de la règle précédente.
 
 ## Mots gardés tels quels
 

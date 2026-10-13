@@ -1,5 +1,6 @@
 import { EPOCH } from "./sim";
 import { DEFAULT_INDICATORS, type State } from "./state";
+import { ftTemplate } from "./providers";
 import type { ApiKey, Automation, BacktestConfig, Instance, Strategy } from "./types";
 
 const DAY = 86400;
@@ -11,19 +12,21 @@ const keys = (): ApiKey[] => [
   { id: "key-kraken-test", name: "Kraken, compte test", exchange: "Kraken", env: "test", currency: "USDT", createdAt: EPOCH + 5 * DAY, hint: "…7mWd" },
 ];
 
+const ft = (className: string) => ({ provider: "freqtrade" as const, className, code: ftTemplate(className), version: 1, trailing: false });
+
 const strategies = (): Strategy[] => [
   {
-    id: "strat-croisement", name: "Croisement de moyennes", timeframe: "1h", extraTimeframes: ["4h"],
+    ...ft("SmaCross"), version: 3, id: "strat-croisement", name: "Croisement de moyennes", timeframe: "1h", extraTimeframes: ["4h"],
     stopLossPct: 3, takeProfitPct: 6, params: { rapide: 9, lente: 21 },
     description: "Exemple volontairement banal : achète quand la moyenne rapide passe au-dessus de la lente. Ce n'est pas un conseil et rien ne garantit un gain.",
   },
   {
-    id: "strat-retour", name: "Retour à la moyenne", timeframe: "15m", extraTimeframes: ["1h"],
+    ...ft("MeanRevert"), id: "strat-retour", name: "Retour à la moyenne", timeframe: "15m", extraTimeframes: ["1h"],
     stopLossPct: 2, takeProfitPct: 3, params: { rapide: 5, lente: 13 },
     description: "Exemple volontairement banal, à unité de temps courte. Il sert à montrer l'interface, pas à gagner de l'argent. Ce n'est pas un conseil.",
   },
   {
-    id: "strat-tendance", name: "Suivi de tendance lent", timeframe: "4h", extraTimeframes: ["1j"],
+    ...ft("SlowTrend"), version: 2, id: "strat-tendance", name: "Suivi de tendance lent", timeframe: "4h", extraTimeframes: ["1j"],
     stopLossPct: 5, takeProfitPct: 12, params: { rapide: 12, lente: 34 },
     description: "Exemple volontairement banal : suit les tendances longues, avec peu de trades. Ce n'est pas un conseil et le passé ne prédit rien.",
   },
@@ -38,7 +41,7 @@ const automations = (): Automation[] => [
   { id: "auto-agent", kind: "agent", name: "Analyse hebdomadaire (propose, ne décide pas)", description: "Un agent relit la semaine et propose des changements. Il n'en applique aucun." },
 ];
 
-const base = { automationIds: [] as string[], command: null, entryPauses: [], manualExits: {}, events: [] };
+const base = { provider: "freqtrade" as const, automationIds: [] as string[], command: null, entryPauses: [], manualExits: {}, events: [] };
 
 const backtestDefaults = (): BacktestConfig => ({
   from: EPOCH, to: EPOCH + 14 * DAY, feePct: 0.1, slippagePct: 0.05, data: {},

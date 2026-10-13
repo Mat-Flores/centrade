@@ -11,7 +11,7 @@ export function VersionList({ inst }: { inst: Instance }) {
         <li key={v.n} className="r tall in-ver">
           <span className="num">Version {v.n}</span>
           <span className="faint num">{dateTime(v.createdAt)}</span>
-          <span className="t" title={v.summary}>{v.summary}</span>
+          <span className="t">{v.summary}</span>
         </li>
       ))}
     </ol>

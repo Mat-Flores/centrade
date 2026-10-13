@@ -67,10 +67,20 @@ export interface ApiKey {
   hint: string;
 }
 
+/** Provider : le moteur de trading (l'écosystème) d'une instance. Une stratégie n'existe que pour un provider. */
+export type ProviderId = "freqtrade" | "nautilus";
+
 export interface Strategy {
   id: string;
   name: string;
   description: string;
+  provider: ProviderId;
+  /** Propres au provider. Freqtrade : une classe Python qui hérite de ControlPlaneStrategy. */
+  className: string;
+  code: string;
+  /** Une stratégie modifiée devient une nouvelle version (SPEC §3.3). */
+  version: number;
+  trailing: boolean;
   timeframe: Timeframe;
   /** Unités de temps complémentaires que la stratégie consulte. */
   extraTimeframes: Timeframe[];
@@ -127,6 +137,8 @@ export interface Instance {
   id: string;
   name: string;
   mode: Mode;
+  /** Fixé à la création, comme le mode : seules les stratégies de ce provider sont utilisables. */
+  provider: ProviderId;
   /** Instance de test dont celle-ci est la copie réelle. */
   promotedFrom?: string;
   keyId: string | null;
@@ -167,6 +179,10 @@ export interface PairStats {
   maxDrawdownPct: number;
   currentDrawdownPct: number;
   exposurePct: number;
+  /** Les mêmes, dans la devise du compte. */
+  maxDrawdown: number;
+  currentDrawdown: number;
+  exposure: number;
   openPositions: number;
   avgDurationSec: number;
   fees: number;

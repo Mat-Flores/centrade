@@ -2,7 +2,8 @@ import { href } from "../../app/route";
 import { actions, type State } from "../../data/store";
 import type { Instance } from "../../data/types";
 import { Button, ModeTag, SimTag } from "../../ui/ui";
-import { age, duration } from "../../lib/format";
+import { providerName } from "../../data/providers";
+import { SEEN_TIP, age, duration, seen } from "../../lib/format";
 import { STATE_LABEL, WANTED_LABEL, startBlock, type Face } from "./shared";
 
 const CMD_LABEL = { demarrer: "Démarrer", pause_achats: "Mettre en pause les achats", reprendre_achats: "Reprendre les achats", arreter: "Arrêter", tout_vendre: "Tout vendre" } as const;
@@ -13,20 +14,21 @@ function StateBlock({ inst, cursor, stale }: { inst: Instance; cursor: number; s
     return (
       <div className="in-state" aria-live="polite">
         <b>Backtest</b>
-        <span className="xs dim">{r?.status === "en_cours" ? `Calcul en cours, ${Math.round(r.progress)} %` : r?.status === "termine" ? "Résultat calculé" : "Aucun résultat"}</span>
+        <span className="xs dim">{r?.status === "en_cours" ? `Calcul en cours, ${Math.round(r.progress)} %` : r?.status === "termine" ? "Résultat calculé" : "Aucun résultat"} · <span className="warn">un backtest n'est pas une prévision</span></span>
       </div>
     );
   }
   const pending = inst.command?.status === "en_cours" ? inst.command : null;
   const differs = inst.wanted !== inst.observed;
-  const seen = `constaté ${age(cursor - inst.observedAt)}`;
   return (
     <div className="in-state" aria-live="polite">
       <b className={stale ? "stale" : ""}>
-        {differs ? <>Demandé : {WANTED_LABEL[inst.wanted]} <span className="faint">·</span> Constaté : {STATE_LABEL[inst.observed]}</> : STATE_LABEL[inst.observed]}
+        {differs ? <>Demandé : {WANTED_LABEL[inst.wanted]} <span className="faint">·</span> État réel : {STATE_LABEL[inst.observed]}</> : STATE_LABEL[inst.observed]}
       </b>
       <span className="xs dim">
-        {stale ? <span className="tag-sim">Périmé depuis {age(cursor - inst.observedAt).replace("il y a ", "")}</span> : seen}
+        {stale
+          ? <span className="tag-sim" data-tip={SEEN_TIP}>Périmé : aucune réponse du bot depuis {age(cursor - inst.observedAt).replace("il y a ", "")}</span>
+          : <span data-tip={SEEN_TIP}>{seen(cursor - inst.observedAt)}</span>}
         {pending && <> · commande « {CMD_LABEL[pending.kind]} » en cours, demandée {age(cursor - pending.requestedAt)}</>}
         {!pending && inst.startedAt !== null && inst.observed !== "arrete" && <> · depuis {duration(cursor - inst.startedAt)}</>}
       </span>
@@ -52,8 +54,9 @@ export function InstanceBar({ inst, s, stale, face, setFace, run, onVersions, on
       <h1 className="title in-name">{inst.name}</h1>
       <ModeTag mode={inst.mode} />
       {inst.mode !== "reel" && <SimTag />}
+      <span className="tag tag-provider" data-tip={`Provider de l'instance : ${providerName(inst.provider)}. Seules ses stratégies sont utilisables.`}>{providerName(inst.provider)}</span>
       <StateBlock inst={inst} cursor={s.cursor} stale={stale} />
-      <button type="button" className="btn ghost sm" onClick={onVersions} title="Ouvrir l'historique des versions">Version {inst.versions[inst.versions.length - 1].n}</button>
+      <button type="button" className="btn ghost sm" onClick={onVersions} data-tip="Ouvrir l'historique des versions">Version {inst.versions[inst.versions.length - 1].n}</button>
       <span className="sp" />
       <div className="in-seg" role="group" aria-label="Face de l'instance">
         {(["observation", "reglages"] as const).map((f) => (

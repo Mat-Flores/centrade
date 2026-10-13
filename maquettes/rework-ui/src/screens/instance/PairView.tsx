@@ -53,24 +53,22 @@ export function PairView({ inst, s, pair, run, dash }: { inst: Instance; s: Stat
 
   return (
     <div className="dash obs">
-      <Strip inst={inst} s={s} pair={pair} stale={stale} dash={dash} />
-      <ObsGrid dash={dash}
-        left={<Composition inst={inst} s={s} activePair={pair} dash={dash} />}
-        center={
-          <div className="in-center">
-            <Zone id="chart" name={`Graphique ${pair}`} dash={dash} className="fill-chart">
-              {neverStarted ? <NeverStarted inst={inst} s={s} run={run} /> : noRun ? <BacktestEmpty inst={inst} pair={pair} tf={strat.timeframe} run={run} /> : (
-                <TradingChart candles={selectCandles(s, inst.id, pair, tf)} trades={trades} timeframe={tf} tradedTimeframes={traded} onTimeframe={setTf}
-                  currency={inst.currency} simulated={inst.mode !== "reel"} observedAgeSec={isLive(inst) ? s.cursor - inst.observedAt : 0} stale={stale}
-                  selectedTradeId={dash.sel} onSelectTrade={dash.setSel} focusTradeId={mine?.id ?? null} focusNonce={mine?.nonce ?? 0} onFocused={dash.clearFocus}
-                  emptyMessage="Aucune bougie à afficher pour cette période." />
-              )}
-            </Zone>
-          </div>
-        }
-        right={<Journal key={pair} trades={trades} entries={selectLog(s, inst.id, pair)} showPair={false} currency={inst.currency} now={s.cursor} live={isLive(inst)} stale={stale} dash={dash}
-          onFocusTrade={(t) => dash.requestFocus(t.id, t.pair)} />}
-      />
+      <Strip inst={inst} s={s} pair={pair} stale={stale} />
+      <ObsGrid zones={{
+        comp: <Composition inst={inst} s={s} activePair={pair} />,
+        chart: (
+          <Zone id="chart" name={`Graphique ${pair}`} className="fill-chart">
+            {neverStarted ? <NeverStarted inst={inst} s={s} run={run} /> : noRun ? <BacktestEmpty inst={inst} pair={pair} tf={strat.timeframe} run={run} /> : (
+              <TradingChart candles={selectCandles(s, inst.id, pair, tf)} trades={trades} timeframe={tf} tradedTimeframes={traded} onTimeframe={setTf}
+                currency={inst.currency} simulated={inst.mode !== "reel"} observedAgeSec={isLive(inst) ? s.cursor - inst.observedAt : 0} stale={stale}
+                selectedTradeId={dash.sel} onSelectTrade={dash.setSel} focusTradeId={mine?.id ?? null} focusNonce={mine?.nonce ?? 0} onFocused={dash.clearFocus}
+                emptyMessage="Aucune bougie à afficher pour cette période." />
+            )}
+          </Zone>
+        ),
+        journal: <Journal key={pair} trades={trades} entries={selectLog(s, inst.id, pair)} showPair={false} currency={inst.currency} live={isLive(inst)} stale={stale} dash={dash}
+          onFocusTrade={(t) => dash.requestFocus(t.id, t.pair)} />,
+      }} />
     </div>
   );
 }

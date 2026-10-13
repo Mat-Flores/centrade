@@ -1,6 +1,7 @@
-import { forwardRef, useEffect, useId, useRef, useState, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { forwardRef, useEffect, useId, useRef, useState, useSyncExternalStore, type ButtonHTMLAttributes, type MouseEvent, type ReactNode } from "react";
 import { animate, useReducedMotion } from "motion/react";
 import type { Mode } from "../data/types";
+import { signedMoney, signedPct } from "../lib/format";
 import "./ui.css";
 
 type BtnProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: "go" | "danger" | "ghost"; small?: boolean };
@@ -8,39 +9,89 @@ export const Button = forwardRef<HTMLButtonElement, BtnProps>(function Button({ 
   return <button ref={ref} type="button" {...p} className={`btn ${variant ?? ""} ${small ? "sm" : ""} ${className}`} />;
 });
 
-const MODE_LABEL: Record<Mode, string> = { test: "Mode test", reel: "Mode réel", backtest: "Backtest" };
+const MODE_KEY = { test: "dryRun", reel: "live", backtest: "backtest" } as const;
 export function ModeTag({ mode }: { mode: Mode }) {
-  return <span className={`mode mode-${mode}`}>{MODE_LABEL[mode]}</span>;
+  return <span className={`mode mode-${mode}`} data-tip={GLOSSARY[MODE_KEY[mode]][1]}>{GLOSSARY[MODE_KEY[mode]][0]}</span>;
 }
 
 /** Mention obligatoire sur tout chiffre du mode test ou d'un backtest. */
 export function SimTag() {
-  return <span className="tag-sim">Simulé</span>;
+  return <span className="tag-sim" data-tip="Argent fictif : aucun de ces chiffres n'est réel.">Simulé</span>;
 }
 
-/** Mot courant à l'écran, terme technique et explication en infobulle (voir VOCABULAIRE.md). */
+/** Terme technique à l'écran (en anglais quand c'est l'usage), explication en français au survol (voir VOCABULAIRE.md). */
 export function Term({ children, tech, tip }: { children: ReactNode; tech?: string; tip: string }) {
-  const [open, setOpen] = useState(false);
-  const id = useId();
+  return <span className="term" tabIndex={0} data-tip={tip} data-tip-tech={tech}>{children}</span>;
+}
+
+/** Termes techniques : libellé affiché, puis explication de l'aperçu de survol. */
+export const GLOSSARY = {
+  timeframe: ["Timeframe", "Unité de temps : la durée d'une bougie du graphique."],
+  stopLoss: ["Stop-loss", "Prix auquel la position est vendue pour limiter la perte."],
+  takeProfit: ["Take-profit", "Prix auquel la position est vendue pour encaisser le gain."],
+  trailing: ["Trailing stop", "Stop suiveur : le stop-loss remonte avec le prix, sans jamais redescendre."],
+  realized: ["Realized PnL", "Résultat encaissé : celui des trades terminés, frais déduits."],
+  unrealized: ["Unrealized PnL", "Résultat en cours : celui des positions encore ouvertes, au dernier prix reçu."],
+  wins: ["Wins", "Trades terminés en gain."],
+  losses: ["Losses", "Trades terminés en perte."],
+  stake: ["Stake", "Mise : le montant engagé dans le trade, dans la devise du compte."],
+  fees: ["Fees", "Frais de l'exchange, achat et vente."],
+  slippage: ["Slippage", "Glissement : l'écart entre le prix attendu et le prix d'exécution."],
+  provider: ["Provider", "Le moteur de trading qui fait tourner l'instance. Une stratégie n'existe que pour un provider."],
+  dryRun: ["Dry-run", "Mode test : le bot trade avec de l'argent fictif. Tous les chiffres sont simulés."],
+  live: ["Live", "Mode réel : le bot trade avec l'argent du compte."],
+  backtest: ["Backtest", "Le bot rejoue une période passée. Un backtest n'est pas une prévision."],
+  totp: ["TOTP", "Code à 6 chiffres, renouvelé toutes les 30 secondes par l'application d'authentification."],
+} as const;
+export type GlossaryKey = keyof typeof GLOSSARY;
+export function G({ k, children }: { k: GlossaryKey; children?: ReactNode }) {
+  return <Term tip={GLOSSARY[k][1]}>{children ?? GLOSSARY[k][0]}</Term>;
+}
+
+// ---------- unité des variations : % ou devise, pour toute l'interface ----------
+let unit: "pct" | "money" = "pct";
+const unitSubs = new Set<() => void>();
+const subUnit = (cb: () => void) => (unitSubs.add(cb), () => unitSubs.delete(cb));
+export const useUnit = (): "pct" | "money" => useSyncExternalStore(subUnit, () => unit);
+export function toggleUnit(): void {
+  unit = unit === "pct" ? "money" : "pct";
+  unitSubs.forEach((l) => l());
+}
+
+export function Arrow({ up }: { up: boolean }) {
   return (
-    <span
-      className="term"
-      tabIndex={0}
-      aria-describedby={open ? id : undefined}
-      onMouseEnter={() => setOpen(true)}
-      onMouseLeave={() => setOpen(false)}
-      onFocus={() => setOpen(true)}
-      onBlur={() => setOpen(false)}
-      onKeyDown={(e) => e.key === "Escape" && setOpen(false)}
-    >
-      {children}
-      {open && (
-        <span role="tooltip" id={id} className="term-tip">
-          {tech && <b>{tech}</b>}
-          {tip}
-        </span>
-      )}
-    </span>
+    <svg width="8" height="8" viewBox="0 0 8 8" aria-hidden="true" className="arrow">
+      <path d={up ? "M4 1 7.5 7h-7z" : "M4 7 .5 1h7z"} fill="currentColor" />
+    </svg>
+  );
+}
+
+/** Variation signée : flèche, signe et couleur (vert / rouge, ou bleu pour ce qui est en cours).
+ *  Avec `amount`, un clic bascule toute l'interface entre % et devise ; `still` suit l'unité sans être cliquable. */
+export function Delta({ pct, amount, currency = "", blue, still }: { pct: number; amount?: number; currency?: string; blue?: boolean; still?: boolean }) {
+  const money = useUnit() === "money" && amount !== undefined;
+  const v = money ? amount : pct;
+  const zero = Math.round(Math.abs(v) * 100) === 0;
+  const cls = `delta num ${blue ? "act" : zero ? "dim" : v > 0 ? "up" : "dn"}`;
+  const body = <>{!zero && <Arrow up={v > 0} />}{money ? signedMoney(amount, currency) : signedPct(pct)}</>;
+  if (amount === undefined || still) return <span className={cls}>{body}</span>;
+  return <button type="button" className={`${cls} unit`} data-tip={money ? "Afficher en %" : `Afficher en ${currency}`} data-tip-live onClick={(e) => { e.stopPropagation(); toggleUnit(); }}>{body}</button>;
+}
+
+/** Valeur copiable au clic, avec sa petite icône à droite. */
+export function Copy({ value, children, what = "" }: { value: string; children?: ReactNode; what?: string }) {
+  const [done, setDone] = useState(false);
+  const copy = (e: MouseEvent) => {
+    e.stopPropagation();
+    void navigator.clipboard?.writeText(value).then(() => { setDone(true); setTimeout(() => setDone(false), 1400); }, () => {});
+  };
+  return (
+    <button type="button" className={`copy ${done ? "is-done" : ""}`} onClick={copy} data-tip={done ? "Copié" : `Copier ${what}`.trim()} data-tip-live>
+      <span className="copy-t">{children ?? value}</span>
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
+        {done ? <path d="M2.5 6.5 5 9l4.5-5.5" /> : <><rect x="4" y="4" width="6.5" height="6.5" rx="1.2" /><path d="M8 4V2.7A1.2 1.2 0 0 0 6.8 1.5H2.7A1.2 1.2 0 0 0 1.5 2.7v4.1A1.2 1.2 0 0 0 2.7 8H4" /></>}
+      </svg>
+    </button>
   );
 }
 

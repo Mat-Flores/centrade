@@ -1,13 +1,17 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { actions, selectStats, useStore } from "../data/store";
+import { actions, useStore } from "../data/store";
 import { href, useRoute, type Route } from "./route";
 import { Button, Dialog, Field, ModeTag } from "../ui/ui";
-import { signedPct } from "../lib/format";
-import { ageText, ageOf, isRunning, isStale } from "./common";
+import { seen } from "../lib/format";
+import { ageOf, isRunning, isStale } from "./common";
+import { layout } from "./layout";
 import { setTheme, useTheme } from "./theme";
 import { ColorDialog } from "./ColorDialog";
 import { Menu, type MenuItem } from "./Menu";
 import "./app.css";
+
+/** Session de la maquette : un seul opérateur, administrateur. */
+export const SESSION = { name: "Opérateur", role: "Administrateur", initials: "OP" };
 
 const NAV: { label: string; to: Route; on: (r: Route) => boolean }[] = [
   { label: "Instances", to: { page: "instances" }, on: (r) => r.page === "instances" || r.page === "instance" },
@@ -87,7 +91,9 @@ function LiftDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   );
 }
 
-export function Shell({ children }: { children: ReactNode }) {
+/** Barre du haut, de gauche à droite : où je suis (navigation), ce qui tourne et si c'est joignable (connexion),
+ *  la commande de sécurité, puis qui je suis (compte, apparence, déconnexion). Rien d'autre. */
+export function Shell({ children, onLogout }: { children: ReactNode; onLogout: () => void }) {
   const route = useRoute();
   const s = useStore((x) => x);
   const theme = useTheme();
@@ -97,17 +103,22 @@ export function Shell({ children }: { children: ReactNode }) {
   const [lift, setLift] = useState(false);
 
   const live = s.instances.filter(isRunning);
-  const reachable = live.filter((i) => !isStale(i, s));
-  const stale = live.length > 0 && reachable.length < live.length;
+  const ok = live.filter((i) => !isStale(i, s)).length;
   const oldest = live.reduce((m, i) => Math.max(m, ageOf(i, s)), 0);
   const realOn = s.instances.some((i) => i.mode === "reel" && i.observed !== "arrete");
+  // Connexion : la session est ouverte ; reste à dire si les bots en marche répondent.
+  const conn = live.length === 0 ? { tone: "", text: "Connecté", tip: "Session ouverte. Aucun bot en marche." }
+    : ok === live.length ? { tone: "ok", text: `${ok}/${live.length} bots`, tip: `Session ouverte. Les ${live.length} bots en marche répondent.\n${seen(oldest)}.` }
+    : { tone: "warn", text: `${ok}/${live.length} bots · périmé`, tip: `${live.length - ok} bot(s) ne répondent plus : leurs valeurs sont périmées.\nDernière réponse la plus ancienne : ${seen(oldest).replace("Mis à jour ", "")}.` };
 
   const navItems: MenuItem[] = NAV.map((n) => ({ label: n.label, href: href(n.to), current: n.on(route) }));
-  const settings: MenuItem[] = [
-    { label: theme === "dark" ? "Thème clair" : "Thème sombre", hint: "Changer l'apparence", onSelect: () => setTheme(theme === "dark" ? "light" : "dark") },
+  const account: MenuItem[] = [
+    { label: theme === "dark" ? "Thème clair" : "Thème sombre", hint: "Apparence", onSelect: () => setTheme(theme === "dark" ? "light" : "dark") },
     { label: "Couleurs", hint: "Personnaliser", onSelect: () => setColors(true) },
-    { label: "Démo", hint: "Simuler une panne", onSelect: () => setDemo(true) },
-    { label: "Paramètres", hint: "Page complète", href: href({ page: "parametres" }) },
+    { label: "Réinitialiser la disposition", hint: "Tableau de bord", onSelect: layout.reset },
+    { label: "Paramètres", hint: "Page complète", href: href({ page: "parametres" }), current: route.page === "parametres" },
+    { label: "Démo", hint: "Simuler une panne", sep: true, onSelect: () => setDemo(true) },
+    { label: "Se déconnecter", sep: true, onSelect: onLogout },
   ];
 
   return (
@@ -117,26 +128,17 @@ export function Shell({ children }: { children: ReactNode }) {
         <a className="mark" href={href({ page: "instances" })} aria-label="Centrade, accueil"><span className="title">Centrade</span></a>
         <nav className="nav" aria-label="Navigation principale"><NavLinks route={route} /></nav>
         <Menu className="nav-menu" label="Menu" ariaLabel="Navigation principale" align="left" items={navItems} />
-        <div className="tape" aria-label="Instances en marche">
-          {live.length === 0 && <span>Aucune instance en marche</span>}
-          {live.map((i) => {
-            const st = selectStats(s, i.id);
-            const pct = st.realizedPct + st.unrealizedPct;
-            return (
-              <span key={i.id}>
-                <b>{i.name}</b> <span className={pct > 0 ? "up" : pct < 0 ? "dn" : ""}>{signedPct(pct)}</span>{i.mode === "test" && <span className="sim"> sim.</span>}
-              </span>
-            );
-          })}
-        </div>
         <span className="spacer" />
-        <ModeTag mode={realOn ? "reel" : "test"} />
-        <div className={`bots ${stale ? "stale" : ""}`} role="status">
-          <b>Bots {reachable.length} sur {live.length} joignables</b>
-          {live.length > 0 ? <>constaté {ageText(oldest)}{stale && <> · périmé</>}</> : <>aucun bot en marche</>}
-        </div>
-        <Menu label="Réglages" ariaLabel="Réglages" items={settings} />
-        {s.killSwitch ? <span className="tag-sim" style={{ color: "var(--c-loss)", borderColor: "var(--c-loss)" }}>Arrêt actif</span> : <Button variant="danger" small onClick={() => setKill(true)}>Arrêt d'urgence</Button>}
+        {realOn && <ModeTag mode="reel" />}
+        <a className={`conn ${conn.tone}`} href={href({ page: "instances" })} role="status" data-tip={conn.tip}>
+          <i className="conn-dot" aria-hidden="true" />{conn.text}
+        </a>
+        {s.killSwitch
+          ? <span className="tag-sim kill-on">Arrêt actif</span>
+          : <Button variant="danger" small onClick={() => setKill(true)} data-tip="Kill switch : bloque tous les achats. Les ventes et les stop-loss continuent.">Arrêt d'urgence</Button>}
+        <Menu ghost btnClassName="acct" ariaLabel={`Compte : ${SESSION.name}`} items={account}
+          label={<span className="avatar" aria-hidden="true">{SESSION.initials}</span>}
+          head={<><b>{SESSION.name}</b><span>{SESSION.role} · session protégée par TOTP</span></>} />
       </header>
       {s.killSwitch && (
         <div className="kill hatch" role="alert">

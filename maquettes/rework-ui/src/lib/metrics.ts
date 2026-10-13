@@ -19,16 +19,18 @@ function equityCurve(trades: Trade[], startBalance: number, times: number[], pri
   });
 }
 
-function drawdowns(values: number[], startBalance: number): { max: number; current: number } {
+/** Reculs depuis un sommet, en pourcent du sommet et en devise. */
+function drawdowns(values: number[], startBalance: number): { max: number; current: number; maxAmount: number; currentAmount: number } {
   let peak = startBalance;
-  let max = 0;
-  let dd = 0;
+  let max = 0, maxAmount = 0;
+  let dd = 0, amount = 0;
   for (const v of values) {
     peak = Math.max(peak, v);
     dd = (v / peak - 1) * 100;
-    max = Math.min(max, dd);
+    amount = v - peak;
+    if (dd < max) { max = dd; maxAmount = amount; }
   }
-  return { max, current: dd };
+  return { max, current: dd, maxAmount, currentAmount: amount };
 }
 
 function ratios(values: number[], times: number[], maxDdPct: number) {
@@ -66,6 +68,7 @@ export function computeStats(
   const realized = closed.reduce((a, t) => a + t.pnl, 0);
   const unrealized = open.reduce((a, t) => a + t.pnl, 0);
   const balance = startBalance + realized + unrealized;
+  const exposure = open.reduce((a, t) => a + t.stake, 0);
   const equity = equityCurve(trades, startBalance, equityTimes, priceAt);
   const values = equity.map((e) => e.value);
   const dd = drawdowns(values, startBalance);
@@ -86,8 +89,11 @@ export function computeStats(
     worst: closed.length ? Math.min(...closed.map((t) => t.pnl)) : 0,
     ...ratios(values, equityTimes, dd.max),
     maxDrawdownPct: dd.max,
+    maxDrawdown: dd.maxAmount,
     currentDrawdownPct: dd.current,
-    exposurePct: balance > 0 ? (open.reduce((a, t) => a + t.stake, 0) / balance) * 100 : 0,
+    currentDrawdown: dd.currentAmount,
+    exposurePct: balance > 0 ? (exposure / balance) * 100 : 0,
+    exposure,
     openPositions: open.length,
     avgDurationSec: mean(closed.map((t) => t.exitTime! - t.entryTime)),
     fees: trades.reduce((a, t) => a + t.fees, 0),

@@ -2,8 +2,9 @@ import { go } from "../../app/route";
 import type { State } from "../../data/store";
 import type { AutomationKind, Instance, Strategy } from "../../data/types";
 import { tfLabel } from "../../lib/format";
-import { Term } from "../../ui/ui";
-import { Zone, type Dash } from "./dash";
+import { providerName } from "../../data/providers";
+import { Copy, G } from "../../ui/ui";
+import { Zone } from "./dash";
 import { plainPct } from "./shared";
 
 export const KIND_LABEL: Record<AutomationKind, string> = { alerte: "Alertes", protection: "Règles de protection", planification: "Planification", agent: "Agents IA" };
@@ -24,28 +25,33 @@ export function groupByStrategy(inst: Instance, strategies: Strategy[]): { strat
 export function StrategyFacts({ st }: { st: Strategy }) {
   return (
     <dl className="kv in-facts">
-      <dt>Unité de temps</dt><dd>{tfLabel(st.timeframe)}</dd>
-      <dt><Term tech="stop-loss" tip="Prix auquel la position est vendue pour limiter la perte.">Stop-loss</Term></dt><dd>{plainPct(st.stopLossPct, 1)}</dd>
-      <dt><Term tech="take-profit" tip="Prix auquel la position est vendue pour encaisser le gain.">Take-profit</Term></dt><dd>{plainPct(st.takeProfitPct, 1)}</dd>
+      <dt><G k="timeframe" /></dt><dd>{tfLabel(st.timeframe)}</dd>
+      <dt><G k="stopLoss" /></dt><dd>{plainPct(st.stopLossPct, 1)}</dd>
+      <dt><G k="takeProfit" /></dt><dd>{plainPct(st.takeProfitPct, 1)}</dd>
     </dl>
   );
 }
 
 /** Compte, stratégies (avec les paires qui les partagent) et automatisations de l'instance. */
-export function Composition({ inst, s, activePair, dash }: { inst: Instance; s: State; activePair?: string; dash: Dash }) {
+export function Composition({ inst, s, activePair }: { inst: Instance; s: State; activePair?: string }) {
   const key = s.keys.find((k) => k.id === inst.keyId);
   const groups = groupByStrategy(inst, s.strategies);
   const autos = s.automations.filter((a) => inst.automationIds.includes(a.id));
 
   return (
-    <Zone id="comp" name="Composition" side dash={dash} className="in-comp" label="Composition de l'instance">
+    <Zone id="comp" name="Composition" className="in-comp" label="Composition de l'instance">
       <div className="in-comp-body scroll">
+        <div className="in-sec">
+          <span className="label"><G k="provider" /></span>
+          <div className="subtitle">{providerName(inst.provider)}</div>
+          <div className="xs dim">Seules les stratégies {providerName(inst.provider)} sont utilisables ici.</div>
+        </div>
         <div className="in-sec">
           <span className="label">Compte</span>
           {key && inst.mode !== "backtest" ? (
             <>
               <div className="subtitle">{key.name}</div>
-              <div className="xs dim num">{key.exchange} · <span className="tag">{key.env === "production" ? "production" : "test"}</span> · {key.hint}</div>
+              <div className="xs dim num in-keyline">{key.exchange} · <span className="tag">{key.env === "production" ? "production" : "test"}</span> <Copy value={key.hint} what="la fin de la clé" /></div>
             </>
           ) : (
             <div className="small dim">{inst.mode === "reel" ? "Clé de production à choisir dans les réglages" : "Aucune clé transmise"}</div>
@@ -57,7 +63,7 @@ export function Composition({ inst, s, activePair, dash }: { inst: Instance; s: 
         {groups.map(({ strategy, pairs }) => (
           <div key={strategy.id} className="in-strat">
             <div className="in-strat-h">
-              <span className="subtitle">{strategy.name}</span>
+              <span className="subtitle in-ellip">{strategy.name}</span>
               <span className="xs dim num">{pairs.length} {pairs.length > 1 ? "paires" : "paire"}</span>
             </div>
             <StrategyFacts st={strategy} />
@@ -78,7 +84,7 @@ export function Composition({ inst, s, activePair, dash }: { inst: Instance; s: 
           return list.length ? (
             <div key={k} className="in-auto">
               <span className="xs faint">{KIND_LABEL[k]}</span>
-              {list.map((a) => <div key={a.id} className="in-auto-i" title={a.description}>{a.name}</div>)}
+              {list.map((a) => <div key={a.id} className="in-auto-i" data-tip={`${a.name}\n${a.description}`}>{a.name}</div>)}
             </div>
           ) : null;
         })}

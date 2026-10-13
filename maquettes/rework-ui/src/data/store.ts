@@ -2,9 +2,10 @@ import { useSyncExternalStore } from "react";
 import { INITIAL_CURSOR, newBacktestConfig, seedState } from "./seed";
 import { selectTrades } from "./derive";
 import { BASE_STEP, EPOCH, PAIRS, SERIES_END, priceAt } from "./sim";
+import { PROVIDERS, ftChecks, providerName } from "./providers";
 import type { State } from "./state";
 import type {
-  ApiKey, Automation, BacktestConfig, ColorRoles, Command, CommandStep, Instance, LogEntry, Mode, ObservedState, Strategy, WantedState,
+  ApiKey, Automation, BacktestConfig, ColorRoles, Command, CommandStep, Instance, LogEntry, Mode, ObservedState, ProviderId, Strategy, WantedState,
 } from "./types";
 
 export type { State } from "./state";
@@ -284,8 +285,15 @@ function strategyOf(strategyId: string): Strategy {
   return s;
 }
 
+/** Une stratégie ne sert que dans une instance du même provider. */
+function compatible(id: string, strategyId: string): Strategy {
+  const strategy = strategyOf(strategyId), inst = get(id);
+  if (strategy.provider !== inst.provider) throw new Error(`« ${strategy.name} » est une stratégie ${providerName(strategy.provider)} : elle ne peut pas servir dans une instance ${providerName(inst.provider)}.`);
+  return strategy;
+}
+
 function addPair(id: string, pair: string, strategyId: string): void {
-  const strategy = strategyOf(strategyId);
+  const strategy = compatible(id, strategyId);
   if (!PAIRS.includes(pair)) throw new Error(`Paire inconnue : ${pair}`);
   if (get(id).pairs.some((p) => p.pair === pair)) throw new Error(`${pair} est déjà dans l'instance.`);
   edit(id, `Ajout de ${pair} avec ${strategy.name}`, (i) => ({
@@ -303,7 +311,7 @@ function removePair(id: string, pair: string): void {
 }
 
 function setPairStrategy(id: string, pair: string, strategyId: string): void {
-  const strategy = strategyOf(strategyId);
+  const strategy = compatible(id, strategyId);
   if (!get(id).pairs.some((p) => p.pair === pair)) throw new Error(`${pair} n'est pas dans l'instance.`);
   edit(id, `${pair} : stratégie ${strategy.name}`, (i) => ({
     pairs: i.pairs.map((p) => (p.pair === pair ? { pair, strategyId } : p)), ...resetRun(i),
@@ -344,14 +352,31 @@ function setBacktestConfig(id: string, p: Partial<Pick<BacktestConfig, "from" | 
   edit(id, "Période et coûts du backtest modifiés", (i) => resetRun(i, undefined, p));
 }
 
-function createInstance(input: { name: string; mode: Mode; keyId: string | null }): Instance {
+function readyProvider(id: ProviderId): void {
+  if (!PROVIDERS.find((p) => p.id === id)?.ready) throw new Error(`Le provider ${providerName(id)} n'est pas encore pris en charge.`);
+}
+
+/** Le provider ne change que sur une instance vierge : ses stratégies ne valent que pour lui. */
+function setProvider(id: string, provider: ProviderId): void {
+  readyProvider(provider);
+  const inst = get(id);
+  if (inst.provider === provider) return;
+  if (inst.mode === "reel") throw new Error(REEL_MSG);
+  if (inst.observed !== "arrete" || inst.startedAt !== null) throw new Error("Le provider est fixé dès le premier démarrage. Créer une nouvelle instance pour en changer.");
+  if (inst.pairs.length) throw new Error("Retirer d'abord les paires : leurs stratégies ne valent que pour le provider actuel.");
+  edit(id, `Provider : ${providerName(provider)}`, () => ({ provider }));
+}
+
+function createInstance(input: { name: string; mode: Mode; keyId: string | null; provider?: ProviderId }): Instance {
+  const provider = input.provider ?? "freqtrade";
+  readyProvider(provider);
   if (input.mode === "reel") throw new Error("Une instance réelle se crée par « Passer en réel » à partir d'une instance de test.");
   if (!input.name.trim()) throw new Error("Le nom ne peut pas être vide.");
   const key = input.keyId ? state.keys.find((k) => k.id === input.keyId) : undefined;
   if (input.keyId && !key) throw new Error("Compte introuvable.");
   if (key?.env === "production") throw new Error("Une instance de test exige un compte test.");
   const inst: Instance = {
-    id: uid("inst"), name: input.name.trim(), mode: input.mode, keyId: key?.id ?? null, currency: key?.currency ?? "USDT",
+    id: uid("inst"), name: input.name.trim(), mode: input.mode, provider, keyId: key?.id ?? null, currency: key?.currency ?? "USDT",
     pairs: [], automationIds: [], startBalance: 2000, wanted: "arrete", observed: "arrete", observedAt: state.cursor, startedAt: null,
     versions: [{ n: 1, createdAt: state.cursor, summary: "Création de l'instance" }], command: null,
     entryPauses: [], manualExits: {}, events: [],
@@ -453,16 +478,27 @@ function removeKey(id: string): void {
   set((s) => ({ ...s, keys: s.keys.filter((k) => k.id !== id) }));
 }
 
-function addStrategy(st: Omit<Strategy, "id">): Strategy {
-  const strategy = { ...st, id: uid("strat") };
+/** Contrôles du registre avant tout dépôt (SPEC §3.3) : provider pris en charge, code conforme. */
+function checkStrategy(st: Pick<Strategy, "provider" | "code">): void {
+  readyProvider(st.provider);
+  const failed = ftChecks(st.code).find((c) => !c.ok);
+  if (failed) throw new Error(`Contrôle du code en échec : ${failed.label}.`);
+}
+
+function addStrategy(st: Omit<Strategy, "id" | "version">): Strategy {
+  checkStrategy(st);
+  const strategy = { ...st, id: uid("strat"), version: 1 };
   set((s) => ({ ...s, strategies: [...s.strategies, strategy] }));
   return strategy;
 }
 
-function updateStrategy(id: string, p: Partial<Omit<Strategy, "id">>): void {
+function updateStrategy(id: string, p: Partial<Omit<Strategy, "id" | "version">>): void {
   const running = state.instances.find((i) => i.observed !== "arrete" && i.pairs.some((x) => x.strategyId === id));
   if (running) throw new Error(`Cette stratégie est utilisée par « ${running.name} », qui tourne : l'arrêter avant de la modifier.`);
-  set((s) => ({ ...s, strategies: s.strategies.map((x) => (x.id === id ? { ...x, ...p } : x)) }));
+  const cur = strategyOf(id);
+  if (p.provider && p.provider !== cur.provider) throw new Error("Une stratégie ne change pas de provider : en créer une nouvelle.");
+  checkStrategy({ ...cur, ...p });
+  set((s) => ({ ...s, strategies: s.strategies.map((x) => (x.id === id ? { ...x, ...p, version: x.version + 1 } : x)) }));
 }
 
 function removeStrategy(id: string): void {
@@ -484,7 +520,7 @@ function removeAutomation(id: string): void {
 }
 
 export const actions = {
-  createInstance, addPair, removePair, setPairStrategy, setKey, toggleAutomation, renameInstance, setBacktestConfig,
+  createInstance, setProvider, addPair, removePair, setPairStrategy, setKey, toggleAutomation, renameInstance, setBacktestConfig,
   start, pauseEntries, resumeEntries, stop, sellAll, promote, setKillSwitch,
   importData, runBacktest, setPlayhead, play, pausePlayback,
   addKey, removeKey, addStrategy, updateStrategy, removeStrategy, addAutomation, removeAutomation,

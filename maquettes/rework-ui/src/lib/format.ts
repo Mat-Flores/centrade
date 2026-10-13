@@ -50,6 +50,12 @@ export function age(sec: number): string {
   return `il y a ${Math.floor(s / 86400)} j`;
 }
 
+/** Âge de la dernière réponse du bot, dit simplement : « Mis à jour à l'instant », « Mis à jour il y a 3 min ». */
+export function seen(sec: number): string {
+  return sec < 5 ? "Mis à jour à l'instant" : `Mis à jour ${age(sec)}`;
+}
+export const SEEN_TIP = "Heure de la dernière réponse du bot. Sans réponse depuis plus d'une heure, les valeurs sont marquées périmées.";
+
 function parts(t: number, opts: Intl.DateTimeFormatOptions): Record<string, string> {
   const f = new Intl.DateTimeFormat("fr-CA", { timeZone: TZ, hourCycle: "h23", ...opts });
   return Object.fromEntries(f.formatToParts(new Date(t * 1000)).map((p) => [p.type, p.value]));
@@ -67,4 +73,10 @@ export function dateTime(t: number): string {
 
 export function tfLabel(tf: Timeframe): string {
   return { "5m": "5 min", "15m": "15 min", "1h": "1 h", "4h": "4 h", "1j": "1 j" }[tf];
+}
+
+/** Nombre de jours de calendrier (Toronto) entre deux instants : 23:50 puis 00:10 donne 1. */
+export function dayOffset(from: number, to: number): number {
+  const day = (t: number) => { const p = parts(t, { year: "numeric", month: "2-digit", day: "2-digit" }); return Date.UTC(+p.year, +p.month - 1, +p.day); };
+  return Math.round((day(to) - day(from)) / 86400000);
 }

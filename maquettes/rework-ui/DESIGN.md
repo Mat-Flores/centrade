@@ -27,9 +27,10 @@ colors:
   faint-light: "#6b7381"
   bid-light: "#177a45"
   ask-light: "#c4262c"
-  amber-light: "#8a5c00"
-  amber-hover-light: "#6f4a00"
-  amber-ink-light: "#fff8e6"
+  amber-light: "#a84a06"
+  accent-light: "#1d2530"
+  accent-hover-light: "#38434f"
+  accent-ink-light: "#fbfaf7"
   blue-light: "#1f5fd6"
   violet-light: "#6d3fd1"
   cvd-gain: "#2b7fe0"
@@ -284,7 +285,7 @@ Trois dispositifs repris de la référence utilisent une couleur de sens forteme
 
 ### Thème clair
 
-Le thème clair s'active avec `data-theme="light"` sur `<html>`. Il garde les mêmes teintes et inverse la luminosité : papier chaud pour les fonds (`ground-light`, `panel-light`, `raised-light`), encre presque noire pour le texte (`bone-light`), et des couleurs de sens assombries pour rester lisibles sur clair (`bid-light`, `ask-light`, `blue-light`, `violet-light`, `amber-light`). Seules les valeurs brutes changent ; les rôles `--c-*`, les dimensions et les composants sont identiques. Le graphique relit sa palette à chaque changement de thème. Le thème sombre est le thème par défaut et le thème n'est pas mémorisé dans la maquette.
+Le thème clair s'active avec `data-theme="light"` sur `<html>`. Il garde les mêmes teintes et inverse la luminosité : papier chaud pour les fonds (`ground-light`, `panel-light`, `raised-light`), encre presque noire pour le texte (`bone-light`), et des couleurs de sens assombries pour rester lisibles sur clair (`bid-light`, `ask-light`, `blue-light`, `violet-light`, `amber-light`). Exception, depuis le 13 octobre 2026 : en clair, l'accent (`--accent`, boutons principaux et sélection) est l'encre `accent-light`, et `amber-light` ne sert plus qu'aux avertissements et au mode test ; en sombre, l'accent reste l'ambre. Pour le reste, seules les valeurs brutes changent ; les rôles `--c-*`, les dimensions et les composants sont identiques. Le graphique relit sa palette à chaque changement de thème. Le thème sombre est le thème par défaut et le thème n'est pas mémorisé dans la maquette.
 
 Contrastes mesurés sur le code livré (texte sur `panel`, puis sur `raised`) :
 

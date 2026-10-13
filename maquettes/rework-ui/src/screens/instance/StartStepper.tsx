@@ -40,7 +40,7 @@ export function StartStepper({ cmd, onSeen }: { cmd: Command; onSeen: () => void
             <div className="in-step-h">
               <span className="in-mark" aria-hidden="true"><i data-fill={st.step} /></span>
               <b>{LABEL[st.step]}</b>
-              <span className="xs faint">{{ attente: "en attente", en_cours: "en cours", ok: "constaté", echec: "bloqué" }[st.status]}</span>
+              <span className="xs faint">{{ attente: "en attente", en_cours: "en cours", ok: "vérifié", echec: "bloqué" }[st.status]}</span>
               {k < steps.length - 1 && <span className="in-line" aria-hidden="true"><i data-line={st.step} /></span>}
             </div>
             {st.status === "echec" && st.detail && <div className="xs dn in-step-d">{st.detail}</div>}

@@ -44,6 +44,12 @@
   --blue-heat: rgba(76, 141, 255, 0.16);
   --violet: #a78bfa;
 
+  /* accent : la couleur des commandes principales et de la sélection. Ambre en sombre ; encre en clair, où l'ambre
+     lisible sur fond clair virait au brun. En clair, --amber ne sert plus qu'aux avertissements et au mode test. */
+  --accent: var(--amber);
+  --accent-hover: var(--amber-hover);
+  --accent-ink: var(--amber-ink);
+
   /* rôles : ce sont eux que les composants et le graphique lisent, et que l'opérateur personnalise */
   --c-bg: var(--ground);
   --c-surface: var(--panel);
@@ -53,8 +59,9 @@
   --c-ink: var(--bone);
   --c-mute: var(--dim);
   --c-faint: var(--faint);
-  --c-accent: var(--amber);
-  --c-accent-ink: var(--amber-ink);
+  --c-accent: var(--accent);
+  --c-accent-hover: var(--accent-hover);
+  --c-accent-ink: var(--accent-ink);
   --c-gain: var(--bid);
   --c-gain-heat: color-mix(in srgb, var(--c-gain) 16%, transparent);
   --c-loss: var(--ask);
@@ -84,9 +91,10 @@
   --faint: #5f6774;
   --bid: #177a45;
   --ask: #c4262c;
-  --amber: #8a5c00;
-  --amber-hover: #6f4a00;
-  --amber-ink: #fff8e6;
+  --amber: #a84a06;
+  --accent: #1d2530;
+  --accent-hover: #38434f;
+  --accent-ink: #fbfaf7;
   --blue: #1f5fd6;
   --violet: #6d3fd1;
   color-scheme: light;
@@ -106,7 +114,10 @@
 }
 
 * { box-sizing: border-box; }
-html { background: var(--c-bg); color: var(--c-ink); scrollbar-color: var(--c-line-2) var(--c-bg); }
+html { background: var(--c-bg); color: var(--c-ink); }
+/* barres de défilement natives masquées : ui/scrollbars.ts dessine les siennes, en surimpression */
+* { scrollbar-width: none; }
+*::-webkit-scrollbar { display: none; }
 body { margin: 0; font-family: var(--font-ui); font-size: 15px; line-height: 1.5; font-variation-settings: "wdth" 100; }
 ::selection { background: var(--c-accent); color: var(--c-accent-ink); }
 :focus-visible { outline: 1px solid var(--c-accent); outline-offset: 3px; }

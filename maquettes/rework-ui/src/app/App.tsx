@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { useStore } from "../data/store";
 import { useRoute, type Route } from "./route";
@@ -11,6 +11,7 @@ import { Bibliotheque } from "../screens/Bibliotheque";
 import { Journal } from "../screens/Journal";
 import { Avance } from "../screens/Avance";
 import { Parametres } from "../screens/Parametres";
+import { Login } from "../screens/Login";
 
 const TITLE: Record<Route["page"], string> = {
   instances: "Instances", instance: "Instance", bibliotheque: "Bibliothèque", journal: "Journal", avance: "Avancé", parametres: "Paramètres",
@@ -33,15 +34,18 @@ export function App() {
   const colors = useStore((s) => s.colors);
   const instName = useStore((s) => (route.page === "instance" ? s.instances.find((i) => i.id === route.id)?.name : undefined));
   const reduce = useReducedMotion();
+  // La maquette s'ouvre connectée ; « Se déconnecter » (menu du compte) mène à l'écran de connexion.
+  const [authed, setAuthed] = useState(true);
 
   useEffect(() => { document.documentElement.lang = "fr"; }, []);
   useEffect(() => { document.documentElement.dataset.theme = theme; applyColors(colors); }, [colors, theme]);
-  useEffect(() => { document.title = `${route.page === "instance" ? instName ?? "Instance" : TITLE[route.page]} · Centrade`; }, [route, instName]);
+  useEffect(() => { document.title = `${!authed ? "Connexion" : route.page === "instance" ? instName ?? "Instance" : TITLE[route.page]} · Centrade`; }, [route, instName, authed]);
 
   // Un changement d'onglet dans une instance n'est pas un changement d'écran.
   const key = route.page === "instance" ? `instance/${route.id}` : route.page === "bibliotheque" ? "bibliotheque" : route.page;
+  if (!authed) return <Login onLogin={() => setAuthed(true)} />;
   return (
-    <Shell>
+    <Shell onLogout={() => setAuthed(false)}>
       <AnimatePresence mode="wait" initial={false}>
         <motion.div
           key={key}

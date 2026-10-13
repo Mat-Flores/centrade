@@ -48,6 +48,6 @@ export function pickRect<T extends { id: string; rect: Rect }>(items: T[], x: nu
 }
 
 export const CAUSE_FR: Record<ExitCause, string> = {
-  take_profit: "Take-profit", stop_loss: "Stop-loss", trailing_stop: "Stop suiveur", signal: "Signal de la stratégie",
-  timeout: "Délai dépassé", manual: "Manuel", kill_switch: "Arrêt d'urgence", engine_protection: "Protection du bot", unknown: "Inconnue",
+  take_profit: "Take-profit", stop_loss: "Stop-loss", trailing_stop: "Trailing stop", signal: "Signal de la stratégie",
+  timeout: "Timeout", manual: "Manuel", kill_switch: "Arrêt d'urgence", engine_protection: "Protection du bot", unknown: "Inconnue",
 };

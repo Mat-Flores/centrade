@@ -4,9 +4,9 @@ import { href } from "../app/route";
 import { ModeTag, Panel } from "../ui/ui";
 import { dateTime } from "../lib/format";
 import { Empty, PageHead } from "../app/common";
-import { DataTable } from "../app/table";
+import { DataTable, fr } from "../app/table";
 
-const COLS = "170px minmax(220px,1fr) minmax(320px,3fr) 130px";
+const COLS = fr(1.1, 1.6, 3.4, 0.9);
 interface Line { id: string; time: number; instId: string; text: string; by: "Opérateur" | "Automatisme"; alert: boolean }
 
 export function Journal() {
@@ -39,22 +39,22 @@ export function Journal() {
         {shown.length === 0 ? (
           <Empty title="Aucun évènement"><span>Les commandes, les alertes et les nouvelles versions apparaîtront ici.</span></Empty>
         ) : (
-          <DataTable label="Journal" cols={COLS} minW={860} head={["Heure (Toronto)", "Instance", "Évènement", "Auteur"]}>
+          <DataTable label="Journal" cols={COLS} hideNarrow={[3]} head={["Heure (Toronto)", "Instance", "Évènement", "Auteur"]}>
             {shown.map((l) => {
               const i = name(l.instId);
               return (
-                <div role="row" className="r tall wrap-row" key={l.id} style={{ gridTemplateColumns: COLS }}>
+                <div role="row" className="r tall wrap-row" key={l.id}>
                   <span role="cell" className="small">{dateTime(l.time)}</span>
                   <span role="cell" className="t"><a href={href({ page: "instance", id: i.id, tab: "tout" })} style={{ marginRight: 8 }}>{i.name}</a><ModeTag mode={i.mode} /></span>
                   <span role="cell" className="t">{l.alert ? <span className="warn">Alerte · </span> : null}{l.text}</span>
-                  <span role="cell" className="t dim">{l.by}</span>
+                  <span role="cell" className="t dim hide-sm">{l.by}</span>
                 </div>
               );
             })}
           </DataTable>
         )}
       </Panel>
-      <p className="quiet">Heures de Toronto. Seuls les évènements constatés sont consignés ; une commande demandée mais pas encore constatée n'y figure pas.</p>
+      <p className="quiet">Heures de Toronto. Seuls les évènements confirmés par le bot sont consignés ; une commande demandée mais pas encore confirmée n'y figure pas.</p>
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { BASE_STEP, EPOCH, PAIRS, aggregate, candles5m, candlesFor, priceAt, sim
 import type { Strategy } from "./types";
 
 const strat: Strategy = {
-  id: "s", name: "S", description: "", timeframe: "1h", extraTimeframes: [],
+  id: "s", name: "S", description: "", provider: "freqtrade", className: "S", code: "", version: 1, trailing: false, timeframe: "1h", extraTimeframes: [],
   stopLossPct: 3, takeProfitPct: 6, params: { rapide: 9, lente: 21 },
 };
 const input = { pair: "BTC/USDT", strategy: strat, stakePerTrade: 250, feePct: 0.1, slippagePct: 0.05, from: EPOCH, to: EPOCH + 30 * 86400 };
