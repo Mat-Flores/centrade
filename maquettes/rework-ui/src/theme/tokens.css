@@ -1,0 +1,117 @@
+/* Jetons repris tels quels de la page de référence de l'opérateur
+   (impeccable.style/gallery/view/b5850eeea1c2e703) : couleurs, polices, hauteurs, espacements.
+   Ajouts propres à Centrade, absents de la référence : --blue (achats, ventes, en cours),
+   --violet (mode backtest) et le thème clair. */
+@import "@fontsource-variable/archivo/wdth.css";
+@import "@fontsource-variable/martian-mono/wdth.css";
+@import "tailwindcss";
+
+:root {
+  /* référence */
+  --ground: #0e1116;
+  --panel: #12161d;
+  --raised: #171c25;
+  --line: #232a35;
+  --line-2: #2e3643;
+  --bone: #e8e6df;
+  --dim: #8f97a4;
+  --faint: #7d8694;
+  --bid: #2fbf71;
+  --bid-heat: rgba(47, 191, 113, 0.16);
+  --ask: #e5484d;
+  --ask-heat: rgba(229, 72, 77, 0.16);
+  --amber: #f2b233;
+  --amber-hover: #ffc550;
+  --amber-ink: #1a1305;
+  --mono: "Martian Mono Variable", ui-monospace, Menlo, monospace;
+  --sans: "Archivo Variable", system-ui, sans-serif;
+  /* Densité par défaut : menus, listes, formulaires et fenêtres, style classique et aéré. */
+  --row: 44px; /* hauteur d'une ligne de tableau */
+  --row-font: 14px;
+  --head: 56px; /* en-tête de panneau */
+  --cols: 40px; /* ligne des titres de colonnes */
+  --bar: 56px; /* barre du haut */
+  --btn: 40px;
+  --btn-sm: 36px;
+  --radius: 10px;
+  --radius-sm: 8px;
+  --pad: 20px; /* marge intérieure d'un panneau */
+  --gap: 16px;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* ajouts Centrade */
+  --blue: #4c8dff;
+  --blue-heat: rgba(76, 141, 255, 0.16);
+  --violet: #a78bfa;
+
+  /* rôles : ce sont eux que les composants et le graphique lisent, et que l'opérateur personnalise */
+  --c-bg: var(--ground);
+  --c-surface: var(--panel);
+  --c-raised: var(--raised);
+  --c-line: var(--line);
+  --c-line-2: var(--line-2);
+  --c-ink: var(--bone);
+  --c-mute: var(--dim);
+  --c-faint: var(--faint);
+  --c-accent: var(--amber);
+  --c-accent-ink: var(--amber-ink);
+  --c-gain: var(--bid);
+  --c-gain-heat: color-mix(in srgb, var(--c-gain) 16%, transparent);
+  --c-loss: var(--ask);
+  --c-loss-heat: color-mix(in srgb, var(--c-loss) 16%, transparent);
+  --c-action: var(--blue);
+  --c-action-heat: color-mix(in srgb, var(--c-action) 16%, transparent);
+  --c-candle-up: var(--c-gain);
+  --c-candle-down: var(--c-loss);
+  --c-mode-test: var(--amber);
+  --c-mode-reel: var(--ask);
+  --c-mode-backtest: var(--violet);
+  --c-warn: var(--amber);
+  --font-ui: var(--sans);
+  --font-num: var(--mono);
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  /* mêmes teintes, luminosité inversée ; contrastes à 4,5:1 sur --ground */
+  --ground: #f4f3ef;
+  --panel: #fbfaf7;
+  --raised: #eceae4;
+  --line: #d9d6cd;
+  --line-2: #c4c0b5;
+  --bone: #14181f;
+  --dim: #555d6b;
+  --faint: #5f6774;
+  --bid: #177a45;
+  --ask: #c4262c;
+  --amber: #8a5c00;
+  --amber-hover: #6f4a00;
+  --amber-ink: #fff8e6;
+  --blue: #1f5fd6;
+  --violet: #6d3fd1;
+  color-scheme: light;
+}
+
+/* Tableau de bord d'une instance : la grille dense de la référence, avec un peu d'air et des coins à peine arrondis. */
+.dash {
+  --row: 28px;
+  --row-font: 12px;
+  --head: 44px;
+  --cols: 30px;
+  --btn-sm: 32px;
+  --radius: 6px;
+  --radius-sm: 4px;
+  --pad: 14px;
+  --gap: 8px;
+}
+
+* { box-sizing: border-box; }
+html { background: var(--c-bg); color: var(--c-ink); scrollbar-color: var(--c-line-2) var(--c-bg); }
+body { margin: 0; font-family: var(--font-ui); font-size: 15px; line-height: 1.5; font-variation-settings: "wdth" 100; }
+::selection { background: var(--c-accent); color: var(--c-accent-ink); }
+:focus-visible { outline: 1px solid var(--c-accent); outline-offset: 3px; }
+.num, .mono { font-family: var(--font-num); font-variant-numeric: tabular-nums slashed-zero; font-feature-settings: "tnum", "zero"; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation-duration: 0s !important; }
+}

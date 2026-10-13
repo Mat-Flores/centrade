@@ -1,0 +1,816 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-12T21:36:18.888Z",
+  "title": "Design System: Centrade, maquette rework-ui",
+  "extensions": {
+    "colorMeta": {
+      "ground": {
+        "role": "neutral",
+        "displayName": "Fond",
+        "canonical": "oklch(17.7% 0.011 260.6)",
+        "tonalRamp": [
+          "oklch(15% 0.011 260.6)",
+          "oklch(26% 0.011 260.6)",
+          "oklch(38% 0.011 260.6)",
+          "oklch(49% 0.011 260.6)",
+          "oklch(61% 0.011 260.6)",
+          "oklch(72% 0.011 260.6)",
+          "oklch(84% 0.011 260.6)",
+          "oklch(95% 0.011 260.6)"
+        ]
+      },
+      "panel": {
+        "role": "neutral",
+        "displayName": "Panneau",
+        "canonical": "oklch(19.9% 0.015 261.6)",
+        "tonalRamp": [
+          "oklch(15% 0.015 261.6)",
+          "oklch(26% 0.015 261.6)",
+          "oklch(38% 0.015 261.6)",
+          "oklch(49% 0.015 261.6)",
+          "oklch(61% 0.015 261.6)",
+          "oklch(72% 0.015 261.6)",
+          "oklch(84% 0.015 261.6)",
+          "oklch(95% 0.015 261.6)"
+        ]
+      },
+      "raised": {
+        "role": "neutral",
+        "displayName": "Surface relevée",
+        "canonical": "oklch(22.6% 0.019 262.1)",
+        "tonalRamp": [
+          "oklch(15% 0.019 262.1)",
+          "oklch(26% 0.019 262.1)",
+          "oklch(38% 0.019 262.1)",
+          "oklch(49% 0.019 262.1)",
+          "oklch(61% 0.019 262.1)",
+          "oklch(72% 0.019 262.1)",
+          "oklch(84% 0.019 262.1)",
+          "oklch(95% 0.019 262.1)"
+        ]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Filet",
+        "canonical": "oklch(28.3% 0.023 259.4)",
+        "tonalRamp": [
+          "oklch(15% 0.023 259.4)",
+          "oklch(26% 0.023 259.4)",
+          "oklch(38% 0.023 259.4)",
+          "oklch(49% 0.023 259.4)",
+          "oklch(61% 0.023 259.4)",
+          "oklch(72% 0.023 259.4)",
+          "oklch(84% 0.023 259.4)",
+          "oklch(95% 0.023 259.4)"
+        ]
+      },
+      "line-2": {
+        "role": "neutral",
+        "displayName": "Filet fort",
+        "canonical": "oklch(33.1% 0.026 260.1)",
+        "tonalRamp": [
+          "oklch(15% 0.026 260.1)",
+          "oklch(26% 0.026 260.1)",
+          "oklch(38% 0.026 260.1)",
+          "oklch(49% 0.026 260.1)",
+          "oklch(61% 0.026 260.1)",
+          "oklch(72% 0.026 260.1)",
+          "oklch(84% 0.026 260.1)",
+          "oklch(95% 0.026 260.1)"
+        ]
+      },
+      "bone": {
+        "role": "neutral",
+        "displayName": "Os",
+        "canonical": "oklch(92.5% 0.01 93.6)",
+        "tonalRamp": [
+          "oklch(15% 0.01 93.6)",
+          "oklch(26% 0.01 93.6)",
+          "oklch(38% 0.01 93.6)",
+          "oklch(49% 0.01 93.6)",
+          "oklch(61% 0.01 93.6)",
+          "oklch(72% 0.01 93.6)",
+          "oklch(84% 0.01 93.6)",
+          "oklch(95% 0.01 93.6)"
+        ]
+      },
+      "dim": {
+        "role": "neutral",
+        "displayName": "Gris moyen",
+        "canonical": "oklch(67.4% 0.021 260.2)",
+        "tonalRamp": [
+          "oklch(15% 0.021 260.2)",
+          "oklch(26% 0.021 260.2)",
+          "oklch(38% 0.021 260.2)",
+          "oklch(49% 0.021 260.2)",
+          "oklch(61% 0.021 260.2)",
+          "oklch(72% 0.021 260.2)",
+          "oklch(84% 0.021 260.2)",
+          "oklch(95% 0.021 260.2)"
+        ]
+      },
+      "faint": {
+        "role": "neutral",
+        "displayName": "Gris discret",
+        "canonical": "oklch(61.7% 0.024 259.2)",
+        "tonalRamp": [
+          "oklch(15% 0.024 259.2)",
+          "oklch(26% 0.024 259.2)",
+          "oklch(38% 0.024 259.2)",
+          "oklch(49% 0.024 259.2)",
+          "oklch(61% 0.024 259.2)",
+          "oklch(72% 0.024 259.2)",
+          "oklch(84% 0.024 259.2)",
+          "oklch(95% 0.024 259.2)"
+        ]
+      },
+      "bid": {
+        "role": "secondary",
+        "displayName": "Vert de gain",
+        "canonical": "oklch(71.2% 0.164 154.1)",
+        "tonalRamp": [
+          "oklch(15% 0.164 154.1)",
+          "oklch(26% 0.164 154.1)",
+          "oklch(38% 0.164 154.1)",
+          "oklch(49% 0.164 154.1)",
+          "oklch(61% 0.164 154.1)",
+          "oklch(72% 0.164 154.1)",
+          "oklch(84% 0.164 154.1)",
+          "oklch(95% 0.164 154.1)"
+        ]
+      },
+      "ask": {
+        "role": "secondary",
+        "displayName": "Rouge de perte et de danger",
+        "canonical": "oklch(62.6% 0.193 23)",
+        "tonalRamp": [
+          "oklch(15% 0.193 23)",
+          "oklch(26% 0.193 23)",
+          "oklch(38% 0.193 23)",
+          "oklch(49% 0.193 23)",
+          "oklch(61% 0.193 23)",
+          "oklch(72% 0.193 23)",
+          "oklch(84% 0.193 23)",
+          "oklch(95% 0.193 23)"
+        ]
+      },
+      "amber": {
+        "role": "primary",
+        "displayName": "Ambre",
+        "canonical": "oklch(80.3% 0.152 79.6)",
+        "tonalRamp": [
+          "oklch(15% 0.152 79.6)",
+          "oklch(26% 0.152 79.6)",
+          "oklch(38% 0.152 79.6)",
+          "oklch(49% 0.152 79.6)",
+          "oklch(61% 0.152 79.6)",
+          "oklch(72% 0.152 79.6)",
+          "oklch(84% 0.152 79.6)",
+          "oklch(95% 0.152 79.6)"
+        ]
+      },
+      "amber-hover": {
+        "role": "primary",
+        "displayName": "Ambre clair (survol)",
+        "canonical": "oklch(85.5% 0.146 81.8)",
+        "tonalRamp": [
+          "oklch(15% 0.146 81.8)",
+          "oklch(26% 0.146 81.8)",
+          "oklch(38% 0.146 81.8)",
+          "oklch(49% 0.146 81.8)",
+          "oklch(61% 0.146 81.8)",
+          "oklch(72% 0.146 81.8)",
+          "oklch(84% 0.146 81.8)",
+          "oklch(95% 0.146 81.8)"
+        ]
+      },
+      "amber-ink": {
+        "role": "primary",
+        "displayName": "Encre d'ambre",
+        "canonical": "oklch(19.1% 0.028 84.5)",
+        "tonalRamp": [
+          "oklch(15% 0.028 84.5)",
+          "oklch(26% 0.028 84.5)",
+          "oklch(38% 0.028 84.5)",
+          "oklch(49% 0.028 84.5)",
+          "oklch(61% 0.028 84.5)",
+          "oklch(72% 0.028 84.5)",
+          "oklch(84% 0.028 84.5)",
+          "oklch(95% 0.028 84.5)"
+        ]
+      },
+      "blue": {
+        "role": "tertiary",
+        "displayName": "Bleu d'action",
+        "canonical": "oklch(65.8% 0.182 260.7)",
+        "tonalRamp": [
+          "oklch(15% 0.182 260.7)",
+          "oklch(26% 0.182 260.7)",
+          "oklch(38% 0.182 260.7)",
+          "oklch(49% 0.182 260.7)",
+          "oklch(61% 0.182 260.7)",
+          "oklch(72% 0.182 260.7)",
+          "oklch(84% 0.182 260.7)",
+          "oklch(95% 0.182 260.7)"
+        ]
+      },
+      "violet": {
+        "role": "tertiary",
+        "displayName": "Violet de backtest",
+        "canonical": "oklch(70.9% 0.159 293.5)",
+        "tonalRamp": [
+          "oklch(15% 0.159 293.5)",
+          "oklch(26% 0.159 293.5)",
+          "oklch(38% 0.159 293.5)",
+          "oklch(49% 0.159 293.5)",
+          "oklch(61% 0.159 293.5)",
+          "oklch(72% 0.159 293.5)",
+          "oklch(84% 0.159 293.5)",
+          "oklch(95% 0.159 293.5)"
+        ]
+      },
+      "ground-light": {
+        "role": "neutral",
+        "displayName": "Fond, thème clair",
+        "canonical": "oklch(96.4% 0.005 95.1)",
+        "tonalRamp": [
+          "oklch(15% 0.005 95.1)",
+          "oklch(26% 0.005 95.1)",
+          "oklch(38% 0.005 95.1)",
+          "oklch(49% 0.005 95.1)",
+          "oklch(61% 0.005 95.1)",
+          "oklch(72% 0.005 95.1)",
+          "oklch(84% 0.005 95.1)",
+          "oklch(95% 0.005 95.1)"
+        ]
+      },
+      "panel-light": {
+        "role": "neutral",
+        "displayName": "Panneau, thème clair",
+        "canonical": "oklch(98.5% 0.004 91.4)",
+        "tonalRamp": [
+          "oklch(15% 0.004 91.4)",
+          "oklch(26% 0.004 91.4)",
+          "oklch(38% 0.004 91.4)",
+          "oklch(49% 0.004 91.4)",
+          "oklch(61% 0.004 91.4)",
+          "oklch(72% 0.004 91.4)",
+          "oklch(84% 0.004 91.4)",
+          "oklch(95% 0.004 91.4)"
+        ]
+      },
+      "raised-light": {
+        "role": "neutral",
+        "displayName": "Surface relevée, thème clair",
+        "canonical": "oklch(93.7% 0.008 91.5)",
+        "tonalRamp": [
+          "oklch(15% 0.008 91.5)",
+          "oklch(26% 0.008 91.5)",
+          "oklch(38% 0.008 91.5)",
+          "oklch(49% 0.008 91.5)",
+          "oklch(61% 0.008 91.5)",
+          "oklch(72% 0.008 91.5)",
+          "oklch(84% 0.008 91.5)",
+          "oklch(95% 0.008 91.5)"
+        ]
+      },
+      "line-light": {
+        "role": "neutral",
+        "displayName": "Filet, thème clair",
+        "canonical": "oklch(87.6% 0.013 91.5)",
+        "tonalRamp": [
+          "oklch(15% 0.013 91.5)",
+          "oklch(26% 0.013 91.5)",
+          "oklch(38% 0.013 91.5)",
+          "oklch(49% 0.013 91.5)",
+          "oklch(61% 0.013 91.5)",
+          "oklch(72% 0.013 91.5)",
+          "oklch(84% 0.013 91.5)",
+          "oklch(95% 0.013 91.5)"
+        ]
+      },
+      "line-2-light": {
+        "role": "neutral",
+        "displayName": "Filet fort, thème clair",
+        "canonical": "oklch(80.8% 0.016 90.3)",
+        "tonalRamp": [
+          "oklch(15% 0.016 90.3)",
+          "oklch(26% 0.016 90.3)",
+          "oklch(38% 0.016 90.3)",
+          "oklch(49% 0.016 90.3)",
+          "oklch(61% 0.016 90.3)",
+          "oklch(72% 0.016 90.3)",
+          "oklch(84% 0.016 90.3)",
+          "oklch(95% 0.016 90.3)"
+        ]
+      },
+      "bone-light": {
+        "role": "neutral",
+        "displayName": "Os, thème clair",
+        "canonical": "oklch(20.8% 0.015 261.6)",
+        "tonalRamp": [
+          "oklch(15% 0.015 261.6)",
+          "oklch(26% 0.015 261.6)",
+          "oklch(38% 0.015 261.6)",
+          "oklch(49% 0.015 261.6)",
+          "oklch(61% 0.015 261.6)",
+          "oklch(72% 0.015 261.6)",
+          "oklch(84% 0.015 261.6)",
+          "oklch(95% 0.015 261.6)"
+        ]
+      },
+      "dim-light": {
+        "role": "neutral",
+        "displayName": "Gris moyen, thème clair",
+        "canonical": "oklch(47.7% 0.025 261.7)",
+        "tonalRamp": [
+          "oklch(15% 0.025 261.7)",
+          "oklch(26% 0.025 261.7)",
+          "oklch(38% 0.025 261.7)",
+          "oklch(49% 0.025 261.7)",
+          "oklch(61% 0.025 261.7)",
+          "oklch(72% 0.025 261.7)",
+          "oklch(84% 0.025 261.7)",
+          "oklch(95% 0.025 261.7)"
+        ]
+      },
+      "faint-light": {
+        "role": "neutral",
+        "displayName": "Gris discret, thème clair",
+        "canonical": "oklch(55.4% 0.024 261.7)",
+        "tonalRamp": [
+          "oklch(15% 0.024 261.7)",
+          "oklch(26% 0.024 261.7)",
+          "oklch(38% 0.024 261.7)",
+          "oklch(49% 0.024 261.7)",
+          "oklch(61% 0.024 261.7)",
+          "oklch(72% 0.024 261.7)",
+          "oklch(84% 0.024 261.7)",
+          "oklch(95% 0.024 261.7)"
+        ]
+      },
+      "bid-light": {
+        "role": "secondary",
+        "displayName": "Vert de gain, thème clair",
+        "canonical": "oklch(51.2% 0.121 153.9)",
+        "tonalRamp": [
+          "oklch(15% 0.121 153.9)",
+          "oklch(26% 0.121 153.9)",
+          "oklch(38% 0.121 153.9)",
+          "oklch(49% 0.121 153.9)",
+          "oklch(61% 0.121 153.9)",
+          "oklch(72% 0.121 153.9)",
+          "oklch(84% 0.121 153.9)",
+          "oklch(95% 0.121 153.9)"
+        ]
+      },
+      "ask-light": {
+        "role": "secondary",
+        "displayName": "Rouge de perte et de danger, thème clair",
+        "canonical": "oklch(53.4% 0.193 25.2)",
+        "tonalRamp": [
+          "oklch(15% 0.193 25.2)",
+          "oklch(26% 0.193 25.2)",
+          "oklch(38% 0.193 25.2)",
+          "oklch(49% 0.193 25.2)",
+          "oklch(61% 0.193 25.2)",
+          "oklch(72% 0.193 25.2)",
+          "oklch(84% 0.193 25.2)",
+          "oklch(95% 0.193 25.2)"
+        ]
+      },
+      "amber-light": {
+        "role": "primary",
+        "displayName": "Ambre, thème clair",
+        "canonical": "oklch(51.2% 0.108 75.1)",
+        "tonalRamp": [
+          "oklch(15% 0.108 75.1)",
+          "oklch(26% 0.108 75.1)",
+          "oklch(38% 0.108 75.1)",
+          "oklch(49% 0.108 75.1)",
+          "oklch(61% 0.108 75.1)",
+          "oklch(72% 0.108 75.1)",
+          "oklch(84% 0.108 75.1)",
+          "oklch(95% 0.108 75.1)"
+        ]
+      },
+      "amber-hover-light": {
+        "role": "primary",
+        "displayName": "Ambre clair (survol), thème clair",
+        "canonical": "oklch(43.9% 0.092 76.1)",
+        "tonalRamp": [
+          "oklch(15% 0.092 76.1)",
+          "oklch(26% 0.092 76.1)",
+          "oklch(38% 0.092 76.1)",
+          "oklch(49% 0.092 76.1)",
+          "oklch(61% 0.092 76.1)",
+          "oklch(72% 0.092 76.1)",
+          "oklch(84% 0.092 76.1)",
+          "oklch(95% 0.092 76.1)"
+        ]
+      },
+      "amber-ink-light": {
+        "role": "primary",
+        "displayName": "Encre d'ambre, thème clair",
+        "canonical": "oklch(98% 0.025 89.2)",
+        "tonalRamp": [
+          "oklch(15% 0.025 89.2)",
+          "oklch(26% 0.025 89.2)",
+          "oklch(38% 0.025 89.2)",
+          "oklch(49% 0.025 89.2)",
+          "oklch(61% 0.025 89.2)",
+          "oklch(72% 0.025 89.2)",
+          "oklch(84% 0.025 89.2)",
+          "oklch(95% 0.025 89.2)"
+        ]
+      },
+      "blue-light": {
+        "role": "tertiary",
+        "displayName": "Bleu d'action, thème clair",
+        "canonical": "oklch(52% 0.194 261.5)",
+        "tonalRamp": [
+          "oklch(15% 0.194 261.5)",
+          "oklch(26% 0.194 261.5)",
+          "oklch(38% 0.194 261.5)",
+          "oklch(49% 0.194 261.5)",
+          "oklch(61% 0.194 261.5)",
+          "oklch(72% 0.194 261.5)",
+          "oklch(84% 0.194 261.5)",
+          "oklch(95% 0.194 261.5)"
+        ]
+      },
+      "violet-light": {
+        "role": "tertiary",
+        "displayName": "Violet de backtest, thème clair",
+        "canonical": "oklch(50.8% 0.211 291.5)",
+        "tonalRamp": [
+          "oklch(15% 0.211 291.5)",
+          "oklch(26% 0.211 291.5)",
+          "oklch(38% 0.211 291.5)",
+          "oklch(49% 0.211 291.5)",
+          "oklch(61% 0.211 291.5)",
+          "oklch(72% 0.211 291.5)",
+          "oklch(84% 0.211 291.5)",
+          "oklch(95% 0.211 291.5)"
+        ]
+      },
+      "cvd-gain": {
+        "role": "secondary",
+        "displayName": "Gain, préréglage daltonisme",
+        "canonical": "oklch(59.7% 0.167 254.9)",
+        "tonalRamp": [
+          "oklch(15% 0.167 254.9)",
+          "oklch(26% 0.167 254.9)",
+          "oklch(38% 0.167 254.9)",
+          "oklch(49% 0.167 254.9)",
+          "oklch(61% 0.167 254.9)",
+          "oklch(72% 0.167 254.9)",
+          "oklch(84% 0.167 254.9)",
+          "oklch(95% 0.167 254.9)"
+        ]
+      },
+      "cvd-loss": {
+        "role": "secondary",
+        "displayName": "Perte, préréglage daltonisme",
+        "canonical": "oklch(65.9% 0.159 55.7)",
+        "tonalRamp": [
+          "oklch(15% 0.159 55.7)",
+          "oklch(26% 0.159 55.7)",
+          "oklch(38% 0.159 55.7)",
+          "oklch(49% 0.159 55.7)",
+          "oklch(61% 0.159 55.7)",
+          "oklch(72% 0.159 55.7)",
+          "oklch(84% 0.159 55.7)",
+          "oklch(95% 0.159 55.7)"
+        ]
+      },
+      "cvd-action": {
+        "role": "tertiary",
+        "displayName": "Achats et en cours, préréglage daltonisme",
+        "canonical": "oklch(63.2% 0.116 174.5)",
+        "tonalRamp": [
+          "oklch(15% 0.116 174.5)",
+          "oklch(26% 0.116 174.5)",
+          "oklch(38% 0.116 174.5)",
+          "oklch(49% 0.116 174.5)",
+          "oklch(61% 0.116 174.5)",
+          "oklch(72% 0.116 174.5)",
+          "oklch(84% 0.116 174.5)",
+          "oklch(95% 0.116 174.5)"
+        ]
+      },
+      "cvd-mode-reel": {
+        "role": "secondary",
+        "displayName": "Mode réel, préréglage daltonisme",
+        "canonical": "oklch(63.6% 0.216 339.1)",
+        "tonalRamp": [
+          "oklch(15% 0.216 339.1)",
+          "oklch(26% 0.216 339.1)",
+          "oklch(38% 0.216 339.1)",
+          "oklch(49% 0.216 339.1)",
+          "oklch(61% 0.216 339.1)",
+          "oklch(72% 0.216 339.1)",
+          "oklch(84% 0.216 339.1)",
+          "oklch(95% 0.216 339.1)"
+        ]
+      }
+    },
+    "typographyMeta": {
+      "title": {
+        "displayName": "Titre",
+        "purpose": "Nom de l'instance, titre de page, nom du produit. Capitales, largeur 72."
+      },
+      "subtitle": {
+        "displayName": "Sous-titre",
+        "purpose": "Nom d'une stratégie ou d'une section dans un panneau."
+      },
+      "body": {
+        "displayName": "Corps",
+        "purpose": "Taille de base de la page."
+      },
+      "control": {
+        "displayName": "Commande",
+        "purpose": "Texte des boutons ; 13 px en petit, 12 px en segmenté."
+      },
+      "panel-head": {
+        "displayName": "En-tête de panneau",
+        "purpose": "Titre d'un panneau dans sa bande de 40 px."
+      },
+      "row-text": {
+        "displayName": "Texte de ligne",
+        "purpose": "Mots dans une ligne de données et messages d'avertissement."
+      },
+      "data": {
+        "displayName": "Donnée",
+        "purpose": "Tous les chiffres, tabulaires, zéro barré."
+      },
+      "label": {
+        "displayName": "Libellé",
+        "purpose": "Titres de colonnes, noms d'indicateurs, intitulés de groupes. Capitales."
+      }
+    },
+    "shadows": [
+      {
+        "name": "trait-selection",
+        "value": "inset 0 2px 0 var(--c-accent)",
+        "purpose": "Seul usage de box-shadow : un trait intérieur de 2 px sur un bord de l'élément sélectionné (haut, bas ou gauche ; ambre, bleu ou rouge). Aucune ombre portée."
+      }
+    ],
+    "motion": [
+      {
+        "name": "ease",
+        "value": "cubic-bezier(0.2, 0.8, 0.2, 1)",
+        "purpose": "Courbe de référence des transitions."
+      },
+      {
+        "name": "commande",
+        "value": "150ms",
+        "purpose": "Fond, contour et texte d'un bouton."
+      },
+      {
+        "name": "panneau-flottant",
+        "value": "150ms",
+        "purpose": "Ouverture du détail du solde ou des indicateurs : opacité et 6 px."
+      },
+      {
+        "name": "ecran",
+        "value": "160ms",
+        "purpose": "Changement d'écran : opacité et 4 px."
+      },
+      {
+        "name": "etape",
+        "value": "180ms puis 200ms",
+        "purpose": "Étape de démarrage constatée : carré, puis filet."
+      },
+      {
+        "name": "face",
+        "value": "200ms",
+        "purpose": "Bascule observation / réglages : opacité et 24 px."
+      },
+      {
+        "name": "onglet",
+        "value": "220ms",
+        "purpose": "Glissement du trait de l'onglet actif."
+      },
+      {
+        "name": "progression",
+        "value": "250ms",
+        "purpose": "Barre de progression."
+      },
+      {
+        "name": "ligne-journal",
+        "value": "280ms",
+        "purpose": "Nouvelle ligne du journal : opacité et 12 px."
+      },
+      {
+        "name": "zone-transaction",
+        "value": "350ms",
+        "purpose": "Apparition de la zone d'une transaction terminée sur le graphique."
+      },
+      {
+        "name": "chiffre",
+        "value": "400ms",
+        "purpose": "Chiffre qui défile vers sa nouvelle valeur. Durée la plus longue du système."
+      },
+      {
+        "name": "mouvement-reduit",
+        "value": "prefers-reduced-motion: reduce",
+        "purpose": "Toutes les transitions et animations sont coupées."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "instance-tablette",
+        "value": "1100px"
+      },
+      {
+        "name": "barre-menu",
+        "value": "1099px"
+      },
+      {
+        "name": "barre-sans-bandeau",
+        "value": "979px"
+      },
+      {
+        "name": "etroit",
+        "value": "639px"
+      },
+      {
+        "name": "tactile",
+        "value": "(pointer: coarse)"
+      }
+    ]
+  },
+  "components": [
+    {
+      "name": "Bouton principal",
+      "kind": "button",
+      "refersTo": "button-go",
+      "description": "L'action principale d'un écran ou d'un dialogue. Un seul à la fois.",
+      "html": "<button class=\"ds-btn ds-btn-go\">Créer une instance</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 40px; padding: 0 18px; font: 600 14px/1 var(--font-ui); font-variation-settings: 'wdth' 88; letter-spacing: 0.01em; white-space: nowrap; border: 1px solid var(--c-line-2); color: var(--c-ink); background: transparent; border-radius: 2px; cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s; } .ds-btn:hover { border-color: var(--c-mute); } .ds-btn:focus-visible { outline: 1px solid var(--c-accent); outline-offset: 3px; } .ds-btn-go { background: var(--c-accent); border-color: var(--c-accent); color: var(--c-accent-ink); } .ds-btn-go:hover { background: var(--amber-hover); border-color: var(--amber-hover); }"
+    },
+    {
+      "name": "Bouton par défaut",
+      "kind": "button",
+      "refersTo": "button",
+      "description": "Commande ordinaire : contour en filet fort, fond transparent.",
+      "html": "<button class=\"ds-btn\">Mettre en pause les achats</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 40px; padding: 0 18px; font: 600 14px/1 var(--font-ui); font-variation-settings: 'wdth' 88; letter-spacing: 0.01em; white-space: nowrap; border: 1px solid var(--c-line-2); color: var(--c-ink); background: transparent; border-radius: 2px; cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s; } .ds-btn:hover { border-color: var(--c-mute); } .ds-btn:focus-visible { outline: 1px solid var(--c-accent); outline-offset: 3px; }"
+    },
+    {
+      "name": "Bouton danger",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Commande qui vend ou arrête. Jamais bloquée ni cachée.",
+      "html": "<button class=\"ds-btn ds-btn-danger\">Tout vendre</button>",
+      "css": ".ds-btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 40px; padding: 0 18px; font: 600 14px/1 var(--font-ui); font-variation-settings: 'wdth' 88; letter-spacing: 0.01em; white-space: nowrap; border: 1px solid var(--c-line-2); color: var(--c-ink); background: transparent; border-radius: 2px; cursor: pointer; transition: background 0.15s, border-color 0.15s, color 0.15s; } .ds-btn:hover { border-color: var(--c-mute); } .ds-btn:focus-visible { outline: 1px solid var(--c-accent); outline-offset: 3px; } .ds-btn-danger { border-color: var(--c-loss); color: var(--c-loss); } .ds-btn-danger:hover { background: var(--c-loss-heat); border-color: var(--c-loss); }"
+    },
+    {
+      "name": "Étiquettes de mode",
+      "kind": "chip",
+      "refersTo": "mode-reel",
+      "description": "Test en pointillés, backtest en trait plein, réel seul à fond plein.",
+      "html": "<span class=\"ds-mode ds-mode-test\">Mode test</span> <span class=\"ds-mode ds-mode-backtest\">Backtest</span> <span class=\"ds-mode ds-mode-reel\">Mode réel</span>",
+      "css": ".ds-mode { display: inline-flex; align-items: center; font-family: var(--font-num); font-variant-numeric: tabular-nums slashed-zero; font-size: 11px; letter-spacing: 0.08em; line-height: 1; padding: 4px 6px 3px; text-transform: uppercase; white-space: nowrap; border: 1px solid; } .ds-mode-test { color: var(--c-mode-test); border-style: dashed; } .ds-mode-backtest { color: var(--c-mode-backtest); } .ds-mode-reel { background: var(--c-mode-reel); border-color: var(--c-mode-reel); color: var(--c-bg); font-weight: 700; }"
+    },
+    {
+      "name": "Mention « simulé »",
+      "kind": "chip",
+      "refersTo": "tag-sim",
+      "description": "Obligatoire à côté de tout chiffre du mode test ou d'un backtest.",
+      "html": "<span class=\"ds-tag-sim\">Simulé</span>",
+      "css": ".ds-tag-sim { display: inline-block; font-family: var(--font-num); font-variant-numeric: tabular-nums slashed-zero; font-size: 11px; letter-spacing: 0.08em; line-height: 1; padding: 3px 4px 2px; border: 1px dashed var(--c-warn); color: var(--c-warn); text-transform: uppercase; white-space: nowrap; }"
+    },
+    {
+      "name": "Panneau, colonnes et lignes",
+      "kind": "card",
+      "refersTo": "panel",
+      "description": "Panneau à plat : en-tête de 40 px, titres de colonnes de 26 px, lignes de 22 px avec barre de chaleur, flèche et signe.",
+      "html": "<section class=\"ds-panel\"><header class=\"ds-panel-head\">Journal des transactions</header><div class=\"ds-cols\"><span>Heure</span><span>Événement</span><span class=\"ds-right\">Résultat</span></div><div class=\"ds-r\"><i class=\"ds-heat\" style=\"width:62%\"></i><span>17:00</span><span class=\"ds-t\">Vente, signal de la stratégie</span><span class=\"ds-right ds-up\"><svg width=\"8\" height=\"8\" viewBox=\"0 0 8 8\" aria-hidden=\"true\"><path d=\"M4 1 7.5 7h-7z\" fill=\"currentColor\"/></svg> +1,32 USDT</span></div><div class=\"ds-r\"><i class=\"ds-heat ds-loss\" style=\"width:38%\"></i><span>13:53</span><span class=\"ds-t\">Vente à perte (stop-loss)</span><span class=\"ds-right ds-dn\"><svg width=\"8\" height=\"8\" viewBox=\"0 0 8 8\" aria-hidden=\"true\"><path d=\"M4 7 .5 1h7z\" fill=\"currentColor\"/></svg> −0,81 USDT</span></div><div class=\"ds-r ds-sel\"><span>07:00</span><span class=\"ds-t\">Achat</span><span class=\"ds-right ds-act\">2 768,19</span></div></section>",
+      "css": ".ds-panel { border: 1px solid var(--c-line); background: var(--c-surface); color: var(--c-ink); min-width: 320px; } .ds-panel-head { display: flex; align-items: center; height: 40px; padding: 0 12px; border-bottom: 1px solid var(--c-line); font: 600 13px var(--font-ui); } .ds-cols, .ds-r { display: grid; grid-template-columns: 68px minmax(0, 1fr) auto; align-items: center; } .ds-cols { height: 26px; font-family: var(--font-num); font-variant-numeric: tabular-nums slashed-zero; font-size: 11px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--c-faint); border-bottom: 1px solid var(--c-line); } .ds-cols > span, .ds-r > span { padding: 0 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: relative; z-index: 1; } .ds-r { height: 22px; position: relative; font-family: var(--font-num); font-variant-numeric: tabular-nums slashed-zero; font-size: 12px; border-bottom: 1px solid color-mix(in srgb, var(--c-line) 55%, transparent); } .ds-r:hover, .ds-sel { background: var(--c-raised); } .ds-sel { box-shadow: inset 2px 0 0 var(--c-action); } .ds-t { font-family: var(--font-ui); font-size: 12.5px; } .ds-right { text-align: right; } .ds-up { color: var(--c-gain); } .ds-dn { color: var(--c-loss); } .ds-act { color: var(--c-action); } .ds-heat { position: absolute; top: 1px; bottom: 1px; left: 0; z-index: 0; background: var(--c-gain-heat); } .ds-heat.ds-loss { background: var(--c-loss-heat); }"
+    },
+    {
+      "name": "Onglets",
+      "kind": "nav",
+      "refersTo": "tab",
+      "description": "Un onglet par paire ; l'actif prend le fond panneau et un trait ambre de 2 px en haut.",
+      "html": "<div class=\"ds-tabs\" role=\"tablist\"><button class=\"ds-tab\" role=\"tab\" aria-selected=\"false\">Tout</button><button class=\"ds-tab\" role=\"tab\" aria-selected=\"true\">ETH/USDT</button><button class=\"ds-tab\" role=\"tab\" aria-selected=\"false\">SOL/USDT</button></div>",
+      "css": ".ds-tabs { display: flex; border-bottom: 1px solid var(--c-line); } .ds-tab { display: inline-flex; align-items: center; height: 36px; padding: 0 14px; font: 600 13px/1 var(--font-ui); font-variation-settings: 'wdth' 88; color: var(--c-mute); background: none; border: 0; border-right: 1px solid var(--c-line); cursor: pointer; white-space: nowrap; } .ds-tab:hover { color: var(--c-ink); } .ds-tab[aria-selected='true'] { color: var(--c-ink); background: var(--c-surface); box-shadow: inset 0 2px 0 var(--c-accent); } .ds-tab:focus-visible { outline: 1px solid var(--c-accent); outline-offset: 3px; }"
+    },
+    {
+      "name": "Champ",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Champ de 32 px sur fond de page, libellé au-dessus, aide dessous.",
+      "html": "<label class=\"ds-field\"><span>Nom de l'instance</span><input class=\"ds-input\" placeholder=\"Swing majors\"><small>Visible dans la liste des instances.</small></label>",
+      "css": ".ds-field { display: grid; gap: 6px; font: 13px var(--font-ui); color: var(--c-ink); min-width: 240px; } .ds-field > span { color: var(--c-mute); } .ds-field small { color: var(--c-faint); font-size: 12px; } .ds-input { height: 32px; padding: 0 10px; font: 13px var(--font-ui); color: var(--c-ink); background: var(--c-bg); border: 1px solid var(--c-line-2); border-radius: 2px; } .ds-input:hover { border-color: var(--c-mute); } .ds-input::placeholder { color: var(--c-faint); } .ds-input:focus-visible { outline: 1px solid var(--c-accent); outline-offset: 3px; }"
+    },
+    {
+      "name": "Bandeau d'arrêt d'urgence",
+      "kind": "custom",
+      "refersTo": "panel",
+      "description": "Bande hachurée ambre : un danger en cours, ce qui est bloqué et ce qui continue.",
+      "html": "<div class=\"ds-kill\" role=\"alert\"><strong>Arrêt d'urgence actif : tous les achats sont bloqués. Les ventes continuent.</strong><small>Rien ne reprend de soi-même.</small></div>",
+      "css": ".ds-kill { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 8px 16px; border-bottom: 1px solid var(--c-warn); font: 13px var(--font-ui); color: var(--c-ink); background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c-warn) 14%, transparent) 0 6px, color-mix(in srgb, var(--c-warn) 5%, transparent) 6px 12px); } .ds-kill strong { color: var(--c-warn); font-weight: 700; } .ds-kill small { font-size: 12px; color: var(--c-mute); }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Le terminal de constat",
+    "overview": "L'écran d'une instance est un terminal de trading dense. Il montre ce qu'un bot a réellement fait : ce qu'il a gagné ou perdu, pourquoi, et ce qu'il fait maintenant. Il refuse le tableau de bord aéré fait de cartes. L'information tient dans des panneaux à plat, collés les uns aux autres et séparés par des filets d'un pixel. Les lignes de données font 22 px de haut et les chiffres sont à chasse fixe.\n\nLe monde visuel est repris de la page de référence fixée par l'opérateur (feuille de style copiée dans `.impeccable/reference.css`) : fond presque noir, texte couleur os, vert et rouge de carnet d'ordres, ambre pour l'action principale et les avertissements, titres condensés en capitales (Archivo), chiffres tabulaires (Martian Mono). La maquette y ajoute trois choses absentes de la référence : un bleu pour les achats, les ventes et ce qui est en cours, un violet pour le mode backtest, et un thème clair.\n\nCe qui est vrai passe avant ce qui rassure. Un état est daté, un chiffre de test porte la mention « simulé », une valeur périmée est estompée. Le mouvement ne sert qu'à montrer un changement réel.",
+    "keyCharacteristics": [
+      "Densité de terminal : barre de 52 px, en-têtes de panneau de 40 px, titres de colonnes de 26 px, lignes de 22 px.",
+      "Tout est à plat : filets de 1 px, aucune ombre portée, coins de 0 ou 2 px.",
+      "Deux polices seulement : Archivo pour les mots, Martian Mono pour les chiffres et les libellés.",
+      "Chaque couleur a un seul sens, le même sur le graphique, dans les tableaux et dans les indicateurs.",
+      "La couleur n'est jamais seule : un signe, une flèche ou un libellé l'accompagne.",
+      "Sombre par défaut, clair disponible, couleurs de sens personnalisables."
+    ],
+    "rules": [
+      {
+        "name": "La règle du sens unique",
+        "body": "Vert veut dire gain. Rouge veut dire perte ou danger. Bleu veut dire achat, vente ou en cours. Ambre veut dire action principale, avertissement ou simulé. Violet veut dire backtest. Une couleur de sens ne sert jamais de décor.",
+        "section": "colors"
+      },
+      {
+        "name": "La règle de la couleur accompagnée",
+        "body": "Aucun sens n'est porté par la couleur seule. Un résultat a toujours son signe et sa flèche, une variation a toujours son mot (« encaissé », « en cours »), un état a toujours son libellé.",
+        "section": "colors"
+      },
+      {
+        "name": "La règle du réel plein",
+        "body": "L'étiquette du mode réel est la seule étiquette à fond plein. Le mode test est en pointillés, le backtest en trait continu. Le réel ne se confond avec rien, même sans la couleur.",
+        "section": "colors"
+      },
+      {
+        "name": "La règle des rôles",
+        "body": "Un composant lit `--c-gain`, `--c-loss`, `--c-action` et les autres rôles, jamais `--bid`, `--ask` ou un code couleur. Sinon la personnalisation et le thème clair cessent de fonctionner.",
+        "section": "colors"
+      },
+      {
+        "name": "La règle du chiffre à chasse fixe",
+        "body": "Tout nombre est en Martian Mono, avec chiffres tabulaires et zéro barré. Un chiffre qui change ne déplace jamais ses voisins.",
+        "section": "typography"
+      },
+      {
+        "name": "La règle du libellé de donnée",
+        "body": "Le petit texte en capitales à chasse fixe nomme une colonne, un indicateur ou un groupe de données. Il ne se pose pas au-dessus d'un titre pour faire joli.",
+        "section": "typography"
+      },
+      {
+        "name": "La règle de la largeur",
+        "body": "La hiérarchie se fait par la largeur et la graisse d'Archivo (72, 80, 88, 100), pas par une troisième police ni par de grandes tailles.",
+        "section": "typography"
+      },
+      {
+        "name": "La règle des hauteurs comptées",
+        "body": "Une hauteur se choisit dans la série 22, 26, 32, 36, 40, 52 px. On compose avec ces valeurs, on n'en invente pas d'autres.",
+        "section": "layout"
+      },
+      {
+        "name": "La règle du filet partagé",
+        "body": "Deux panneaux voisins partagent un seul filet de 1 px. Pas de gouttière, pas de carte isolée.",
+        "section": "layout"
+      },
+      {
+        "name": "La règle du plat",
+        "body": "Aucune ombre portée, aucun flou, aucun dégradé de surface. Un niveau se dit par un ton de fond et un filet.",
+        "section": "elevation"
+      },
+      {
+        "name": "La règle du trait de 2 px",
+        "body": "L'élément sélectionné porte un trait plein de 2 px sur un seul bord, à l'intérieur de sa boîte. C'est le seul marqueur de sélection.",
+        "section": "elevation"
+      },
+      {
+        "name": "La règle du pointillé",
+        "body": "Un contour en pointillés veut dire « pas réel » ou « pas encore » : simulé, en attente, verrouillé. Il ne s'emploie pas comme décor.",
+        "section": "shapes"
+      }
+    ],
+    "dos": [
+      "**Do** lire les couleurs par leurs rôles `--c-*`, pour que le thème clair et la personnalisation continuent de fonctionner.",
+      "**Do** accompagner chaque couleur de sens d'un signe, d'une flèche ou d'un libellé. En vision daltonienne, le vert et le rouge de la référence ne sont séparés que de 6 à 8 points.",
+      "**Do** écrire tout nombre en Martian Mono, avec chiffres tabulaires, signe explicite et devise.",
+      "**Do** composer avec les hauteurs 22, 26, 32, 36, 40 et 52 px et la marge de panneau de 12 px.",
+      "**Do** coller les panneaux et les séparer par un filet de 1 px.",
+      "**Do** poser la mention « simulé » en pointillés ambre à côté de tout chiffre du mode test ou d'un backtest.",
+      "**Do** garder le mode réel comme seule étiquette à fond plein.",
+      "**Do** donner au moins 44 px de haut à toute cible tactile.",
+      "**Do** garder chaque animation sous 400 ms environ, liée à un changement réel, et coupée avec `prefers-reduced-motion`.",
+      "**Do** vérifier chaque nouvelle teinte dans les deux thèmes : 4,5:1 pour du texte, 3:1 pour un repère graphique."
+    ],
+    "donts": [
+      "**Don't** construire un tableau de bord aéré fait de cartes séparées par des gouttières. La maquette est un terminal dense.",
+      "**Don't** ajouter une ombre portée, un flou ou un dégradé de surface. Le trait intérieur de 2 px reste le seul usage de `box-shadow`.",
+      "**Don't** arrondir au-delà de 2 px, ni dessiner de pastille ou de cercle.",
+      "**Don't** utiliser le vert, le rouge, le bleu, l'ambre ou le violet comme décor ou hors de leur sens.",
+      "**Don't** utiliser le bleu pour un résultat encaissé, ni le vert ou le rouge pour un résultat encore en cours.",
+      "**Don't** employer le pointillé pour autre chose que le simulé, l'attente ou l'indisponible.",
+      "**Don't** poser un petit libellé en capitales au-dessus d'un titre comme ornement. Ce style nomme une donnée.",
+      "**Don't** introduire une troisième police, ni une taille de texte hors de 11, 12, 12,5, 13, 14, 15 et 21 px.",
+      "**Don't** animer en boucle ni animer un élément dont la valeur n'a pas changé.",
+      "**Don't** charger une police, une icône ou un script depuis un serveur tiers."
+    ]
+  }
+}

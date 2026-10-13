@@ -1,0 +1,119 @@
+<!doctype html><html lang="fr"><meta charset="utf-8"><title>Centrade : Plan de réseau</title>
+<link href="https://fonts.googleapis.com/css2?family=Overpass:wght@400;600;800&display=swap" rel="stylesheet">
+<style>:root{--bg:#0d1633;--shell:#111d44;--panel:#142252;--panel2:#1a2a62;--line:#26356e;--ink:#f4f1e8;--mute:#9aa6cf;--gain:#37c871;--loss:#ff5a4f;--blue:#5db1ff;--up:#37c871;--down:#ff5a4f;--mode:#f4f1e8;--mode-ink:#0d1633;--r:999px;--font:'Overpass',sans-serif;--numfont:'Overpass',sans-serif;--logo:800 20px 'Overpass';--track:0;--h1:800 26px 'Overpass';--h2:600 13px 'Overpass';--num:600 26px 'Overpass';--bignum:800 42px/1 'Overpass'}
+*{box-sizing:border-box;margin:0}
+body{width:1440px;height:900px;overflow:hidden;background:var(--bg);color:var(--ink);font:14px/1.4 var(--font);font-variant-numeric:tabular-nums}
+button{font:inherit;color:inherit;background:var(--panel2);border:1px solid var(--line);border-radius:var(--r);padding:7px 14px}
+.sp{flex:1}.mute{color:var(--mute)}.gain{color:var(--gain)}.loss{color:var(--loss)}.blue{color:var(--blue)}
+.top{height:48px;display:flex;align-items:center;gap:26px;padding:0 20px;background:var(--shell);border-bottom:1px solid var(--line)}
+.logo{font:var(--logo);letter-spacing:var(--track)}
+.top nav{display:flex;gap:22px}.top nav span{color:var(--mute);padding:14px 0}.top nav .on{color:var(--ink);box-shadow:0 2px 0 var(--blue)}
+.kill{background:transparent;border-color:var(--loss);color:var(--loss)}
+.inst{height:64px;display:flex;align-items:center;gap:16px;padding:0 20px}
+.inst h1{font:var(--h1);letter-spacing:var(--track)}
+.mode{background:var(--mode);color:var(--mode-ink);border-radius:var(--r);padding:3px 10px;font-weight:600}
+.tabs{height:44px;display:flex;align-items:stretch;gap:4px;padding:0 20px;border-bottom:1px solid var(--line)}
+.tabs span{display:flex;align-items:center;gap:10px;padding:0 16px;border-radius:var(--r) var(--r) 0 0;color:var(--mute)}
+.tabs .on{background:var(--panel);color:var(--ink);box-shadow:inset 0 2px 0 var(--blue)}
+.stats{height:104px;display:grid;grid-template-columns:2.4fr repeat(6,1fr);gap:1px;background:var(--line);border-bottom:1px solid var(--line)}
+.stats div{background:var(--bg);padding:16px 20px;display:flex;flex-direction:column;justify-content:center;gap:4px}
+.stats small{color:var(--mute);font-size:13px}.stats b{font:var(--num)}
+.stats .solde b{font:var(--bignum);letter-spacing:var(--track)}
+.solde p{display:flex;gap:18px;font-weight:600}
+main{height:640px;display:grid;grid-template-columns:230px 1fr 330px}
+aside,.chart{padding:16px 20px}
+.left{border-right:1px solid var(--line);display:flex;flex-direction:column;gap:14px}
+.left h2,.log h2{font:var(--h2);color:var(--mute)}
+.card{background:var(--panel);border-radius:var(--r);padding:12px 14px;display:flex;flex-direction:column;gap:6px}
+.pill{display:inline-block;font-style:normal;border:1px solid var(--line);border-radius:var(--r);padding:1px 8px;margin-right:4px}
+.pill.on{border-color:var(--blue);color:var(--blue)}
+.tf{display:flex;gap:6px;align-items:center;margin-bottom:10px}
+.tf span{padding:4px 12px;border-radius:var(--r);color:var(--mute);border:1px solid transparent}
+.tf .traded{border-color:var(--blue);color:var(--blue)}.tf .on{background:var(--blue);color:var(--bg);font-weight:700}
+svg{display:block;width:100%;height:560px}
+.u{fill:var(--up);stroke:var(--up);stroke-width:1.5}.d{fill:var(--down);stroke:var(--down);stroke-width:1.5}
+.sl{stroke:var(--loss);stroke-dasharray:6 5;stroke-width:1.5}.tp{stroke:var(--gain);stroke-dasharray:6 5;stroke-width:1.5}
+.path{stroke:var(--blue);stroke-width:2.5;fill:none}.mk{fill:var(--blue)}
+svg text{font:600 13px var(--numfont);fill:var(--ink)}
+.log{border-left:1px solid var(--line);display:flex;flex-direction:column;gap:10px}
+.row{display:grid;grid-template-columns:52px 1fr auto;gap:10px;padding:9px 0;border-bottom:1px solid var(--line);font-family:var(--numfont)}
+.row.new{background:var(--panel);margin:0 -12px;padding:9px 12px;border-radius:var(--r);border:0}
+.card{border-radius:10px}.tabs span::before{content:'';width:18px;height:5px;border-radius:3px;background:#ffb53a}.tabs span:nth-child(1)::before{background:#f4f1e8}.tabs span:nth-child(3)::before{background:#b98cff}.tabs span:nth-child(4)::before{background:#2ad1c9}.tabs span:nth-child(5)::before{background:#ff86c8}.tabs .on{box-shadow:inset 0 3px 0 #ffb53a;border-radius:10px 10px 0 0}.row.new{border-radius:10px}</style>
+<body>
+<header class="top"><b class="logo">Centrade</b><nav><span class="on">Instances</span><span>Bibliothèque</span><span>Journal</span><span>Avancé</span></nav>
+<span class="sp"></span><span class="mute">Bots 3 sur 3 joignables, observé il y a 2 s</span><button class="kill">Arrêt d'urgence</button></header>
+<section class="inst"><span class="mute">Instances /</span><h1>Swing majors</h1><span class="mode">Mode test, chiffres simulés</span>
+<span class="gain">● Actif</span><span class="mute">depuis 3 j 4 h 12 min · version 4</span><span class="sp"></span>
+<button>Mettre en pause les achats</button><button>Arrêter</button></section>
+<nav class="tabs"><span>Tout <b class="gain">+10,00 %</b></span><span class="on">BTC/USDT <b class="gain">+4,10 %</b></span><span>ETH/USDT <b class="loss">−0,80 %</b></span>
+<span>SOL/USDT <b class="gain">+2,20 %</b></span><span>ADA/USDT <b class="mute">0,00 %</b></span></nav>
+<section class="stats">
+<div class="solde"><small>Solde de l'instance</small><b>2 000,00 USDT</b><p><span class="gain">▲ +7,91 % encaissé</span><span class="blue float">▲ +2,09 % en cours</span></p></div>
+<div><small>Départ</small><b>1 818,18</b></div><div><small>Transactions</small><b>42</b></div><div><small>Réussites</small><b class="gain">27</b></div>
+<div><small>Échecs</small><b class="loss">15</b></div><div><small>Taux de réussite</small><b>64 %</b></div><div><small>Plus forte baisse</small><b class="loss">−3,20 %</b></div>
+</section>
+<main>
+<aside class="left"><h2>Compte</h2><div class="card"><b>Binance, compte test</b><span class="mute">Aucune clé transmise</span></div>
+<h2>Paires et stratégies</h2><svg viewBox="0 0 225 250" style="height:250px">
+<g fill="none" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+<path stroke="#ffb53a" d="M14 24H60L84 60H120"/><path stroke="#b98cff" d="M14 96H60L84 66H120"/>
+<path stroke="#2ad1c9" d="M14 150H60L84 180H120"/><path stroke="#ff86c8" d="M14 222H60L84 186H120"/>
+<path stroke="#f4f1e8" stroke-width="3" d="M120 63V183"/></g>
+<g fill="#0d1633" stroke="#f4f1e8" stroke-width="3"><circle cx="120" cy="63" r="9"/><circle cx="120" cy="183" r="9"/></g>
+<g style="font:600 12px Overpass;fill:#f4f1e8"><text x="14" y="14">BTC/USDT</text><text x="14" y="116">ETH/USDT</text>
+<text x="14" y="140">SOL/USDT</text><text x="14" y="242">ADA/USDT</text>
+<text x="136" y="58">Croisement</text><text x="136" y="74" style="fill:#9aa6cf">1 h</text>
+<text x="136" y="178">Retour</text><text x="136" y="194" style="fill:#9aa6cf">15 min</text></g></svg>
+
+<h2>Automatisations</h2><div class="card"><b>Pause si perte du jour &gt; 3 %</b><span class="mute">Règle de protection</span></div></aside>
+<section class="chart"><div class="tf"><span>5 min</span><span>15 min</span><span class="on traded">1 h</span><span>4 h</span><span>1 j</span><span class="sp"></span><span class="mute">Prix observé il y a 2 s</span></div>
+<svg viewBox="0 0 780 520">
+<rect x="255" y="168" width="278" height="150" fill="var(--gain)" opacity=".16" rx="10"/>
+<path class="tp" d="M248 150H780"/><path class="sl" d="M248 372H540"/>
+<path class="u" d="M21.0 288V310M14 293h14v7h-14z"/>
+<path class="u" d="M47.0 270V300M40 279h14v14h-14z"/>
+<path class="u" d="M73.0 256V283M66 265h14v14h-14z"/>
+<path class="u" d="M99.0 257V269M92 261h14v4h-14z"/>
+<path class="u" d="M125.0 245V265M118 257h14v4h-14z"/>
+<path class="u" d="M151.0 237V270M144 247h14v10h-14z"/>
+<path class="d" d="M177.0 240V261M170 247h14v2h-14z"/>
+<path class="u" d="M203.0 220V253M196 232h14v15h-14z"/>
+<path class="u" d="M229.0 216V239M222 221h14v12h-14z"/>
+<path class="u" d="M255.0 211V230M248 216h14v4h-14z"/>
+<path class="u" d="M281.0 200V225M274 207h14v9h-14z"/>
+<path class="u" d="M307.0 178V213M300 182h14v25h-14z"/>
+<path class="u" d="M333.0 166V188M326 174h14v8h-14z"/>
+<path class="u" d="M359.0 155V180M352 163h14v11h-14z"/>
+<path class="u" d="M385.0 148V169M378 159h14v5h-14z"/>
+<path class="u" d="M411.0 139V171M404 148h14v11h-14z"/>
+<path class="u" d="M437.0 135V162M430 141h14v7h-14z"/>
+<path class="u" d="M463.0 110V153M456 118h14v24h-14z"/>
+<path class="u" d="M489.0 86V121M482 95h14v23h-14z"/>
+<path class="u" d="M515.0 75V104M508 86h14v8h-14z"/>
+<path class="d" d="M541.0 80V117M534 86h14v20h-14z"/>
+<path class="d" d="M567.0 97V126M560 106h14v12h-14z"/>
+<path class="d" d="M593.0 104V144M586 118h14v19h-14z"/>
+<path class="d" d="M619.0 132V160M612 136h14v14h-14z"/>
+<path class="u" d="M645.0 134V162M638 148h14v2h-14z"/>
+<path class="u" d="M671.0 129V158M664 136h14v12h-14z"/>
+<path class="u" d="M697.0 108V141M690 116h14v19h-14z"/>
+<path class="u" d="M723.0 96V128M716 100h14v17h-14z"/>
+<path class="u" d="M749.0 78V107M742 83h14v16h-14z"/>
+<path class="d" d="M775.0 79V96M768 83h14v4h-14z"/>
+<path class="path" d="M255 318L300 300L350 262L400 240L450 205L500 180L533 168"/>
+<circle class="mk" cx="255" cy="318" r="7"/><circle class="mk" cx="533" cy="168" r="7"/>
+<text x="232" y="346">Achat</text><text x="545" y="186">Vente</text>
+<path d="M394 150v-30" stroke="var(--gain)"/><rect x="318" y="84" width="152" height="36" rx="18" fill="#0d1633" stroke="#37c871" stroke-width="3"/><text x="394" y="107" text-anchor="middle" fill="#37c871">+3,20 % · +41,06 USDT</text>
+<path class="sl" d="M650 300H780"/><circle class="mk" cx="650" cy="236" r="7"/><path class="path" d="M650 236L690 250L730 222L766 214"/><text class="float" x="640" y="200" fill="var(--blue)">En cours +1,30 %</text>
+<text x="780" y="140" text-anchor="end">Vente à gain (take-profit)</text><text x="548" y="390">Vente à perte (stop-loss)</text>
+</svg></section>
+<aside class="log"><h2>Journal des transactions</h2>
+<div class="row"><span class="mute">09:14</span><span>Achat BTC/USDT</span><span class="blue">61 204,00</span></div>
+<div class="row"><span class="mute">11:02</span><span>Vente ETH/USDT, stop</span><span class="loss">−12,40</span></div>
+<div class="row"><span class="mute">13:48</span><span>Vente BTC/USDT, objectif</span><span class="gain">+41,06</span></div>
+<div class="row"><span class="mute">14:05</span><span>Achat SOL/USDT</span><span class="blue">148,20</span></div>
+<div class="row"><span class="mute">15:31</span><span>Achat refusé, protection</span><span class="mute">ADA/USDT</span></div>
+<div class="row"><span class="mute">16:20</span><span>Vente SOL/USDT, signal</span><span class="gain">+9,85</span></div>
+<div class="row new"><span class="mute">17:42</span><span>Achat BTC/USDT</span><span class="blue">62 880,00</span></div>
+<span class="mute">Heure de Toronto. Les nouvelles lignes arrivent par le bas.</span></aside>
+</main>
