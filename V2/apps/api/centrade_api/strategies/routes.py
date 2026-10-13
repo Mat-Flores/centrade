@@ -8,106 +8,37 @@ n'est pas enregistrée.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from typing import Any, Literal
 from uuid import UUID
 
-import centrade_freqtrade.checks as freqtrade_checks
 from centrade_core.audit import fingerprint, write_audit
-from centrade_core.engine.contract import StaticChecks
-from centrade_core.engine.types import Manifest
 from centrade_core.ids import uuid7
 from centrade_core.models.trading import Strategy, StrategyVersion
-from centrade_fake.engine import ENGINE as FAKE
-from centrade_fake.engine import FakeEngine
 from fastapi import APIRouter, HTTPException, Request, Response
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field
 from sqlalchemy import select, tuple_
 from sqlalchemy.exc import IntegrityError
 
-from centrade_api.deps import client_ip
-from centrade_api.instances import Db, IdempotencyKey, Limit, Now, Operator, Viewer, _page_args
-from centrade_api.schemas import Page, decode_cursor, encode_cursor
+from centrade_api.auth import Operator, Viewer
+from centrade_api.core.deps import (
+    Db,
+    IdempotencyKey,
+    Limit,
+    Now,
+    client_ip,
+)
+from centrade_api.core.pagination import Page, decode_cursor, encode_cursor, page_args
+from centrade_api.strategies.checks import check_version
+from centrade_api.strategies.schemas import (
+    StatusChange,
+    StrategyCreate,
+    StrategyOut,
+    VersionCreate,
+    VersionDetail,
+    VersionOut,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["strategies"])
 
-# Type de moteur -> contrôles de son adaptateur. Un moteur inconnu est refusé.
-CHECKS: dict[str, StaticChecks] = {
-    FAKE: FakeEngine(clock=lambda: datetime.now(UTC), seed=0, new_id=uuid7),
-    freqtrade_checks.ENGINE: freqtrade_checks,
-}
 TRANSITIONS = {("draft", "approved"), ("approved", "retired")}
-Status = Literal["draft", "approved", "retired"]
-
-
-class StrategyCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    name: str = Field(pattern=r"^[a-z0-9][a-z0-9_-]{0,63}$")
-
-
-class StrategyOut(BaseModel):
-    id: UUID
-    name: str
-    created_at: AwareDatetime
-
-
-class VersionCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    manifest: dict[str, Any]
-    code: str = Field(min_length=1, max_length=60_000)
-
-
-class StatusChange(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    status: Status
-
-
-class VersionOut(BaseModel):
-    id: UUID
-    strategy_id: UUID
-    version: int
-    status: Status
-    engine: str  # type de moteur, lu dans le manifest
-    manifest: dict[str, Any]
-    code_hash: str
-    author: str
-    static_checks: dict[str, Any]
-    exits: dict[str, Any]  # politique de sortie (F10) : stoploss et ratios en chaînes décimales
-    created_at: AwareDatetime
-
-    @classmethod
-    def of(cls, v: StrategyVersion) -> VersionOut:
-        return cls(
-            **{k: getattr(v, k) for k in cls.model_fields if k != "engine"},
-            engine=v.manifest["engine"],
-        )
-
-
-class VersionDetail(VersionOut):
-    code: str
-
-    @classmethod
-    def of(cls, v: StrategyVersion) -> VersionDetail:
-        return cls(**VersionOut.of(v).model_dump(), code=v.code)
-
-
-def _check(raw: dict[str, Any], code: str) -> tuple[dict[str, Any], list[str]]:
-    """Manifest canonique (JSON) et motifs de refus ; liste vide = accepté."""
-    try:
-        manifest = Manifest.model_validate(raw)
-    except ValueError as e:  # ValidationError : ni valeur reçue ni contexte dans les motifs
-        problems: list[Any] = getattr(e, "errors", lambda: [])()
-        return {}, [f"manifest.{'.'.join(map(str, x['loc']))} : {x['msg']}" for x in problems]
-    checks = CHECKS.get(manifest.engine)
-    if checks is None:
-        return {}, [f"type de moteur inconnu : {manifest.engine}"]
-    props = manifest.params_schema.get("properties", {})
-    defaults = {k: p["default"] for k, p in props.items() if isinstance(p, dict) and "default" in p}
-    errors: list[str] = [
-        *checks.validate(manifest, defaults).errors,
-        *checks.check_source(manifest, code).errors,
-    ]
-    return manifest.model_dump(mode="json"), errors
 
 
 async def _strategy(db: Db, strategy_id: UUID, *, lock: bool = False) -> Strategy:
@@ -135,7 +66,7 @@ async def list_strategies(
     _: Viewer, db: Db, now: Now, cursor: str | None = None, limit: Limit = 50
 ) -> Page[StrategyOut]:
     stmt = select(Strategy)
-    if (at := _page_args(cursor)) is not None:
+    if (at := page_args(cursor)) is not None:
         stmt = stmt.where(tuple_(Strategy.created_at, Strategy.id) < tuple_(*at))
     rows = (
         await db.scalars(
@@ -181,7 +112,7 @@ async def create_version(
     db: Db,
     now: Now,
 ) -> VersionDetail:
-    manifest, errors = _check(body.manifest, body.code)
+    manifest, errors = check_version(body.manifest, body.code)
     if errors:
         raise HTTPException(422, errors)  # rien n'est enregistré
     code_hash = fingerprint({"code": body.code, "manifest": manifest})

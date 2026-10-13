@@ -24,7 +24,7 @@ from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from centrade_api.auth.security import token_hash
-from centrade_api.deps import get_db, utcnow
+from centrade_api.core.deps import get_db, utcnow
 
 log = structlog.get_logger()
 
@@ -171,3 +171,9 @@ async def require_recent_totp(
     if verified is None or not (verified <= now < verified + RECENT_TOTP):
         raise HTTPException(403, "Confirmation par code TOTP requise.")
     return user
+
+
+# Rôles demandés par les routes : `_: Viewer` suffit à exiger une session du niveau voulu.
+Viewer = Annotated[Principal, Depends(require_role("viewer"))]
+Operator = Annotated[Principal, Depends(require_role("operator"))]
+Admin = Annotated[Principal, Depends(require_role("admin"))]

@@ -9,7 +9,12 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from centrade_api.accounts import KeyPermissions, KeyUsage, get_permission_probe, verdict
+from centrade_api.accounts.permissions import (
+    KeyPermissions,
+    KeyUsage,
+    get_permission_probe,
+    verdict,
+)
 from centrade_api.testing import Stack
 from centrade_core.models import AuditLog
 from centrade_core.models.trading import Account, Secret
@@ -215,9 +220,9 @@ async def test_sonde_par_defaut_non_verifie(stack: Stack) -> None:
 async def test_decision_du_test_de_permissions(
     stack: Stack, monkeypatch: pytest.MonkeyPatch, outcome: Any, expected: str
 ) -> None:
-    from centrade_api import accounts
+    from centrade_api.accounts import permissions
 
-    monkeypatch.setattr(accounts, "PROBE_TIMEOUT_S", 0.05)
+    monkeypatch.setattr(permissions, "PROBE_TIMEOUT_S", 0.05)
     admin = await stack.client("admin")
     aid = (await _account(admin))["id"]
     await admin.put(f"{A}/{aid}/secret", json=KEY)
@@ -299,9 +304,9 @@ async def test_rotation_reussie_bascule_puis_revoque_l_ancienne(stack: Stack) ->
 async def test_rotation_en_echec_ancienne_cle_intacte(
     stack: Stack, monkeypatch: pytest.MonkeyPatch, outcome: Any
 ) -> None:
-    from centrade_api import accounts
+    from centrade_api.accounts import permissions
 
-    monkeypatch.setattr(accounts, "PROBE_TIMEOUT_S", 0.05)
+    monkeypatch.setattr(permissions, "PROBE_TIMEOUT_S", 0.05)
     admin = await stack.client("admin")
     aid = (await _account(admin))["id"]
     await admin.put(f"{A}/{aid}/secret", json=KEY)

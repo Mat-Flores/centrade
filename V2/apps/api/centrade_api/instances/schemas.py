@@ -1,41 +1,21 @@
-"""Schémas de l'API de pilotage (SPEC §8, §9).
+"""Schémas des instances et des commandes (SPEC §8, §9).
 
-I1 : toute valeur issue d'un moteur sort en `Observed` (valeur + date d'observation + `stale`).
-Les réponses qui en portent ont `server_time`, l'horloge du serveur au moment de la réponse :
-le client calcule l'âge sans se fier à la sienne. L'état voulu et l'état observé sont des champs
-distincts ; rien ici ne copie l'un dans l'autre. Aucun schéma ne nomme un moteur précis.
+Les réponses qui portent une valeur observée ont `server_time`, l'horloge du serveur au moment de
+la réponse : le client calcule l'âge sans se fier à la sienne. Aucun schéma ne nomme un moteur
+précis.
 """
 
 from __future__ import annotations
 
-import base64
-import binascii
 import json
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any, Literal, Self, cast
 from uuid import UUID
 
-from centrade_core.models.trading import Alert, Command, Event, Instance
-from fastapi import HTTPException
+from centrade_core.models.trading import Command, Instance
 from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, field_validator, model_validator
 
-ObservedState = Literal[
-    "starting", "exits_only", "running", "halted", "stopped", "error", "unknown"
-]
-ObservedMode = Literal["paper", "live", "unknown"]
-
-
-class Observed[T](BaseModel):
-    value: T
-    observed_at: AwareDatetime | None  # None : jamais observé
-    stale: bool  # plus ancien que le seuil de fraîcheur
-
-
-def observe[T](
-    value: T, observed_at: datetime | None, now: datetime, stale_after_s: float
-) -> Observed[T]:
-    stale = observed_at is not None and now - observed_at > timedelta(seconds=stale_after_s)
-    return Observed(value=value, observed_at=observed_at, stale=stale)
+from centrade_api.core.observed import Observed, ObservedMode, ObservedState, observe
 
 
 class CommandOut(BaseModel):
@@ -194,77 +174,3 @@ class InstanceDetail(InstanceOut):
 class CommandAccepted(BaseModel):
     command_id: UUID
     command: CommandOut
-
-
-class EventOut(BaseModel):
-    id: UUID
-    ts: AwareDatetime  # heure du moteur
-    ts_ingest: AwareDatetime  # heure de réception
-    type: str
-    instance_id: UUID
-    seq: int
-    correlation_id: UUID | None
-    payload: dict[str, Any]  # décimaux en chaînes (enveloppe canonique)
-
-    @classmethod
-    def of(cls, e: Event) -> EventOut:
-        return cls(
-            id=e.id,
-            ts=e.ts,
-            ts_ingest=e.ts_ingest,
-            type=e.type,
-            instance_id=e.instance_id,
-            seq=e.seq,
-            correlation_id=e.correlation_id,
-            payload=e.payload,
-        )
-
-
-class AlertOut(BaseModel):
-    id: UUID
-    rule: str
-    severity: str
-    target_kind: str
-    target_id: UUID | None
-    status: str
-    message: str
-    correlation_id: UUID | None
-    invariant: str | None
-    created_at: AwareDatetime
-    acknowledged_at: AwareDatetime | None
-    resolved_at: AwareDatetime | None
-
-    @classmethod
-    def of(cls, a: Alert) -> AlertOut:
-        return cls.model_validate(a, from_attributes=True)
-
-
-class AuditOut(BaseModel):
-    seq: int
-    ts: AwareDatetime
-    actor: str
-    action: str
-    target: str
-    before_hash: str | None
-    after_hash: str | None
-    ip: str | None
-
-
-class Page[T](BaseModel):
-    items: list[T]
-    next_cursor: str | None  # à repasser tel quel ; None : fin de la liste
-    server_time: AwareDatetime
-
-
-def encode_cursor(ts: datetime | int, ident: UUID | None = None) -> str:
-    raw = f"{ts.isoformat() if isinstance(ts, datetime) else ts}|{ident or ''}"
-    return base64.urlsafe_b64encode(raw.encode()).decode().rstrip("=")
-
-
-def decode_cursor(cursor: str) -> tuple[str, str]:
-    try:
-        raw = base64.urlsafe_b64decode(cursor + "=" * (-len(cursor) % 4)).decode()
-        head, ident = raw.split("|", 1)
-    except (binascii.Error, ValueError):
-        raise HTTPException(422, "Curseur invalide.") from None
-    return head, ident

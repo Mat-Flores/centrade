@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from centrade_api.errors import install_error_handlers
+from centrade_api.core.errors import install_error_handlers
 from centrade_api.main import app
 from fastapi import FastAPI, HTTPException
 from fastapi.testclient import TestClient

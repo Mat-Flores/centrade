@@ -211,7 +211,7 @@ class _JumpClock:
 
 
 async def test_le_flux_se_ferme_quand_la_session_expire(stack: Stack) -> None:
-    from centrade_api.deps import utcnow
+    from centrade_api.core.deps import utcnow
 
     c = await stack.client("viewer")
     stack.app.dependency_overrides[utcnow] = _JumpClock(stack.world.clock, after=3)
@@ -228,7 +228,7 @@ async def test_le_flux_exige_une_session_et_ne_repousse_pas_l_inactivite(stack: 
     assert (await anon.get("/api/v1/stream")).status_code == 401
     await _ready(stack)
     assert stack.last_account is not None
-    from centrade_api.stream import stream_messages
+    from centrade_api.stream.routes import stream_messages
 
     async with stack.world.sessions() as s:
         row = (

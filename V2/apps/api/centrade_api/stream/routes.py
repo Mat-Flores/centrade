@@ -28,10 +28,15 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from centrade_api.auth import Principal, require_role
 from centrade_api.auth.deps import SESSION_IDLE
-from centrade_api.deps import get_redis, get_session_factory, utcnow
-from centrade_api.instances import instance_out
-from centrade_api.schemas import AlertOut, CommandOut
-from centrade_api.trading import trading_out
+from centrade_api.core.deps import (
+    get_redis,
+    get_session_factory,
+    utcnow,
+)
+from centrade_api.feeds.schemas import AlertOut
+from centrade_api.instances.schemas import CommandOut
+from centrade_api.instances.service import instance_out
+from centrade_api.trading.projections import trading_out
 
 log = structlog.get_logger()
 router = APIRouter(prefix="/api/v1", tags=["flux"])

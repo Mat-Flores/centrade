@@ -7,9 +7,14 @@ from centrade_core.models.trading import Alert, Event
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, tuple_
 
-from centrade_api.auth import require_role
-from centrade_api.instances import Db, Limit, Now, Viewer, _page_args
-from centrade_api.schemas import AlertOut, AuditOut, EventOut, Page, decode_cursor, encode_cursor
+from centrade_api.auth import Viewer, require_role
+from centrade_api.core.deps import (
+    Db,
+    Limit,
+    Now,
+)
+from centrade_api.core.pagination import Page, decode_cursor, encode_cursor, page_args
+from centrade_api.feeds.schemas import AlertOut, AuditOut, EventOut
 
 router = APIRouter(prefix="/api/v1", tags=["journaux"])
 
@@ -29,7 +34,7 @@ async def list_events(
         stmt = stmt.where(Event.instance_id == instance_id)
     if type is not None:
         stmt = stmt.where(Event.type == type)
-    if (at := _page_args(cursor)) is not None:
+    if (at := page_args(cursor)) is not None:
         stmt = stmt.where(tuple_(Event.ts, Event.id) < tuple_(*at))
     rows = (
         await db.scalars(stmt.order_by(Event.ts.desc(), Event.id.desc()).limit(limit + 1))
@@ -54,7 +59,7 @@ async def list_alerts(
         stmt = stmt.where(Alert.target_id == instance_id)
     if status is not None:
         stmt = stmt.where(Alert.status == status)
-    if (at := _page_args(cursor)) is not None:
+    if (at := page_args(cursor)) is not None:
         stmt = stmt.where(tuple_(Alert.created_at, Alert.id) < tuple_(*at))
     rows = (
         await db.scalars(stmt.order_by(Alert.created_at.desc(), Alert.id.desc()).limit(limit + 1))

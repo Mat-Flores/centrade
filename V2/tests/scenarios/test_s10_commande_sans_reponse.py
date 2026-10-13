@@ -5,7 +5,7 @@ import asyncio
 from collections.abc import AsyncGenerator
 from typing import Any
 
-from centrade_api.stream import stream_messages
+from centrade_api.stream.routes import stream_messages
 from centrade_api.testing import Stack, act, create_instance, get, ref_of
 from centrade_fake.engine import Failure
 from fastapi.sse import ServerSentEvent

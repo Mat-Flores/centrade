@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
-from centrade_api.stream import _message
+from centrade_api.stream.routes import _message
 from centrade_api.testing import Stack, get
 from centrade_core.engine.types import Intent
 from centrade_core.ids import uuid7

@@ -17,7 +17,7 @@ from uuid import UUID, uuid4
 
 import pytest
 import structlog
-from centrade_api.accounts import KeyPermissions, get_permission_probe
+from centrade_api.accounts.permissions import KeyPermissions, get_permission_probe
 from centrade_api.testing import Stack
 from centrade_core.audit import fingerprint
 from centrade_core.ids import uuid7

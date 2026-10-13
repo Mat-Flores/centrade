@@ -25,7 +25,7 @@ from centrade_worker.testing import World
 from fastapi import FastAPI
 
 from centrade_api.auth import routes, security
-from centrade_api.deps import get_db, get_redis, get_session_factory, utcnow
+from centrade_api.core.deps import get_db, get_redis, get_session_factory, utcnow
 from centrade_api.main import create_app
 
 ORIGIN = "https://centrade.test"

@@ -9,7 +9,7 @@ from typing import Annotated
 import httpx
 import pyotp
 from centrade_api.auth import Principal, current_user, routes, security
-from centrade_api.deps import get_db, utcnow
+from centrade_api.core.deps import get_db, utcnow
 from centrade_core.ids import uuid7
 from centrade_core.models import AuditLog, Session, User
 from fastapi import Cookie, Depends, FastAPI

@@ -16,17 +16,17 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
-from centrade_api.accounts import router as accounts_router
+from centrade_api.accounts.routes import router as accounts_router
 from centrade_api.auth import require_same_origin
 from centrade_api.auth import router as auth_router
-from centrade_api.deps import get_redis, get_session_factory, utcnow
-from centrade_api.errors import install_error_handlers
-from centrade_api.feeds import router as feeds_router
-from centrade_api.instances import router as instances_router
-from centrade_api.logging import configure_logging
-from centrade_api.strategies import router as strategies_router
-from centrade_api.stream import router as stream_router
-from centrade_api.trading import router as trading_router
+from centrade_api.core.deps import get_redis, get_session_factory, utcnow
+from centrade_api.core.errors import install_error_handlers
+from centrade_api.core.logging import configure_logging
+from centrade_api.feeds.routes import router as feeds_router
+from centrade_api.instances.routes import router as instances_router
+from centrade_api.strategies.routes import router as strategies_router
+from centrade_api.stream.routes import router as stream_router
+from centrade_api.trading.routes import router as trading_router
 
 configure_logging()
 log = structlog.get_logger()

@@ -6,16 +6,11 @@ passe par une sonde injectée qui reçoit une référence, jamais une valeur, et
 fonction d'ordre (I11). Refus par défaut : une clé nouvelle ou dont le test n'aboutit pas n'est
 pas vérifiée, ce qui bloque le live (I5).
 
-Source : https://fastapi.tiangolo.com/tutorial/dependencies/dependencies-in-path-operation-decorators/
-"""
+Source : https://fastapi.tiangolo.com/tutorial/dependencies/dependencies-in-path-operation-decorators/"""
 
 from __future__ import annotations
 
-import asyncio
-import json
-from dataclasses import dataclass
-from decimal import Decimal
-from typing import Annotated, Any, Literal, Protocol
+from typing import Annotated, Any
 from uuid import UUID
 
 import structlog
@@ -24,52 +19,38 @@ from centrade_core.ids import uuid7
 from centrade_core.models.trading import Account, Secret
 from centrade_core.secrets import AesGcmSecretStore, SecretStore
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from pydantic import AwareDatetime, BaseModel, ConfigDict, Field, SecretStr, field_validator
 from sqlalchemy import select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from centrade_api.auth import Principal, require_recent_totp, require_role
-from centrade_api.deps import client_ip
-from centrade_api.instances import Cfg, Db, Limit, Now, Viewer, _page_args
-from centrade_api.schemas import Page, encode_cursor
+from centrade_api.accounts.permissions import (
+    PermissionProbe,
+    get_permission_probe,
+    run_probe,
+)
+from centrade_api.accounts.schemas import (
+    AccountCreate,
+    AccountOut,
+    KeyOut,
+    PermissionTestOut,
+    SecretIn,
+)
+from centrade_api.auth import Admin, Viewer, require_recent_totp
+from centrade_api.core.deps import (
+    Cfg,
+    Db,
+    Limit,
+    Now,
+    client_ip,
+)
+from centrade_api.core.pagination import Page, encode_cursor, page_args
 
 log = structlog.get_logger()
 router = APIRouter(prefix="/api/v1", tags=["comptes"])
 
-Admin = Annotated[Principal, Depends(require_role("admin"))]
 # Ajouter ou remplacer une clé est une action dangereuse (SPEC §9) : TOTP de moins de 5 min.
 RecentTotp = Depends(require_recent_totp)
-KeyUsage = Literal["trade", "read"]  # `engine_api` et `webhook` ne se saisissent pas ici
-Verdict = Literal["verified", "refused", "unverified"]
-PROBE_TIMEOUT_S = 10.0
 _KIND = "venue_api_key"
 _REF = {"trade": "secret_ref", "read": "read_secret_ref"}
-
-
-@dataclass(frozen=True, slots=True)
-class KeyPermissions:
-    """Ce que la venue dit d'une clé. None : la venue ne l'a pas dit."""
-
-    trading: bool | None
-    withdrawal: bool | None
-    ip_restricted: bool | None
-
-
-class PermissionProbe(Protocol):
-    """Lecture des permissions d'une clé stockée. Aucune fonction d'ordre (I11)."""
-
-    async def permissions(self, secret_id: UUID) -> KeyPermissions: ...
-
-
-class UnverifiedProbe:
-    """Aucune venue réelle dans cet environnement (SPEC §0.10) : rien n'est constaté."""
-
-    async def permissions(self, secret_id: UUID) -> KeyPermissions:
-        return KeyPermissions(trading=None, withdrawal=None, ip_restricted=None)
-
-
-def get_permission_probe() -> PermissionProbe:
-    return UnverifiedProbe()
 
 
 def get_secret_store(cfg: Cfg) -> SecretStore:
@@ -78,135 +59,6 @@ def get_secret_store(cfg: Cfg) -> SecretStore:
 
 Probe = Annotated[PermissionProbe, Depends(get_permission_probe)]
 Store = Annotated[SecretStore, Depends(get_secret_store)]
-
-
-def verdict(perms: KeyPermissions, usage: KeyUsage) -> Verdict:
-    """Clé de trading : trading autorisé et retrait interdit. Clé de lecture : ni l'un ni
-    l'autre. Retrait possible : refus. Réponse incomplète : non vérifié."""
-    if not isinstance(perms, KeyPermissions):
-        return "unverified"
-    if perms.withdrawal is True:
-        return "refused"
-    if not isinstance(perms.trading, bool) or perms.withdrawal is not False:
-        return "unverified"
-    return "verified" if perms.trading is (usage == "trade") else "refused"
-
-
-async def _probe(
-    probe: PermissionProbe, secret_id: UUID, usage: KeyUsage
-) -> tuple[Verdict, bool | None]:
-    """Rend (verdict, restriction d'IP constatée). Erreur ou délai dépassé : non vérifié."""
-    try:
-        async with asyncio.timeout(PROBE_TIMEOUT_S):
-            perms = await probe.permissions(secret_id)
-    except Exception as exc:  # le message d'une erreur de venue peut porter une clé : type seul
-        log.warning("account_probe_failed", error=type(exc).__name__)
-        return "unverified", None
-    result = verdict(perms, usage)
-    ip = perms.ip_restricted if result == "verified" else None
-    return result, ip if isinstance(ip, bool) else None
-
-
-class AccountCreate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    venue: str = Field(min_length=1, max_length=32, pattern=r"^[a-z][a-z0-9_-]*$")
-    type: Literal["paper", "live"]
-    environment: Literal["production", "sandbox"]
-    label: str = Field(min_length=1, max_length=80)
-    currency: str = Field(pattern=r"^[A-Z0-9]{2,10}$")
-    # Chaîne décimale, dans `currency`. Bornes de NUMERIC(38, 18).
-    capital_cap: Decimal | None = Field(
-        default=None, gt=0, lt=Decimal("1e20"), max_digits=38, decimal_places=18
-    )
-
-    @field_validator("capital_cap", mode="before")
-    @classmethod
-    def _decimal_string(cls, v: object) -> object:
-        if v is not None and not isinstance(v, str):
-            raise ValueError("chaîne décimale attendue")  # jamais de float pour de l'argent
-        return v
-
-
-class SecretIn(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    usage: KeyUsage
-    key: SecretStr = Field(min_length=1, max_length=512)
-    secret: SecretStr = Field(min_length=1, max_length=1024)
-
-    def value(self) -> SecretStr:
-        return SecretStr(
-            json.dumps(
-                {"key": self.key.get_secret_value(), "secret": self.secret.get_secret_value()}
-            )
-        )
-
-
-class KeyOut(BaseModel):
-    """Tout ce qu'on dit d'une clé : jamais sa valeur, ni un préfixe, ni une empreinte."""
-
-    usage: str
-    key_version: int
-    stored_at: AwareDatetime
-    rotated_at: AwareDatetime | None
-    last_used_at: AwareDatetime | None
-
-    @classmethod
-    def of(cls, s: Secret) -> KeyOut:
-        return cls(
-            usage=s.usage,
-            key_version=s.key_version,
-            stored_at=s.created_at,
-            rotated_at=s.rotated_at,
-            last_used_at=s.last_used_at,
-        )
-
-
-class AccountOut(BaseModel):
-    id: UUID
-    venue: str
-    type: str
-    environment: str
-    label: str
-    currency: str
-    capital_cap: str | None  # chaîne décimale
-    trade_key: KeyOut | None
-    read_key: KeyOut | None
-    permissions_verified_at: AwareDatetime | None  # None : non vérifié, live bloqué
-    ip_restricted: bool | None  # None : inconnu
-    created_at: AwareDatetime
-    updated_at: AwareDatetime
-
-    @classmethod
-    def of(cls, a: Account, secrets: dict[UUID, Secret]) -> AccountOut:
-        def key(ref: UUID | None) -> KeyOut | None:
-            return KeyOut.of(secrets[ref]) if ref in secrets else None
-
-        return cls(
-            id=a.id,
-            venue=a.venue,
-            type=a.type,
-            environment=a.environment,
-            label=a.label,
-            currency=a.currency,
-            capital_cap=None if a.capital_cap is None else _money(a.capital_cap),
-            trade_key=key(a.secret_ref),
-            read_key=key(a.read_secret_ref),
-            permissions_verified_at=a.permissions_verified_at,
-            ip_restricted=a.ip_restricted,
-            created_at=a.created_at,
-            updated_at=a.updated_at,
-        )
-
-
-class PermissionTestOut(BaseModel):
-    result: Verdict
-    account: AccountOut
-
-
-def _money(value: Decimal) -> str:
-    return format(value.normalize(), "f")
 
 
 async def _accounts_out(db: AsyncSession, accounts: list[Account]) -> list[AccountOut]:
@@ -240,7 +92,7 @@ async def list_accounts(
     _: Viewer, db: Db, now: Now, cursor: str | None = None, limit: Limit = 50
 ) -> Page[AccountOut]:
     stmt = select(Account)
-    if (at := _page_args(cursor)) is not None:
+    if (at := page_args(cursor)) is not None:
         stmt = stmt.where(tuple_(Account.created_at, Account.id) < tuple_(*at))
     rows = (
         await db.scalars(
@@ -315,7 +167,7 @@ async def check_permissions(
     account = await _locked(db, account_id)
     if account.secret_ref is None:
         raise HTTPException(409, "Aucune clé de trading à tester.")
-    result, ip_restricted = await _probe(probe, account.secret_ref, "trade")
+    result, ip_restricted = await run_probe(probe, account.secret_ref, "trade")
     account.permissions_verified_at = now if result == "verified" else None
     account.ip_restricted = ip_restricted
     account.updated_at = now
@@ -358,7 +210,7 @@ async def rotate_secret(
     if old is None:
         raise HTTPException(409, "Aucune clé à remplacer.")
     new = await store.rotate(db, old, owner=account.id, value=body.value(), now=now)
-    result, ip_restricted = await _probe(probe, new, body.usage)
+    result, ip_restricted = await run_probe(probe, new, body.usage)
     target, ip = f"account:{account_id}", client_ip(request)
     if result != "verified":
         await db.rollback()

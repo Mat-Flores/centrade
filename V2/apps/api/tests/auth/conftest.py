@@ -27,7 +27,7 @@ from centrade_api.auth import (
     routes,
     security,
 )
-from centrade_api.deps import get_db, utcnow
+from centrade_api.core.deps import get_db, utcnow
 from centrade_api.main import create_app
 from centrade_core.ids import uuid7
 from centrade_core.logging import configure_logging

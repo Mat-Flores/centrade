@@ -36,7 +36,7 @@ from centrade_api.auth.deps import (
     set_cookie,
     unauthorized,
 )
-from centrade_api.deps import client_ip, get_db, utcnow
+from centrade_api.core.deps import client_ip, get_db, utcnow
 
 log = structlog.get_logger()
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
