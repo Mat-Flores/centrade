@@ -92,9 +92,8 @@ export const InstanceSchema = z.object({
   realized_pnl: observed(z.array(MoneySchema).nullable()),
   closed_trades: observed(z.number().int().nullable()),
   open_positions: observed(z.number().int().nullable()),
-  // shortcut: absent from the server contract at the time of writing (backend commit in progress);
-  // make it exact (drop `.nullish()`) once `balances` ships in InstanceOut.
-  balances: observed(z.array(BalanceSchema).nullable()).nullish(),
+  // Last observed balances, dated by their oldest row; null = never observed.
+  balances: observed(z.array(BalanceSchema).nullable()),
   created_at: z.string(),
   server_time: z.string(),
 });

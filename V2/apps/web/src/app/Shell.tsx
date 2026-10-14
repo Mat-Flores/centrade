@@ -1,11 +1,17 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 import { fr } from "@/i18n/fr";
+import { useServerNow } from "@/lib/clock";
+import { degradation } from "@/lib/cockpit";
+import { connectionSummary } from "@/lib/connection";
+import { healthQuery, instancesQuery } from "@/lib/instances";
 import { endSession, logout, type Me } from "@/lib/session";
+import { useCockpitStream } from "@/lib/stream";
 import { SoonButton } from "@/ui/ui";
 
 import { ColorDialog } from "./ColorDialog";
+import { DegradationProvider } from "./degradation";
 import { InlineError } from "./common";
 import { Link } from "./Link";
 import { Menu, type MenuItem } from "./Menu";
@@ -31,6 +37,15 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }) {
   const main = useRef<HTMLElement>(null);
   const signOut = useMutation({ mutationFn: logout, onSuccess: endSession });
 
+  // The cockpit's single stream, opened once here: every screen reads the same cache.
+  const instances = useQuery(instancesQuery);
+  const health = useQuery(healthQuery);
+  const { silentMs } = useCockpitStream();
+  const nowMs = Date.parse(useServerNow());
+  const report = health.isError ? undefined : health.data;
+  const degraded = degradation({ streamSilentMs: silentMs, health: report, healthFailed: health.isError });
+  const conn = connectionSummary(instances.data?.items, degraded, nowMs);
+
   // Screen change: the content takes the focus (the screen reader announces the title). Never on the first display.
   const page = route.page;
   useEffect(() => {
@@ -55,9 +70,9 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }) {
         </nav>
         <Menu className="nav-menu" label={fr.nav.menu} panelLabel={fr.nav.main} align="left" items={navItems} />
         <span className="spacer" />
-        {/* Open session only: no bot state is read yet, and none is assumed. Neutral dot, no status role. */}
-        <Link className="conn" to={{ page: "instances" }} data-tip={fr.shell.sessionOpenTip}>
-          <i className="conn-dot" aria-hidden="true" /><span>{fr.shell.sessionOpen}</span>
+        {/* The dot is colored only for what is observed; "Session ouverte" while nothing is loaded. */}
+        <Link className={`conn ${conn.tone === "neutral" ? "" : conn.tone}`} to={{ page: "instances" }} data-tip={conn.tip}>
+          <i className="conn-dot" aria-hidden="true" /><span>{conn.text}</span>
         </Link>
         <SoonButton variant="danger" small>{fr.shell.emergencyStop}</SoonButton>
         <Menu ghost btnClassName="acct" ariaLabel={fr.shell.account(me.email)} items={account}
@@ -65,7 +80,7 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }) {
           head={<><b>{me.email}</b><span>{fr.shell.accountRole(fr.roles[me.role])}</span></>} />
       </header>
       <InlineError message={signOut.isError ? fr.shell.logoutFailed : null} />
-      <main id="contenu" ref={main} tabIndex={-1} style={{ outline: "none" }}>{children}</main>
+      <main id="contenu" ref={main} tabIndex={-1} style={{ outline: "none" }}><DegradationProvider value={degraded}>{children}</DegradationProvider></main>
       <ColorDialog open={colors} onClose={() => setColors(false)} />
     </>
   );

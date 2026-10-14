@@ -25,6 +25,7 @@ export function makeInstance(over: Partial<Instance> & { stateValue?: Instance["
     realized_pnl: { value: age === null ? null : [], observed_at: observedAt, stale: false },
     closed_trades: { value: age === null ? null : 0, observed_at: observedAt, stale: false },
     open_positions: { value: age === null ? null : 0, observed_at: observedAt, stale: false },
+    balances: { value: null, observed_at: null, stale: false },
     created_at: iso(3600),
     server_time: iso(0),
     ...rest,

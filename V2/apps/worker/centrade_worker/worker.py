@@ -435,7 +435,7 @@ class Worker:
         # cadence (their observation date advances); never every round.
         sig = (
             status.state, status.mode, snap.positions, snap.orders, snap.stops, snap.closed,
-            snap.balances,
+            frozenset(b.currency for b in snap.balances),  # not the amounts: they move every tick
         )  # fmt: skip
         if self._note_instance(ref.instance_id, sig):
             self._notes.extend(n for n in written if n[0] != "alert")

@@ -1,7 +1,7 @@
 import { fr } from "@/i18n/fr";
 
 import { ENGINE_STALE_MS, stateView, wantedDiffers } from "./cockpit";
-import { sumDecimals } from "./decimal";
+import { signOf, sumDecimals } from "./decimal";
 import { formatMoney, formatPnl, freshness } from "./format";
 import type { DesiredState, Instance, Observed } from "./instances";
 
@@ -59,6 +59,14 @@ export interface RowSummary {
   closedTrades: string;
   /** One line per currency, never added across currencies. */
   pnl: string[];
+  /** Sign of each `pnl` line (0 when unknown or empty): the caller colors, the text already carries the sign. */
+  pnlSigns: (-1 | 0 | 1)[];
+  /** "12 +2" (closed trades, open positions), or "inconnu". */
+  tradesCompact: string;
+  tradesStale: boolean;
+  /** Whether any figure of the row is stale. */
+  balancesStale: boolean;
+  pnlStale: boolean;
   balances: BalanceLine[] | null;
   balancesText: string[];
 }
@@ -88,6 +96,14 @@ export function summarizeRow(instance: Instance, nowMs: number): RowSummary {
         : pnl.value.length === 0
           ? [staleMark(fr.instances.noClosedTrade, pnl.stale)]
           : pnl.value.map((m) => staleMark(formatPnl(m.amount, m.currency), pnl.stale)),
+    pnlSigns: pnl.kind === "unknown" ? [0] : pnl.value.length === 0 ? [0] : pnl.value.map((m) => signOf(m.amount)),
+    tradesCompact:
+      trades.kind === "unknown"
+        ? fr.observed.unknown
+        : `${trades.value}${positions.kind === "known" && positions.value > 0 ? ` +${positions.value}` : ""}`,
+    tradesStale: (trades.kind === "known" && trades.stale) || (positions.kind === "known" && positions.stale),
+    balancesStale: balances.kind === "known" && balances.stale,
+    pnlStale: pnl.kind === "known" && pnl.stale,
     balances: balances.kind === "unknown" ? null : balances.value,
     balancesText:
       balances.kind === "unknown"

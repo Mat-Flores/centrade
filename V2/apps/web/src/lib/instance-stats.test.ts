@@ -125,3 +125,23 @@ describe("groupTotals", () => {
     expect(t.balances[0]!.amount).toBe("10.3");
   });
 });
+
+describe("summarizeRow: compact figures", () => {
+  it("signs each currency line apart, never adding currencies", () => {
+    const row = summarizeRow(makeInstance({ realized_pnl: pnl([usdt("12.5"), { currency: "BTC", amount: "-0.01", fees: "0" }]) }), NOW);
+    expect(row.pnlSigns).toEqual([1, -1]);
+    expect(row.pnl).toHaveLength(2);
+  });
+
+  it("says closed trades and open positions together, and unknown rather than zero", () => {
+    const known = summarizeRow(makeInstance({ closed_trades: { value: 12, observed_at: iso(2), stale: false }, open_positions: { value: 2, observed_at: iso(2), stale: false } }), NOW);
+    expect(known.tradesCompact).toBe("12 +2");
+    expect(summarizeRow(makeInstance({ age: null }), NOW).tradesCompact).toBe("inconnu");
+  });
+
+  it("flags a stale figure instead of presenting it as current", () => {
+    const row = summarizeRow(makeInstance({ balances: bal([{ currency: "USDT", free: "1", total: "2" }], 120) }), NOW);
+    expect(row.balancesStale).toBe(true);
+    expect(row.balancesText[0]).toContain("(périmé)");
+  });
+});

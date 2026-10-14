@@ -22,7 +22,6 @@ from centrade_core.models.trading import (
 )
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 UNREACHABLE_RULE = "engine_unreachable"
@@ -136,7 +135,7 @@ async def apply_observation(
         # of this snapshot (I4); nothing else reads the balances.
         async with s.begin_nested():
             await _balances(s, instance_id, snap)
-    except SQLAlchemyError as exc:
+    except Exception as exc:  # any failure: the balance must never cost the rest (I4)
         log.error(
             "balance_projection_failed", instance_id=str(instance_id), error=type(exc).__name__
         )

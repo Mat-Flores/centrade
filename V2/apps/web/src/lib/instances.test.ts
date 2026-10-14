@@ -24,7 +24,7 @@ describe("InstanceSchema", () => {
     expect(parsed.open_positions.value).toBeNull();
   });
 
-  it.each(["strategy", "account", "started_at", "realized_pnl", "closed_trades", "open_positions"])("refuses a response without %s", (field) => {
+  it.each(["strategy", "account", "started_at", "realized_pnl", "closed_trades", "open_positions", "balances"])("refuses a response without %s", (field) => {
     expect(InstanceSchema.safeParse(without(wire(), field)).success).toBe(false);
   });
 
@@ -33,7 +33,7 @@ describe("InstanceSchema", () => {
     expect(InstanceSchema.safeParse(body).success).toBe(false);
   });
 
-  it("accepts balances while absent from the server contract, and reads them when present", () => {
+  it("reads balances, and refuses a malformed one", () => {
     expect(InstanceSchema.safeParse(wire()).success).toBe(true);
     const withBalances = { ...wire(), balances: { value: [{ currency: "USDT", free: "10", total: "12" }], observed_at: null, stale: false } };
     expect(InstanceSchema.parse(withBalances).balances?.value?.[0]?.total).toBe("12");

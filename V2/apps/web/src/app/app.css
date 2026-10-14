@@ -224,3 +224,14 @@ textarea.code { font-size: 12px; line-height: 1.55; white-space: pre; overflow: 
 .login-card { width: min(400px, 100%); display: grid; gap: 20px; }
 .login-card h1 { margin: 0; font: 700 22px/1.2 var(--font-ui); font-variation-settings: "wdth" 88; }
 .login-card .panel { padding: 24px; display: grid; gap: 20px; }
+
+/* ---------- instances list ---------- */
+.tbl .r .line { display: block; overflow: hidden; text-overflow: ellipsis; }
+.tbl .foot-row .label .line { margin-top: 2px; font-weight: 400; }
+.tbl .r .state-sub { display: flex; flex-wrap: wrap; gap: 2px 8px; margin-top: 4px; white-space: nowrap; }
+.tbl .r .row-err { position: relative; z-index: 1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; white-space: normal; overflow: visible; }
+.tbl .r .act-cell .icon { flex: none; }
+.skel-rows { display: grid; gap: 12px; padding: 20px; }
+.skel { height: 20px; border-radius: var(--radius-sm); background: var(--c-raised); animation: skel 1.4s ease-in-out infinite alternate; }
+@keyframes skel { from { opacity: 0.5; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .skel { animation: none; } }
