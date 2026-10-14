@@ -44,10 +44,16 @@ describe("checkColors", () => {
     expect(w.some((m) => m.startsWith(fr.colors.lowContrast(fr.colors.roles.modeTest, "").split(":")[0]!))).toBe(true);
   });
   it("passes the color blindness preset on both surfaces", () => {
-    const r = PRESETS[1]!.roles!;
-    const hex = { ...r, candleUp: r.gain, candleDown: r.loss, modeTest: "#f2b233", modeBacktest: "#a78bfa" };
-    expect(checkColors(hex, "#12161d")).toEqual([]);
-    expect(checkColors({ ...hex, modeTest: "#8a5c00", modeBacktest: "#6d3fd1" }, "#fbfaf7")).toEqual([]);
+    const preset = PRESETS.find((p) => p.id === "colorblind")!.roles!;
+    // Only the roles the preset leaves to the theme (var(--...)) are resolved here; every other value is the preset's own.
+    const resolve = (tokens: Record<string, string>): ColorRoles =>
+      Object.fromEntries(Object.entries(preset).map(([k, v]) => [k, v.startsWith("var(") ? tokens[v]! : v])) as unknown as ColorRoles;
+    const dark = resolve({ "var(--amber)": "#f2b233", "var(--violet)": "#a78bfa" });
+    const light = resolve({ "var(--amber)": "#8a5c00", "var(--violet)": "#6d3fd1" });
+    expect(dark.gain).toBe(preset.gain);
+    expect(dark.modeLive).toBe(preset.modeLive);
+    expect(checkColors(dark, "#12161d")).toEqual([]);
+    expect(checkColors(light, "#fbfaf7")).toEqual([]);
   });
 });
 

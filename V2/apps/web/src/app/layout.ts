@@ -1,5 +1,5 @@
 // Dashboard layout of an instance: zone order, collapse, sizes. Shared by all instances.
-// In memory only. "Reset the layout" (account menu, Settings) goes back to the default.
+// No consumer yet: wired at the Instance screen step (the account menu no longer offers a reset). In memory only.
 import { useSyncExternalStore } from "react";
 
 export type ZoneId = "balance" | "indicators" | "composition" | "chart" | "pairs" | "journal";

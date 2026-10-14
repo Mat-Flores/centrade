@@ -1,13 +1,13 @@
-/* Jetons repris tels quels de la page de référence de l'opérateur
-   (impeccable.style/gallery/view/b5850eeea1c2e703) : couleurs, polices, hauteurs, espacements.
-   Ajouts propres à Centrade, absents de la référence : --blue (achats, ventes, en cours),
-   --violet (mode backtest) et le thème clair. */
+/* Tokens taken as-is from the operator's reference page
+   (impeccable.style/gallery/view/b5850eeea1c2e703): colors, fonts, heights, spacing.
+   Centrade's own additions, absent from the reference: --blue (buys, sells, in progress),
+   --violet (backtest mode) and the light theme. */
 @import "@fontsource-variable/archivo/wdth.css";
 @import "@fontsource-variable/martian-mono/wdth.css";
 @import "tailwindcss";
 
 :root {
-  /* référence */
+  /* reference */
   --ground: #0e1116;
   --panel: #12161d;
   --raised: #171c25;
@@ -25,17 +25,17 @@
   --amber-ink: #1a1305;
   --mono: "Martian Mono Variable", ui-monospace, Menlo, monospace;
   --sans: "Archivo Variable", system-ui, sans-serif;
-  /* Densité par défaut : menus, listes, formulaires et fenêtres, style classique et aéré. */
+  /* Default density: menus, lists, forms and windows, classic and airy style. */
   --row: 44px; /* hauteur d'une ligne de tableau */
   --row-font: 14px;
-  --head: 56px; /* en-tête de panneau */
+  --head: 56px; /* panel header */
   --cols: 40px; /* ligne des titres de colonnes */
   --bar: 56px; /* barre du haut */
   --btn: 40px;
   --btn-sm: 36px;
   --radius: 10px;
   --radius-sm: 8px;
-  --pad: 20px; /* marge intérieure d'un panneau */
+  --pad: 20px; /* inner padding of a panel */
   --gap: 16px;
   --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
 
@@ -44,13 +44,13 @@
   --blue-heat: rgba(76, 141, 255, 0.16);
   --violet: #a78bfa;
 
-  /* accent : la couleur des commandes principales et de la sélection. Ambre en sombre ; encre en clair, où l'ambre
-     lisible sur fond clair virait au brun. En clair, --amber ne sert plus qu'aux avertissements et au mode test. */
+  /* accent: the color of the main controls and of the selection. Amber in dark; ink in light, where amber
+     readable on a light ground turned brown. In light, --amber is only used for warnings and test mode. */
   --accent: var(--amber);
   --accent-hover: var(--amber-hover);
   --accent-ink: var(--amber-ink);
 
-  /* rôles : ce sont eux que les composants et le graphique lisent, et que l'opérateur personnalise */
+  /* roles: these are what the components and the chart read, and what the operator customizes */
   --c-bg: var(--ground);
   --c-surface: var(--panel);
   --c-raised: var(--raised);
@@ -80,7 +80,7 @@
 }
 
 :root[data-theme="light"] {
-  /* mêmes teintes, luminosité inversée ; contrastes à 4,5:1 sur --ground */
+  /* same hues, inverted lightness; contrast of 4.5:1 on --ground */
   --ground: #f4f3ef;
   --panel: #fbfaf7;
   --raised: #eceae4;
@@ -100,7 +100,7 @@
   color-scheme: light;
 }
 
-/* Tableau de bord d'une instance : la grille dense de la référence, avec un peu d'air et des coins à peine arrondis. */
+/* An instance's dashboard: the dense grid of the reference, with a little air and barely rounded corners. */
 .dash {
   --row: 28px;
   --row-font: 12px;
@@ -115,7 +115,7 @@
 
 * { box-sizing: border-box; }
 html { background: var(--c-bg); color: var(--c-ink); }
-/* barres de défilement natives masquées : ui/scrollbars.ts dessine les siennes, en surimpression */
+/* native scrollbars hidden: ui/scrollbars.ts draws its own, as an overlay */
 * { scrollbar-width: none; }
 *::-webkit-scrollbar { display: none; }
 body { margin: 0; font-family: var(--font-ui); font-size: 15px; line-height: 1.5; font-variation-settings: "wdth" 100; }

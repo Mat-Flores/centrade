@@ -58,7 +58,8 @@ export function Arrow({ up }: { up: boolean }) {
 
 /** Signed variation: arrow, sign and color (green / red, or blue for what is in progress). Both values are decimal strings.
  *  With `amount`, a click switches the whole interface between % and currency; `still` follows the unit without being clickable. */
-export function Delta({ pct, amount, currency = "", blue, still }: { pct: string; amount?: string; currency?: string; blue?: boolean; still?: boolean }) {
+type DeltaProps = { pct: string; blue?: boolean } & ({ amount?: undefined; currency?: undefined; still?: undefined } | { amount: string; currency: string; still?: boolean });
+export function Delta({ pct, amount, currency, blue, still }: DeltaProps) {
   const money = useUnit() === "money" && amount !== undefined;
   const v = money ? amount : pct;
   const sign = signOf(v);
@@ -76,7 +77,7 @@ export function Copy({ value, children, what = "" }: { value: string; children?:
     void navigator.clipboard?.writeText(value).then(() => { setDone(true); setTimeout(() => setDone(false), 1400); }, () => {});
   };
   return (
-    <button type="button" className={`copy ${done ? "is-done" : ""}`} onClick={copy} data-tip={done ? fr.ui.copied : fr.ui.copy(what)} data-tip-live>
+    <button type="button" className={`copy ${done ? "is-done" : ""}`} onClick={copy} data-tip={done ? fr.ui.copied : fr.ui.copy(what)} data-tip-live aria-label={fr.ui.copyLabel}>
       <span className="copy-t">{children ?? value}</span>
       <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round">
         {done ? <path d="M2.5 6.5 5 9l4.5-5.5" /> : <><rect x="4" y="4" width="6.5" height="6.5" rx="1.2" /><path d="M8 4V2.7A1.2 1.2 0 0 0 6.8 1.5H2.7A1.2 1.2 0 0 0 1.5 2.7v4.1A1.2 1.2 0 0 0 2.7 8H4" /></>}

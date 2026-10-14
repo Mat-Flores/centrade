@@ -1,4 +1,4 @@
-/* Coque de l'application et écrans secondaires. Que des jetons de tokens.css et des classes de ui.css. */
+/* Application shell and secondary screens. Only tokens from tokens.css and classes from ui.css. */
 
 /* ---------- barre du haut ---------- */
 .bar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 12px; height: var(--bar); padding: 0 20px; background: var(--c-bg); border-bottom: 1px solid var(--c-line); }
@@ -10,7 +10,7 @@
 .nav a:hover { color: var(--c-ink); }
 .nav a[aria-current="page"] { color: var(--c-ink); box-shadow: inset 0 -2px 0 var(--c-accent); }
 .nav-menu { display: none; }
-/* connexion : un point, un compte de bots ; le détail au survol */
+/* connection: a dot, a count of bots; the detail on hover */
 .conn { display: inline-flex; align-items: center; gap: 8px; height: var(--btn-sm); padding: 0 12px; border-radius: var(--radius-sm); font: 500 13px var(--font-ui); color: var(--c-mute); text-decoration: none; white-space: nowrap; }
 .conn:hover { background: var(--c-raised); color: var(--c-ink); }
 .conn-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--c-faint); flex: none; }
@@ -28,7 +28,7 @@
 }
 @media (max-width: 560px) { .conn { padding: 0 4px; font-size: 0; gap: 0; } }
 
-/* menu déroulant : Réglages, navigation étroite, actions de ligne */
+/* dropdown menu: settings, narrow navigation, row actions */
 .menu { position: relative; }
 .menu-panel { position: fixed; z-index: 40; min-width: 280px; max-width: calc(100vw - 16px); display: grid; gap: 2px; padding: 8px; background: var(--c-surface); border: 1px solid var(--c-line-2); border-radius: 10px; box-shadow: 0 16px 40px -12px rgb(0 0 0 / 0.5); animation: dlg-in 0.12s var(--ease); transform-origin: top right; }
 .menu-item { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 40px; padding: 0 12px; border: 0; border-radius: 8px; background: none; color: var(--c-ink); font: 500 14px var(--font-ui); text-decoration: none; text-align: left; cursor: pointer; }
@@ -43,7 +43,7 @@
 .mi-hint { font-size: 12.5px; font-weight: 400; color: var(--c-mute); white-space: nowrap; }
 @media (pointer: coarse) { .menu-item { min-height: 44px; } }
 
-/* bande d'arrêt d'urgence */
+/* emergency stop band */
 .kill { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; min-height: 48px; padding: 6px 20px; border-bottom: 1px solid var(--c-warn); font-size: 14px; color: var(--c-ink); }
 .kill strong { color: var(--c-warn); font-weight: 700; }
 .kill .sp { flex: 1; }
@@ -111,7 +111,7 @@
 .dim-stale { opacity: 0.5; }
 .tag-pair { color: var(--c-mute); }
 
-/* pastille d'état : un mot et un âge, jamais la couleur seule */
+/* status pill: a word and an age, never color alone */
 .chip { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--c-line-2); border-radius: 8px; font: 500 13px var(--font-ui); color: var(--c-ink); white-space: nowrap; }
 .chip.ok { color: var(--c-gain); border-color: color-mix(in srgb, var(--c-gain) 50%, transparent); }
 .chip.warn { color: var(--c-warn); border-color: color-mix(in srgb, var(--c-warn) 55%, transparent); border-style: dashed; }
@@ -119,14 +119,14 @@
 .chip.info { color: var(--c-action); border-color: color-mix(in srgb, var(--c-action) 50%, transparent); }
 .chip .age { color: var(--c-mute); font-weight: 400; }
 
-/* onglets soulignés (Bibliothèque) */
+/* underlined tabs (Library) */
 .utabs { display: flex; gap: 4px; border-bottom: 1px solid var(--c-line); overflow-x: auto; scrollbar-width: none; }
 .utab { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 16px; font: 600 14px var(--font-ui); color: var(--c-mute); text-decoration: none; white-space: nowrap; border-bottom: 2px solid transparent; margin-bottom: -1px; }
 .utab:hover { color: var(--c-ink); }
 .utab[aria-current="page"] { color: var(--c-ink); border-bottom-color: var(--c-accent); }
 .utab:focus-visible { outline-offset: -2px; }
 
-/* choix segmenté */
+/* segmented choice */
 .seg-group { display: grid; gap: 6px; border: 0; padding: 0; margin: 0; }
 .seg-group legend { font-size: 13px; color: var(--c-mute); margin-bottom: 6px; padding: 0; }
 .seg { display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; align-items: baseline; padding: 10px 12px; border: 1px solid var(--c-line-2); border-radius: var(--radius); cursor: pointer; }
@@ -145,7 +145,7 @@
 .form-grid.two { grid-template-columns: 1fr 1fr; }
 @media (max-width: 639px) { .form-grid.two { grid-template-columns: 1fr; } }
 .checks { display: flex; flex-wrap: wrap; gap: 10px 18px; }
-.note { font-size: 12px; color: var(--c-faint); margin: 0; } /* tableau de bord : ne pas élargir */
+.note { font-size: 12px; color: var(--c-faint); margin: 0; } /* dashboard: do not widen */
 .fieldset { border: 0; margin: 0; padding: 0; display: grid; gap: 8px; align-content: start; }
 .fieldset legend { font-size: 14px; color: var(--c-mute); padding: 0; margin-bottom: 6px; }
 
@@ -194,7 +194,7 @@ a.tab[aria-current="page"] { color: var(--c-ink); background: var(--c-surface); 
 .opt.off:hover { border-color: var(--c-line-2); }
 .opt.off .lock { width: 14px; height: 14px; }
 
-/* cases à cocher avec description */
+/* checkboxes with description */
 .check-row { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: start; padding: 12px 14px; border: 1px solid var(--c-line); border-radius: 10px; cursor: pointer; }
 .check-row:hover { border-color: var(--c-line-2); background: var(--c-raised); }
 .check-row input { accent-color: var(--c-accent); width: 18px; height: 18px; margin: 2px 0 0; }
@@ -210,7 +210,7 @@ a.tab[aria-current="page"] { color: var(--c-ink); background: var(--c-surface); 
 
 .preview .r > span { overflow: visible; padding: 0 8px; }
 
-/* stratégies : pastilles de provider, code, contrôles */
+/* strategies: provider pills, code, controls */
 .prov-pills { margin-bottom: 12px; }
 textarea.code { font-size: 12px; line-height: 1.55; white-space: pre; overflow: auto; tab-size: 4; resize: vertical; min-height: 180px; }
 .ft-checks { list-style: none; margin: -8px 0 0; padding: 0; display: grid; border: 1px solid var(--c-line); border-radius: var(--radius-sm); overflow: hidden; }

@@ -57,8 +57,8 @@ function MenuPanel({ id, items, head, style, ariaLabel, onClose, anchor }: {
 }
 
 /** Drop-down menu: opens under its button. `head`: non-clickable header block (account identity, for example). */
-export function Menu({ label, items, head, align = "right", ghost, small = true, className = "", btnClassName, ariaLabel, title }: {
-  label: ReactNode; items: MenuItem[]; head?: ReactNode; align?: "left" | "right"; ghost?: boolean; small?: boolean; className?: string; btnClassName?: string; ariaLabel?: string; title?: string;
+export function Menu({ label, items, head, align = "right", ghost, small = true, className = "", btnClassName, ariaLabel, panelLabel, title }: {
+  label: ReactNode; items: MenuItem[]; head?: ReactNode; align?: "left" | "right"; ghost?: boolean; small?: boolean; className?: string; btnClassName?: string; ariaLabel?: string; panelLabel?: string; title?: string;
 }) {
   const [pos, setPos] = useState<CSSProperties | null>(null);
   const wrap = useRef<HTMLDivElement>(null);
@@ -79,7 +79,7 @@ export function Menu({ label, items, head, align = "right", ghost, small = true,
         onClick={() => (open ? close(false) : show())}
         onKeyDown={(e) => { if (e.key === "ArrowDown" && !open) { e.preventDefault(); show(); } }}
       >{label}</Button>
-      {pos && <MenuPanel id={id} items={items} head={head} style={pos} ariaLabel={ariaLabel} onClose={close} anchor={wrap} />}
+      {pos && <MenuPanel id={id} items={items} head={head} style={pos} ariaLabel={panelLabel ?? ariaLabel} onClose={close} anchor={wrap} />}
     </div>
   );
 }

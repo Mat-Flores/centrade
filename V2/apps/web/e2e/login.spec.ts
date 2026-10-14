@@ -1,6 +1,6 @@
 import { expect, test } from "@playwright/test";
 
-import { expectNoViolation, mockAuth, useTheme, watchConsole } from "./support";
+import { expectNoViolation, mockAuth, signIn, useTheme, watchConsole } from "./support";
 
 const LOGIN_API = "**/api/v1/auth/login";
 
@@ -65,6 +65,25 @@ test("the keyboard path works, a 404 is tied to the fields, and the password is 
   // The password never reaches the URL nor the browser storage.
   expect(page.url()).not.toContain("motdepasse");
   expect(await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }))).not.toContain("motdepasse");
+});
+
+test("the code step stays pending until /auth/me is refetched, so the code cannot be sent twice", async ({ page }) => {
+  const state = await mockAuth(page);
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/api/v1/auth/me", async (route) => {
+    if (state.authenticated) await gate; // the refetch that follows the accepted code
+    await route.fallback();
+  });
+  await signIn(page);
+  await page.getByLabel("Code").fill("123456");
+  await page.getByRole("button", { name: "Valider le code" }).click();
+
+  await expect(page.getByRole("button", { name: "Vérification en cours…" })).toBeDisabled();
+  await page.locator("form").evaluate((form: HTMLFormElement) => form.requestSubmit());
+  release();
+  await expect(page.getByRole("heading", { level: 1, name: "Instances" })).toBeVisible();
+  expect(state.codes).toEqual(["123456"]);
 });
 
 test("a pending submit disables the button, is announced, and cannot be sent twice", async ({ page }) => {

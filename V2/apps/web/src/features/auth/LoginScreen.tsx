@@ -18,6 +18,7 @@ export function LoginScreen() {
   const [state, setState] = useState<State>({ status: "idle" });
   const [returned, setReturned] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
+  const submitting = useRef(false);
   const field = (name: string) => formRef.current?.elements.namedItem(name) as HTMLInputElement | null;
   const pending = state.status === "pending";
   const failure = state.status === "failed" ? state.failure : null;
@@ -31,26 +32,31 @@ export function LoginScreen() {
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (pending) return;
+    if (submitting.current) return; // synchronous guard: `pending` is stale until the next render
+    submitting.current = true;
     const data = new FormData(event.currentTarget);
     // The password and the code do not survive the submit: the field is emptied at once.
     const secret = field(totp ? "code" : "password");
     if (secret) secret.value = "";
     setState({ status: "pending" });
-    if (!totp) {
-      const result = await submitLogin({ username: String(data.get("username") ?? ""), password: String(data.get("password") ?? "") });
+    try {
+      if (!totp) {
+        const result = await submitLogin({ username: String(data.get("username") ?? ""), password: String(data.get("password") ?? "") });
+        if (result.ok) {
+          setState({ status: "idle" });
+          setStep("totp");
+        } else setState({ status: "failed", failure: result });
+        return;
+      }
+      const result = await submitTotp(String(data.get("code") ?? ""));
       if (result.ok) {
+        // The session exists server side: /auth/me confirms it, and the shell shows. Stay pending until the refetch ends.
+        await queryClient.invalidateQueries({ queryKey: meKey });
         setState({ status: "idle" });
-        setStep("totp");
       } else setState({ status: "failed", failure: result });
-      return;
+    } finally {
+      submitting.current = false;
     }
-    const result = await submitTotp(String(data.get("code") ?? ""));
-    if (result.ok) {
-      // The session exists server side: /auth/me confirms it, and the shell shows.
-      await queryClient.invalidateQueries({ queryKey: meKey });
-      setState({ status: "idle" });
-    } else setState({ status: "failed", failure: result });
   }
 
   const invalid = { "aria-invalid": failure ? true : undefined, "aria-describedby": failure ? messageId : undefined };

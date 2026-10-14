@@ -12,6 +12,7 @@ import { fr } from "@/i18n/fr";
 import { meQuery, type Me } from "@/lib/session";
 import { Button } from "@/ui/ui";
 
+import { ErrorBoundary } from "./ErrorBoundary";
 import { NotFound } from "./NotFound";
 import { href, replace, useRoute, type Route } from "./router";
 import { Shell } from "./Shell";
@@ -59,7 +60,7 @@ function Session({ me }: { me: Me }) {
           exit={reduce ? { opacity: 1 } : { opacity: 0 }}
           transition={reduce ? { duration: 0 } : { duration: 0.16, ease: [0.2, 0.8, 0.2, 1] }}
         >
-          <Screen route={route} />
+          <ErrorBoundary key={key}><Screen route={route} /></ErrorBoundary>
         </motion.div>
       </AnimatePresence>
     </Shell>

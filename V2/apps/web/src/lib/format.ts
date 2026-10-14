@@ -67,7 +67,7 @@ const timestampFormat = new Intl.DateTimeFormat(LOCALE, {
   timeZoneName: "short",
 });
 
-/** Timestamp in Toronto time, time zone shown (EST or EDT). */
+/** Timestamp in Toronto time, time zone shown (HNE or HAE in fr-CA). */
 export function formatTimestamp(iso: string): string {
   return timestampFormat.format(new Date(iso)); // throws RangeError if the date is unreadable
 }

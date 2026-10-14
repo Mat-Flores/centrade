@@ -7,7 +7,6 @@ import { SoonButton } from "@/ui/ui";
 
 import { ColorDialog } from "./ColorDialog";
 import { InlineError } from "./common";
-import { layout } from "./layout";
 import { Link } from "./Link";
 import { Menu, type MenuItem } from "./Menu";
 import { hasNavigated, href, useRoute, type Route } from "./router";
@@ -42,7 +41,6 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }) {
   const account: MenuItem[] = [
     { label: theme === "dark" ? fr.shell.themeToLight : fr.shell.themeToDark, hint: fr.shell.appearance, onSelect: () => setTheme(theme === "dark" ? "light" : "dark") },
     { label: fr.shell.colors, hint: fr.shell.customize, onSelect: () => setColors(true) },
-    { label: fr.shell.resetLayout, hint: fr.shell.dashboard, onSelect: layout.reset },
     { label: fr.shell.settings, hint: fr.shell.fullPage, href: href({ page: "settings" }), current: route.page === "settings" },
     { label: signOut.isPending ? fr.shell.loggingOut : fr.shell.logout, sep: true, onSelect: () => !signOut.isPending && signOut.mutate() },
   ];
@@ -55,12 +53,11 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }) {
         <nav className="nav" aria-label={fr.nav.main}>
           {NAV.map((n) => <Link key={n.label} to={n.to} aria-current={n.on(route) ? "page" : undefined}>{n.label}</Link>)}
         </nav>
-        <Menu className="nav-menu" label={fr.nav.menu} ariaLabel={fr.nav.main} align="left" items={navItems} />
+        <Menu className="nav-menu" label={fr.nav.menu} panelLabel={fr.nav.main} align="left" items={navItems} />
         <span className="spacer" />
-        {/* Open session only: no bot state is read yet, and none is assumed. */}
-        <Link className="conn" to={{ page: "instances" }} data-tip={fr.shell.connectedTip}>
-          {/* role="status" on the text, not the link: on the <a> it would hide the link and its name. */}
-          <i className="conn-dot" aria-hidden="true" /><span role="status">{fr.shell.connected}</span>
+        {/* Open session only: no bot state is read yet, and none is assumed. Neutral dot, no status role. */}
+        <Link className="conn" to={{ page: "instances" }} data-tip={fr.shell.sessionOpenTip}>
+          <i className="conn-dot" aria-hidden="true" /><span>{fr.shell.sessionOpen}</span>
         </Link>
         <SoonButton variant="danger" small>{fr.shell.emergencyStop}</SoonButton>
         <Menu ghost btnClassName="acct" ariaLabel={fr.shell.account(me.email)} items={account}

@@ -23,12 +23,14 @@ export async function fetchMe(signal?: AbortSignal): Promise<Me | null> {
 export const meQuery = queryOptions({ queryKey: meKey, queryFn: ({ signal }) => fetchMe(signal), staleTime: 60_000 });
 
 /** Session over (logout or 401): nothing of the previous account stays in the cache. */
-export function endSession(): void {
+export async function endSession(): Promise<void> {
+  // In-flight requests of the previous account must not land in the cache after the purge.
+  await queryClient.cancelQueries();
   // `me` stays in the cache (mounted observers follow it); everything else of the previous account goes.
   queryClient.removeQueries({ predicate: (query) => query.queryKey[0] !== meKey[0] || query.queryKey[1] !== meKey[1] });
   queryClient.setQueryData(meKey, null);
 }
 
-setUnauthorizedHandler(endSession);
+setUnauthorizedHandler(() => void endSession());
 
 export const logout = () => apiFetch("/auth/logout", z.unknown(), { method: "POST" });
