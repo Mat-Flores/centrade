@@ -1,4 +1,4 @@
-"""Instances et commandes : routes, schémas, demande de commande, vues de sortie."""
+"""Instances and commands: routes, schemas, command request, output views."""
 
 from centrade_api.instances.routes import router
 

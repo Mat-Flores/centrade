@@ -17,8 +17,8 @@ def test_no_secret_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 def test_master_key_is_optional_but_never_defaulted(tmp_path: Path) -> None:
-    """Le worker et les migrations n'en ont pas besoin (moindre privilège) ; qui la demande
-    sans l'avoir reçue échoue."""
+    """The worker and the migrations do not need it (least privilege); whoever asks for it
+    without having received it fails."""
     s = Settings(redis_url="redis://r:6379/0", postgres_password_file=tmp_path / "pw")
     assert s.master_key_file is None and s.engine_failure_injection is False
     with pytest.raises(ValueError, match="clé maître"):
@@ -44,7 +44,7 @@ def test_production_image_has_no_test_helper_modules() -> None:
     lines = (root / ".dockerignore").read_text(encoding="utf-8").splitlines()
     for helper in ("apps/api/centrade_api/testing.py", "apps/worker/centrade_worker/testing.py"):
         assert (root / helper).is_file()
-        # Exclu après la ligne qui admet son dossier : dans .dockerignore, la dernière gagne.
+        # Excluded after the line that admits its folder: in .dockerignore, the last one wins.
         assert lines.index(helper) > lines.index("!" + helper.rsplit("/", 1)[0]), helper
     for module in root.glob("apps/*/centrade_*/**/*.py"):
         if module.name != "testing.py":
@@ -54,11 +54,11 @@ def test_production_image_has_no_test_helper_modules() -> None:
 def test_worker_does_not_receive_the_master_key() -> None:
     root = Path(__file__).resolve().parents[1]
     compose = (root / "deploy/compose/core.yml").read_text(encoding="utf-8")
-    # Blocs `  nom:` de la section `services:` ; pyyaml n'est pas une dépendance du projet.
+    # `  name:` blocks of the `services:` section; pyyaml is not a project dependency.
     section = compose.split("\nservices:\n", 1)[1].split("\nnetworks:\n", 1)[0]
     services = dict(re.findall(r"^  (\w+):\n((?:(?:    .*)?\n)+)", section, re.M))
     assert {"api", "worker", "migrate"} <= set(services)
     assert "master_key" in services["api"] and "CENTRADE_MASTER_KEY_FILE" in services["api"]
     for name in ("worker", "migrate"):
         assert "master_key" not in services[name].lower(), name
-    assert "MASTER_KEY" not in compose.split("\nservices:\n", 1)[0]  # pas dans l'ancre commune
+    assert "MASTER_KEY" not in compose.split("\nservices:\n", 1)[0]  # not in the common anchor

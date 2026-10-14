@@ -1,7 +1,7 @@
-"""`close_position` et `cancel_entry_order` (SPEC F9, §7, I4) dans le cycle des commandes : envoi,
-effet vérifié par l'instantané, échéance. Elles réduisent le risque : immédiates, jamais retenues
-par la vérification de F9 ni par une instance occupée. Un ordre qui n'est pas une entrée ne
-s'annule jamais."""
+"""`close_position` and `cancel_entry_order` (SPEC F9, §7, I4) in the command cycle: send,
+effect verified by the snapshot, deadline. They reduce risk: immediate, never held back
+by the F9 verification nor by a busy instance. An order that is not an entry is
+never cancelled."""
 
 from datetime import timedelta
 from decimal import Decimal
@@ -23,7 +23,7 @@ def _key() -> dict[str, str]:
 
 
 async def _trading(stack: Stack) -> tuple[httpx.AsyncClient, str, InstanceRef]:
-    """Instance en marche qui tient au moins une position et un ordre d'entrée ouvert."""
+    """Running instance holding at least one position and one open entry order."""
     w = stack.world
     c = await stack.client("operator")
     iid = str((await create_instance(c))["id"])
@@ -43,7 +43,7 @@ async def _trading(stack: Stack) -> tuple[httpx.AsyncClient, str, InstanceRef]:
 
 
 async def _command(stack: Stack, iid: str, type_: str, args: dict[str, Any] | None) -> UUID:
-    """Commande écrite comme le fait l'API, pour les cas que ses routes refusent d'emblée."""
+    """Command written the way the API does it, for cases its routes refuse outright."""
     now = stack.world.clock.now
     cmd = Command(
         id=uuid7(),
@@ -78,8 +78,8 @@ async def test_position_close_is_sent_and_verified_by_the_snapshot(stack: Stack)
     assert cmd["status"] == "verified", cmd
     assert calls == ["close_position"]
     left = {p.position_id for p in (await w.fake.snapshot(ref)).positions}
-    assert left < before and len(before - left) == 1  # celle-là, et elle seule
-    assert (await w.fake.status(ref)).state == "running"  # ni pause ni arrêt
+    assert left < before and len(before - left) == 1  # that one, and that one only
+    assert (await w.fake.status(ref)).state == "running"  # neither pause nor stop
 
 
 async def test_entry_order_cancel_is_sent_and_verified(stack: Stack) -> None:
@@ -100,7 +100,7 @@ async def test_entry_order_cancel_is_sent_and_verified(stack: Stack) -> None:
     assert calls == ["cancel_entry_order"]
     assert (await w.fake.snapshot(ref)).orders == ()
     held = {p.position_id for p in (await w.fake.snapshot(ref)).positions}
-    assert held  # les positions ne sont pas touchées
+    assert held  # positions are not touched
 
 
 async def test_cancel_rejects_an_order_that_is_not_an_entry(stack: Stack) -> None:
@@ -115,7 +115,7 @@ async def test_cancel_rejects_an_order_that_is_not_an_entry(stack: Stack) -> Non
         price=Decimal("100"),
         status="open",
     )
-    w.fake._insts[ref.instance_id].orders[exit_order.order_id] = exit_order  # sortie en attente
+    w.fake._insts[ref.instance_id].orders[exit_order.order_id] = exit_order  # pending exit
     calls = spy(w.fake)
 
     refused = await _command(stack, iid, "cancel_entry_order", {"order_id": exit_order.order_id})
@@ -133,7 +133,7 @@ async def test_cancel_rejects_an_order_that_is_not_an_entry(stack: Stack) -> Non
     assert "introuvable" in results[unknown]["result"]["reason"]
     assert "order_id manquant" in results[empty]["result"]["reason"]
     assert "position_id manquant" in results[no_position]["result"]["reason"]
-    assert calls == []  # rien n'a été envoyé au moteur
+    assert calls == []  # nothing was sent to the engine
     assert exit_order.order_id in {o.order_id for o in (await w.fake.snapshot(ref)).orders}
 
 
@@ -144,8 +144,8 @@ async def test_i04_close_and_cancel_are_never_held_back_by_the_f9_check(
     w = stack.world
     snap = await w.fake.snapshot(ref)
     position_id, order_id = snap.positions[0].position_id, snap.orders[0].order_id
-    # Tout ce que la vérification refuse : mode faux, configuration dérivée, image changée,
-    # relevés périmés, et une reprise des entrées restée sans effet (instance occupée).
+    # Everything the verification refuses: wrong mode, drifted configuration, changed image,
+    # stale snapshots, and an entries resume left without effect (busy instance).
     for failure in (Failure.LIE_MODE, Failure.DRIFT, Failure.SLOW, Failure.IGNORE_PAUSE):
         w.fake.set_failure(ref, failure)
     busy = await _command(stack, iid, "resume_entries", None)
@@ -153,7 +153,7 @@ async def test_i04_close_and_cancel_are_never_held_back_by_the_f9_check(
 
     close = await _command(stack, iid, "close_position", {"position_id": position_id})
     cancel = await _command(stack, iid, "cancel_entry_order", {"order_id": order_id})
-    w.clock.advance(600)  # worker longtemps absent : elles n'expirent pas avant l'envoi
+    w.clock.advance(600)  # worker absent for a long time: they do not expire before sending
     await w.worker.run_once()
 
     assert {"close_position", "cancel_entry_order"} <= set(calls)
@@ -166,7 +166,7 @@ async def test_i04_close_and_cancel_are_never_held_back_by_the_f9_check(
         assert cmd["dispatched_at"] is not None and cmd["status"] == "acknowledged", cmd
     assert (await get(c, f"/api/v1/commands/{busy}"))["status"] in ("failed", "timed_out")
 
-    # Le relevé redevient frais : l'effet est observé, les deux commandes sont vérifiées.
+    # The snapshot is fresh again: the effect is observed, both commands are verified.
     w.fake.set_failure(ref, Failure.SLOW, on=False)
     await w.worker.run_once()
     for cid in (close, cancel):
@@ -181,7 +181,7 @@ async def test_close_without_engine_response_times_out_and_is_visible(stack: Sta
     cid = await _command(stack, iid, "close_position", {"position_id": position_id})
 
     await w.worker.run_once()
-    assert (await get(c, f"/api/v1/commands/{cid}"))["status"] == "dispatched"  # jamais rejouée
+    assert (await get(c, f"/api/v1/commands/{cid}"))["status"] == "dispatched"  # never replayed
     w.clock.advance(31)
     await w.worker.run_once()
     assert (await get(c, f"/api/v1/commands/{cid}"))["status"] == "timed_out"

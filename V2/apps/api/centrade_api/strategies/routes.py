@@ -1,9 +1,9 @@
-"""Registre de stratégies (SPEC F1, §7, §8).
+"""Strategy registry (SPEC F1, §7, §8).
 
-Une version déposée est immuable : aucune route ne change son manifest, son code ni sa politique
-de sortie, seul son statut avance. Les contrôles (manifest, code source) sont ceux de l'adaptateur
-du type de moteur du manifest ; ils sont purs et tournent ici, à l'écriture. Une version refusée
-n'est pas enregistrée.
+A deposited version is immutable: no route changes its manifest, its code or its exit policy,
+only its status advances. The checks (manifest, source code) are those of the adapter of the
+manifest's engine type; they are pure and run here, at write time. A refused version is not
+recorded.
 """
 
 from __future__ import annotations
@@ -114,9 +114,9 @@ async def create_version(
 ) -> VersionDetail:
     manifest, errors = check_version(body.manifest, body.code)
     if errors:
-        raise HTTPException(422, errors)  # rien n'est enregistré
+        raise HTTPException(422, errors)  # nothing is recorded
     code_hash = fingerprint({"code": body.code, "manifest": manifest})
-    # Verrou de ligne : les dépôts d'une même stratégie sont sérialisés, les numéros se suivent.
+    # Row lock: deposits for the same strategy are serialized, numbers follow each other.
     await _strategy(db, strategy_id, lock=True)
     replay = await db.scalar(
         select(StrategyVersion).where(

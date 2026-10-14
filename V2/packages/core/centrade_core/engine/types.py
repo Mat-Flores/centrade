@@ -1,4 +1,4 @@
-"""Types du contrat moteur (SPEC §7). Rien ici ne nomme un moteur précis."""
+"""Types of the engine contract (SPEC §7). Nothing here names a specific engine."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pydantic import AwareDatetime, BaseModel, BeforeValidator, ConfigDict, Fiel
 
 
 def _decimal_only(v: Any) -> Any:
-    """Argent : jamais de float (règle 5). Chaînes et entiers acceptés, valeur finie exigée."""
+    """Money: never float (rule 5). Strings and integers accepted, finite value required."""
     if isinstance(v, float):
         raise ValueError("float interdit : fournir une chaîne décimale ou un Decimal")
     if isinstance(v, (str, int, Decimal)):
@@ -21,9 +21,9 @@ def _decimal_only(v: Any) -> Any:
     return v
 
 
-# Sérialisé en chaîne décimale en JSON (comportement natif de Pydantic pour Decimal).
+# Serialized as a decimal string in JSON (Pydantic's native behaviour for Decimal).
 Dec = Annotated[Decimal, BeforeValidator(_decimal_only)]
-# `asset_class:venue:symbol`, ex. crypto:binance:BTC/USDT
+# `asset_class:venue:symbol`, e.g. crypto:binance:BTC/USDT
 Symbol = Annotated[str, StringConstraints(pattern=r"^[a-z_]+:[a-z0-9_-]+:[^\s:]+$")]
 
 Mode = Literal["backtest", "paper", "live"]
@@ -51,7 +51,7 @@ class Capabilities(Model):
     supports_reduce: bool
     supports_close_position: bool
     supports_cancel_entry_order: bool
-    stop_on_venue: dict[str, bool]  # par venue
+    stop_on_venue: dict[str, bool]  # per venue
     native_limits: tuple[str, ...]
     supports_sandbox: bool
 
@@ -65,7 +65,7 @@ class Exits(Model):
     stoploss: Dec
     stop_on_venue: bool
     trailing: dict[str, Any] = Field(default_factory=dict)
-    take_profit: dict[str, Dec] = Field(default_factory=dict)  # minutes écoulées -> gain visé
+    take_profit: dict[str, Dec] = Field(default_factory=dict)  # minutes elapsed -> target gain
 
 
 class Manifest(Model):
@@ -90,15 +90,15 @@ class ValidationResult(Model):
 
 
 class Deployment(Model):
-    """Ce que le worker fixe au déploiement, depuis le registre et la table `engines` (I10)."""
+    """What the worker sets at deployment, from the registry and the `engines` table (I10)."""
 
-    fingerprint: str = Field(min_length=1)  # à porter sur ce qui tourne (étiquette du conteneur)
+    fingerprint: str = Field(min_length=1)  # to carry on what runs (container label)
     config_hash: str
-    code: str  # source de la version de stratégie ; vide pour une instance simulée
+    code: str  # source of the strategy version; empty for a simulated instance
     image: str
     digest: str
     engine_version: str
-    memory_mb: int | None = None  # réservations de `engines` ; None : défaut de l'adaptateur
+    memory_mb: int | None = None  # `engines` reservations; None: the adapter's default
     cpus: Dec | None = None
 
 
@@ -109,7 +109,7 @@ class InstanceSpec(Model):
     account_id: str
     manifest: Manifest
     params: dict[str, Any] = Field(default_factory=dict)
-    # Toujours renseigné par le worker ; None (tests de contrat) : la vérification de F9 refuse.
+    # Always set by the worker; None (contract tests): the F9 verification refuses.
     deployment: Deployment | None = None
 
 
@@ -119,35 +119,35 @@ class InstanceRef(Model):
 
 
 class EngineConfig(Model):
-    """Clés possédées par la plateforme, valeurs en chaînes (comparaison exacte)."""
+    """Keys owned by the platform, values as strings (exact comparison)."""
 
     values: dict[str, str]
-    # Clés propres au mode ou à l'instance : hors du hash de configuration (I10).
+    # Mode- or instance-specific keys: outside the configuration hash (I10).
     mode_keys: frozenset[str] = frozenset()
-    # Clés que le moteur ne sait pas faire relire. Déclarées ici, jamais ignorées en silence :
-    # une clé possédée absente de la relecture et absente de cette liste est une dérive (F9).
+    # Keys the engine cannot have re-read. Declared here, never silently ignored:
+    # an owned key absent from the re-read and absent from this list is a drift (F9).
     unreadable: frozenset[str] = frozenset()
 
 
 class EffectiveConfig(Model):
-    """Ce qui tourne réellement, relu dans le moteur (F9). `values` porte les mêmes noms de clés
-    que `EngineConfig.values` ; leur forme reste celle du moteur (`config_drift` la compare)."""
+    """What actually runs, re-read from the engine (F9). `values` carries the same key names
+    as `EngineConfig.values`; their form stays the engine's (`config_drift` compares it)."""
 
     values: dict[str, str]
     observed_at: AwareDatetime
-    fingerprint: str | None = None  # empreinte portée par ce qui tourne ; None : illisible
-    engine_version: str | None = None  # version que le moteur déclare ; None : illisible
+    fingerprint: str | None = None  # fingerprint carried by what runs; None: unreadable
+    engine_version: str | None = None  # version the engine declares; None: unreadable
 
 
 class Drift(Model):
     key: str
-    expected: str | None  # None : clé non générée
-    observed: str | None  # None : absente de la relecture
+    expected: str | None  # None: key not generated
+    observed: str | None  # None: absent from the re-read
 
 
 class InstanceStatus(Model):
     state: ObservedState
-    mode: Mode | None  # mode observé ; None si inconnu
+    mode: Mode | None  # observed mode; None if unknown
     observed_at: AwareDatetime
 
 
@@ -178,11 +178,11 @@ class Balance(Model):
 
 class Stop(Model):
     position_id: str
-    price: Dec | None  # None : stop absent
+    price: Dec | None  # None: no stop
     held_by: Literal["engine", "venue"]
 
 
-# Énumération canonique des causes de sortie (SPEC F10). Toute autre valeur est lue `unknown`.
+# Canonical enumeration of exit causes (SPEC F10). Any other value is read as `unknown`.
 EXIT_CAUSES = (
     "stop_loss",
     "trailing_stop",
@@ -198,8 +198,9 @@ EXIT_CAUSES = (
 
 
 class ClosedTrade(Model):
-    """Position close, relue dans le moteur. `position_id` identifie le trade (unique par instance).
-    Cause absente ou hors de `EXIT_CAUSES` : le worker écrit `unknown`, il ne devine rien."""
+    """Closed position, re-read from the engine. `position_id` identifies the trade (unique per
+    instance).
+    Cause absent or outside `EXIT_CAUSES`: the worker writes `unknown`, it guesses nothing."""
 
     position_id: str
     symbol: Symbol
@@ -221,7 +222,7 @@ class Snapshot(Model):
     balances: tuple[Balance, ...]
     stops: tuple[Stop, ...]
     observed_at: AwareDatetime
-    closed: tuple[ClosedTrade, ...] = ()  # trades clos que le moteur relit encore
+    closed: tuple[ClosedTrade, ...] = ()  # closed trades the engine still re-reads
 
 
 class BacktestSpec(Model):

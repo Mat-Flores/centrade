@@ -1,5 +1,5 @@
-"""Docker local pour les tests du runner : vrai socket proxy (celui de engines.yml), réseau et
-volumes jetables. Tout ce que ces tests créent est supprimé ; rien d'autre n'est touché."""
+"""Local Docker for the runner tests: real socket proxy (engines.yml's), throwaway network and
+volumes. Everything these tests create is deleted; nothing else is touched."""
 
 import os
 import secrets
@@ -38,7 +38,7 @@ def engines_service() -> dict[str, Any]:
 
 @dataclass
 class Stack:
-    raw: Any  # client Docker direct, pour préparer et nettoyer seulement
+    raw: Any  # direct Docker client, only to prepare and clean up
     proxy_url: str
     network: str
     runtime_dir: Path
@@ -83,7 +83,7 @@ def docker_stack(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Stack]:
         raw.images.get(image)
     except DockerException:
         raw.images.pull(image)
-    # Port hôte `None` : Docker en choisit un libre. Les stubs de types ne décrivent pas ce cas.
+    # Host port `None`: Docker picks a free one. The type stubs do not describe this case.
     proxy = raw.containers.run(  # type: ignore[call-overload]
         image,
         detach=True,
@@ -109,7 +109,7 @@ def docker_stack(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Stack]:
         port = bound[0]["HostPort"]
         time.sleep(1)
         runtime = tmp_path_factory.mktemp("run-centrade")
-        os.chmod(runtime, 0o755)  # noqa: S103 (lu par le démon)
+        os.chmod(runtime, 0o755)  # noqa: S103 (read by the daemon)
         assert net.name is not None
         yield Stack(raw, f"tcp://127.0.0.1:{port}", net.name, runtime, ids)
     finally:

@@ -1,5 +1,5 @@
-"""S10 (SPEC §14) : commande sans réponse -> `timed_out`, visible par l'API et dans le flux,
-jamais `verified` ; l'instance s'affiche `unknown`."""
+"""S10 (SPEC §14): unanswered command -> `timed_out`, visible through the API and in the stream,
+never `verified`; the instance displays as `unknown`."""
 
 import asyncio
 from collections.abc import AsyncGenerator
@@ -28,14 +28,14 @@ async def test_s10_unanswered_command_is_timed_out_visible_never_verified(stack:
     gen = stream_messages(
         factory=w.sessions, redis=w.redis, session_id=sid, now=w.clock, cfg=stack.settings
     )
-    assert (await _next(gen)).event == "heartbeat"  # abonné avant que rien ne se passe
+    assert (await _next(gen)).event == "heartbeat"  # subscribed before anything happens
 
     inst = await create_instance(c)
     iid = inst["id"]
     await w.worker.run_once()
     r = await act(c, iid, "resume-entries")
-    await w.worker.run_once()  # running, commande vérifiée
-    w.fake.set_failure(ref_of(iid), Failure.SILENT)  # le moteur se tait
+    await w.worker.run_once()  # running, command verified
+    w.fake.set_failure(ref_of(iid), Failure.SILENT)  # the engine goes silent
     cid = (await act(c, iid, "pause-entries")).json()["command_id"]
 
     await w.worker.run_once()
@@ -52,7 +52,7 @@ async def test_s10_unanswered_command_is_timed_out_visible_never_verified(stack:
     assert r.status_code == 202
 
     seen: list[tuple[str, dict[str, Any]]] = []
-    for _ in range(60):  # le flux a relayé les changements, dans l'ordre
+    for _ in range(60):  # the stream relayed the changes, in order
         ev = await _next(gen)
         if ev.event != "heartbeat":
             seen.append((str(ev.event), dict(ev.data or {})))

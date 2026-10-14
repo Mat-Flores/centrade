@@ -1,4 +1,4 @@
-"""I3 : le mode d'une instance est fixé à la création (trigger en base)."""
+"""I3: an instance's mode is fixed at creation (database trigger)."""
 
 import os
 from datetime import UTC, datetime
@@ -31,7 +31,7 @@ async def test_i03_mode_is_immutable_after_creation(
             ),
             {"i": iid, "e": eid, "n": f"i-{uuid4()}"},
         )
-    for mode in ("live", "paper"):  # même la valeur identique est une écriture sur le mode
+    for mode in ("live", "paper"):  # even an identical value is a write to the mode
         async with session_factory() as s:
             if mode == "paper":
                 await s.execute(
@@ -47,13 +47,13 @@ async def test_i03_mode_is_immutable_after_creation(
 async def test_i03_paper_and_backtest_never_get_a_trading_key(
     session_factory: async_sessionmaker[AsyncSession], tmp_path: Path, keyed_instance: Any
 ) -> None:
-    """Même sur un compte live qui porte une clé : ni déchiffrée, ni écrite pour du paper."""
+    """Even on a live account that holds a key: neither decrypted nor written for paper."""
     from centrade_worker import secrets as worker
 
     key, now = bytes(range(32)), datetime(2026, 1, 1, tzinfo=UTC)
 
-    # Un backtest n'est pas une ligne d'`instances` (contrainte de mode) : la propriété
-    # ci-dessous couvre ce mode et tous les autres.
+    # A backtest is not an `instances` row (mode constraint): the property
+    # below covers this mode and all the others.
     for mode in ("paper",):
         _, instance_id, trade, api = await keyed_instance(mode=mode)
         async with session_factory() as s:
@@ -64,7 +64,7 @@ async def test_i03_paper_and_backtest_never_get_a_trading_key(
                     await worker.write_instance_file(
                         s, tmp_path, instance_id=instance_id, secret_ids=ids, content={"k": "v"}
                     )
-            # Seul l'identifiant de l'API native du moteur lui est remis.
+            # Only the engine's native API identifier is handed to it.
             api_value = await worker.reveal(s, key, secret_id=api, instance_id=instance_id, now=now)
             assert api_value.get_secret_value().startswith("TEST-SECRET-DO-NOT-USE-api")
             path = await worker.write_instance_file(
@@ -122,27 +122,27 @@ async def test_i03_mode_mismatch_forbids_entries_and_raises_an_alert(stack: Any)
     assert (await w.fake.status(ref_of(iid))).state == "running"
     calls = spy(w.fake)
 
-    w.fake.set_failure(ref_of(iid), Failure.LIE_MODE)  # le moteur se déclare live
+    w.fake.set_failure(ref_of(iid), Failure.LIE_MODE)  # the engine declares itself live
     await w.worker.run_once()
 
     (alert,) = await alerts(w, iid, "mode_mismatch")
     assert (alert.severity, alert.invariant, alert.status) == ("critical", "I3", "open")
-    # Le mode observé est enregistré tel quel, jamais remplacé par le mode voulu (I1).
+    # The observed mode is recorded as is, never replaced by the wanted mode (I1).
     row = await instance(w, iid)
     assert (row.mode, row.observed_mode) == ("paper", "live")
     shown = await get(c, f"/api/v1/instances/{iid}")
     assert shown["mode_mismatch"] is True and shown["observed_mode"]["value"] == "live"
-    # Entrées ouvertes malgré l'écart : `pause_entries` est parti d'office, dans le même tour.
+    # Entries open despite the mismatch: `pause_entries` was sent automatically, in the same cycle.
     (pause,) = await commands(w, iid, "pause_entries")
     assert pause.actor == "system:worker" and calls == ["pause_entries"]
     assert (await w.fake.status(ref_of(iid))).state == "exits_only"
     await w.worker.run_once()
     assert (await commands(w, iid, "pause_entries"))[0].status == "verified"
 
-    # Tant que l'écart dure, aucune reprise : refusée à la demande…
+    # While the mismatch lasts, no resume: refused on request...
     r = await act(c, iid, "resume-entries")
     assert r.status_code == 409 and "mode" in r.json()["detail"]
-    # … et, si le mensonge commence après une demande acceptée, refusée juste avant l'envoi.
+    # ... and, if the lie starts after an accepted request, refused just before sending.
     w.fake.set_failure(ref_of(iid), Failure.LIE_MODE, on=False)
     await w.worker.run_once()
     assert (await alerts(w, iid, "mode_mismatch"))[0].status == "resolved"
@@ -159,8 +159,8 @@ async def test_i03_mode_mismatch_forbids_entries_and_raises_an_alert(stack: Any)
 
 
 async def test_i03_mode_is_reread_at_every_start(stack: Any) -> None:
-    """Arrêt puis relance, et redémarrage du worker : chaque démarrage observé relit le mode et
-    la configuration, sans attendre la cadence."""
+    """Stop then restart, and worker restart: each observed start re-reads the mode and
+    the configuration, without waiting for the cadence."""
     from centrade_api.testing import act, ref_of
     from centrade_fake.engine import Failure
     from worker_support import alerts
@@ -172,23 +172,23 @@ async def test_i03_mode_is_reread_at_every_start(stack: Any) -> None:
 
     async def effective_config(ref: Any) -> Any:
         nonlocal reads
-        reads += str(ref.instance_id) == iid  # la base est partagée : cette instance seulement
+        reads += str(ref.instance_id) == iid  # the database is shared: this instance only
         return await real(ref)
 
     w.fake.effective_config = effective_config
     await w.worker.run_once()
-    assert reads == 0  # déjà vérifiée à ce démarrage, et la cadence n'est pas échue
+    assert reads == 0  # already verified at this start, and the cadence is not due
 
     assert (await act(c, iid, "stop")).status_code == 202
     await w.worker.run_once()
-    w.fake.set_failure(ref_of(iid), Failure.LIE_MODE)  # le moteur change pendant l'arrêt
+    w.fake.set_failure(ref_of(iid), Failure.LIE_MODE)  # the engine changes during the stop
     await w.worker.run_once()
     assert (await act(c, iid, "start")).status_code == 202
-    await w.worker.run_once()  # démarrage observé : vérification immédiate
+    await w.worker.run_once()  # observed start: immediate verification
     assert reads == 1
     assert [a.severity for a in await alerts(w, iid, "mode_mismatch")] == ["critical"]
 
-    w.worker = w.make_worker("apres")  # le worker redémarre, le moteur continue
+    w.worker = w.make_worker("apres")  # the worker restarts, the engine carries on
     await w.worker.load_instances()
     await w.worker.run_once()
     assert reads == 2

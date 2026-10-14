@@ -1,4 +1,4 @@
-"""Instances et commandes (lot D1) : paramètres, empreinte de requête, clé d'idempotence par acteur.
+"""Instances and commands (batch D1): parameters, request fingerprint, per-actor idempotency key.
 
 Revision ID: 0004
 Revises: 0003
@@ -17,13 +17,13 @@ depends_on = None
 def upgrade() -> None:
     op.add_column("instances", sa.Column("params", pg.JSONB, nullable=False, server_default="{}"))
     op.add_column("commands", sa.Column("request_hash", sa.Text, nullable=False, server_default=""))
-    # Une clé n'a de sens que pour son auteur : une clé globale révélerait celles des autres.
+    # A key only makes sense for its author: a global key would reveal others' keys.
     op.drop_constraint("uq_commands_idempotency_key", "commands", type_="unique")
     op.create_unique_constraint(
         "uq_commands_actor_idempotency_key", "commands", ["actor", "idempotency_key"]
     )
     op.create_index("ix_commands_status", "commands", ["status"])
-    # Le moteur simulé existe toujours (le worker l'adresse par son type).
+    # The simulated engine always exists (the worker addresses it by its type).
     op.execute(
         "INSERT INTO engines (id, kind, image, version) "
         "SELECT gen_random_uuid(), 'fake', 'centrade/fake', '1' "

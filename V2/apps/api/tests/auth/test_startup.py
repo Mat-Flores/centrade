@@ -1,4 +1,4 @@
-"""Démarrage réel de l'API : configuration lue dans l'environnement, refus sans clé maître."""
+"""Real API startup: configuration read from the environment, refusal without master key."""
 
 import base64
 from pathlib import Path

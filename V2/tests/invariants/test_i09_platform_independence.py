@@ -1,8 +1,8 @@
-"""I9 : arrêter ou redémarrer la plateforme ne touche à aucun conteneur de moteur.
-Côté runner (Docker local requis) : l'arrêt du runner (et donc du worker) laisse les conteneurs en
-marche, et une nouvelle instance du runner les adopte sans les redémarrer.
-Côté worker (FakeEngine, runner doublé) : son arrêt n'envoie rien à aucun moteur ; à la reprise,
-il rattache ce qui tourne sans rien commander et resynchronise sans doublon."""
+"""I9: stopping or restarting the platform touches no engine container.
+Runner side (local Docker required): stopping the runner (and so the worker) leaves the containers
+running, and a new runner instance adopts them without restarting them.
+Worker side (FakeEngine, stubbed runner): its shutdown sends nothing to any engine; on resume,
+it attaches to what is running without ordering anything and resynchronizes without duplicates."""
 
 import asyncio
 import os
@@ -27,7 +27,7 @@ async def test_i09_worker_shutdown_touches_no_container(docker_stack: Stack) -> 
     await runner.create(spec)
     started = await runner.start(spec.instance_id)
 
-    # Arrêt du worker : son client Docker est fermé, il ne reste rien qui pilote le conteneur.
+    # Worker shutdown: its Docker client is closed, nothing is left that drives the container.
     runner._cli().close()
     del runner
 
@@ -67,7 +67,7 @@ async def _running(stack: ApiStack) -> str:
 
 
 def _restarted(w: World, runner: RunnerDouble | None = None) -> Worker:
-    """Nouveau processus de worker devant un moteur qui, lui, a continué de tourner."""
+    """New worker process facing an engine that kept running."""
     return Worker(
         adapters={"fake": w.fake},
         sessions=w.sessions,
@@ -93,13 +93,13 @@ async def test_i09_worker_shutdown_has_no_effect_on_instances(stack: ApiStack) -
     stop = asyncio.Event()
     install_stop_signals(stop)
     try:
-        os.kill(os.getpid(), signal.SIGTERM)  # le signal d'arrêt de Docker
+        os.kill(os.getpid(), signal.SIGTERM)  # Docker's stop signal
         await asyncio.wait_for(worker.run(stop), timeout=5)
     finally:
         for sig in (signal.SIGTERM, signal.SIGINT):
             asyncio.get_running_loop().remove_signal_handler(sig)
 
-    assert stop.is_set() and calls == [] and runner.calls == []  # rien vers le moteur ni Docker
+    assert stop.is_set() and calls == [] and runner.calls == []  # nothing to the engine or Docker
     after = (await w.fake.status(ref_of(iid)), await w.fake.snapshot(ref_of(iid)))
     assert after[0].state == "running" and after[1].positions == before[1].positions
     now = await instance(w, iid)
@@ -119,8 +119,8 @@ async def test_i09_platform_restart_restarts_no_instance(stack: ApiStack) -> Non
     await worker.load_instances()
     await worker.run_once()
 
-    assert calls == []  # ni redéploiement, ni relance, ni commande : le moteur est rattaché
-    assert runner.calls == ["adopt"]  # Docker : une lecture, rien d'autre
+    assert calls == []  # no redeployment, no restart, no command: the engine is attached
+    assert runner.calls == ["adopt"]  # Docker: one read, nothing else
     assert (await w.fake.status(ref_of(iid))).state == "running"
     row = await instance(w, iid)
     assert row.container_ref == runner.containers[0].container_id
@@ -133,19 +133,19 @@ async def test_i09_exits_made_during_outage_are_resynced_without_duplicates(
 ) -> None:
     iid = await _running(stack)
     w, ref = stack.world, ref_of(iid)
-    for _ in range(200):  # jusqu'à tenir une position : sinon le test ne prouverait rien
+    for _ in range(200):  # until it holds a position: otherwise the test would prove nothing
         if (await w.fake.snapshot(ref)).positions:
             break
         w.step(ref, 1)
     await w.worker.run_once()
     assert (await w.projection(ref)).positions
 
-    # Panne : le worker a publié un lot qu'il n'a pas ingéré, puis le moteur continue seul.
+    # Outage: the worker published a batch it did not ingest, then the engine carries on alone.
     w.step(ref, 20)
     pending = await w.drain_engine(ref)
     await w.publish(pending)
     w.clock.advance(300)
-    await w.fake.flatten(ref)  # des sorties passent pendant la panne
+    await w.fake.flatten(ref)  # exits go through during the outage
     emitted = len(pending) + len(w.fake._insts[ref.instance_id].outbox)
 
     async with w.sessions() as s:
@@ -155,14 +155,14 @@ async def test_i09_exits_made_during_outage_are_resynced_without_duplicates(
     worker = _restarted(w)
     await worker.load_instances()
     await worker.run_once()
-    await w.publish(pending)  # le bus relivre le lot : au moins une fois
+    await w.publish(pending)  # the bus redelivers the batch: at least once
     await worker.run_once()
 
     got = await w.projection(ref)
-    assert got.n_events == (known or 0) + emitted  # tout est arrivé, une seule fois
+    assert got.n_events == (known or 0) + emitted  # everything arrived, exactly once
     want = await w.expected(ref)
     assert (got.positions, got.open_orders) == (want.positions, want.open_orders)
-    assert got.positions == frozenset()  # les sorties de la panne se voient
+    assert got.positions == frozenset()  # the outage's exits are visible
     async with w.sessions() as s:
         seqs = (
             await s.scalars(select(Event.seq).where(Event.instance_id == ref.instance_id))
@@ -185,12 +185,12 @@ async def test_i09_orphan_container_is_reported_and_left_intact(stack: ApiStack)
     calls = spy(w.fake)
 
     await worker.load_instances()
-    await worker.load_instances()  # un second démarrage ne double pas l'alerte
+    await worker.load_instances()  # a second start does not duplicate the alert
 
     (alert,) = await alerts(w, unknown)
     assert (alert.rule, alert.target_kind, alert.status) == ("orphan_container", "global", "open")
     assert "orphelin" in alert.message
-    assert runner.calls == ["adopt", "adopt"] and calls == []  # ni arrêté, ni supprimé
+    assert runner.calls == ["adopt", "adopt"] and calls == []  # neither stopped nor removed
 
 
 async def test_i09_different_label_fingerprint_and_missing_container_are_reported(
@@ -210,12 +210,12 @@ async def test_i09_different_label_fingerprint_and_missing_container_are_reporte
     (alert,) = await alerts(w, iid, "fingerprint_mismatch")
     assert alert.invariant == "I10" and alert.status == "open"
 
-    runner.containers = []  # le conteneur rattaché ne tourne plus
+    runner.containers = []  # the attached container is no longer running
     await _restarted(w, runner).load_instances()
     (missing,) = await alerts(w, iid, "container_missing")
     assert missing.severity == "critical"
 
-    # Instance voulue arrêtée : son conteneur absent est normal. Docker muet : rien n'est conclu.
+    # Instance wanted stopped: its absent container is normal. Docker silent: nothing is concluded.
     async with w.sessions.begin() as s:
         await s.execute(update(Instance).where(Instance.id == row.id).values(container_ref="c2"))
     other = await _running(stack)

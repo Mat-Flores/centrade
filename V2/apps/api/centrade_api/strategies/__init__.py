@@ -1,4 +1,4 @@
-"""Registre de stratégies : routes, schémas, contrôles par type de moteur."""
+"""Strategy registry: routes, schemas, checks per engine type."""
 
 from centrade_api.strategies.routes import router
 

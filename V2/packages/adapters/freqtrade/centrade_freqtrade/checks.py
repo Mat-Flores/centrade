@@ -1,10 +1,10 @@
-"""Contrôles statiques d'une version de stratégie (SPEC §7, F10, annexe C) : manifest, paramètres,
-et analyse AST du code source.
+"""Static checks of a strategy version (SPEC §7, F10, annex C): manifest, parameters,
+and AST analysis of the source code.
 
-Le contrôle du code refuse par défaut : imports, noms globaux et décorateurs passent par des listes
-blanches ; toute liaison ou écriture qui vise la plateforme est refusée, quelle qu'en soit la forme
-syntaxique. Il ne remplace ni la configuration possédée ni l'isolation du conteneur : du code
-Python dans le processus du moteur ne se confine pas par analyse statique (limites : ADR 0008).
+The code check refuses by default: imports, global names and decorators go through
+allowlists; any binding or write that targets the platform is refused, whatever its syntactic
+form. It replaces neither the owned configuration nor the container isolation: Python code
+in the engine's process cannot be confined by static analysis (limits: ADR 0008).
 """
 
 from __future__ import annotations
@@ -28,15 +28,15 @@ PLATFORM_HOOKS = frozenset(
         "adjust_trade_position",
         "adjust_entry_price",
         "adjust_order_price",
-        "adjust_exit_price",  # le moteur le refuse avec adjust_order_price (ADR 0008)
+        "adjust_exit_price",  # the engine refuses it with adjust_order_price (ADR 0008)
         "leverage",
     }
 )
 
 
 def _base_names() -> frozenset[str]:
-    """Noms définis par ControlPlaneStrategy, lus dans son source (pas d'import : Freqtrade
-    n'est pas installé côté plateforme) : méthodes et attributs de classe."""
+    """Names defined by ControlPlaneStrategy, read from its source (no import: Freqtrade
+    is not installed on the platform side): methods and class attributes."""
     tree = ast.parse(Path(__file__).with_name("control_plane.py").read_text(encoding="utf-8"))
     cls = next(
         n for n in tree.body if isinstance(n, ast.ClassDef) and n.name == "ControlPlaneStrategy"
@@ -56,18 +56,18 @@ ENGINE = "freqtrade"
 BASE_MODULE = "control_plane"
 BASE_CLASS = "ControlPlaneStrategy"
 
-# Noms qu'une stratégie ne peut ni lier ni écrire : tout ce que la base définit (dérivé de son
-# source) plus les hooks de la plateforme.
+# Names a strategy may neither bind nor write: everything the base defines (derived from its
+# source) plus the platform's hooks.
 PROTECTED_NAMES = _base_names() | PLATFORM_HOOKS
 
-_TALIB = re.compile(r"[A-Z][A-Z0-9_]*")  # fonctions d'indicateurs : jamais un sous-module
-# Liste blanche d'imports : module -> noms permis, par `from … import` comme en attribut du module
-# importé. Aucun de ces noms n'est un module (relevé sur l'image du tag épinglé, ADR 0008).
+_TALIB = re.compile(r"[A-Z][A-Z0-9_]*")  # indicator functions: never a submodule
+# Import allowlist: module -> permitted names, both for `from … import` and as an attribute of the
+# imported module. None of these names is a module (taken from the pinned tag's image, ADR 0008).
 ALLOWED_IMPORTS: dict[str, frozenset[str] | re.Pattern[str]] = {
     BASE_MODULE: frozenset({BASE_CLASS}),
     "__future__": frozenset({"annotations"}),
-    # `freqtrade.strategy.__all__` du tag, sans IStrategy (la base est imposée) ni Trade, Order,
-    # PairLocks (accès à la base de données du moteur).
+    # `freqtrade.strategy.__all__` of the tag, without IStrategy (imposed base), Trade, Order,
+    # PairLocks (access to the engine's database).
     "freqtrade.strategy": frozenset(
         {
             "informative",
@@ -166,7 +166,7 @@ ALLOWED_IMPORTS: dict[str, frozenset[str] | re.Pattern[str]] = {
     ),
     "talib": _TALIB,
     "talib.abstract": _TALIB,
-    "math": frozenset(n for n in dir(math) if not n.startswith("_")),  # ni sous-module ni E/S
+    "math": frozenset(n for n in dir(math) if not n.startswith("_")),  # neither submodule nor I/O
     "datetime": frozenset({"datetime", "timedelta", "timezone", "date", "time", "UTC"}),
     "decimal": frozenset({"Decimal"}),
     "typing": frozenset(
@@ -189,8 +189,8 @@ ALLOWED_IMPORTS: dict[str, frozenset[str] | re.Pattern[str]] = {
     "functools": frozenset({"reduce", "lru_cache", "cache"}),
     "logging": frozenset({"getLogger", "Logger", "DEBUG", "INFO", "WARNING", "ERROR"}),
 }
-# Noms globaux utilisables sans les définir. Aucun accès par chaîne (getattr, vars…), aucune E/S,
-# aucune fabrique de classe (type), aucun décorateur qui délie une méthode de son instance.
+# Global names usable without defining them. No access by string (getattr, vars…), no I/O,
+# no class factory (type), no decorator that unbinds a method from its instance.
 ALLOWED_BUILTINS = frozenset(
     {"abs", "all", "any", "bool", "dict", "divmod", "enumerate", "filter", "float", "frozenset",
      "int", "isinstance", "len", "list", "map", "max", "min", "object", "pow", "print", "property",
@@ -202,19 +202,19 @@ _BUILTIN_NAMES = frozenset(dir(builtins))
 _DECORATORS = frozenset(
     {("freqtrade.strategy", "informative"), ("functools", "lru_cache"), ("functools", "cache")}
 )
-# Attributs que le moteur relit sur la stratégie à chaque tour et que la configuration générée
-# impose au chargement (`StrategyResolver`, tag 2026.9) : les réécrire à chaud contournerait F10.
+# Attributes the engine re-reads on the strategy every round and that the generated configuration
+# imposes at load: rewriting them live would bypass F10.
 CONFIG_IMPOSED_ATTRS = frozenset(
     {"stoploss", "trailing_stop", "trailing_stop_positive", "trailing_stop_positive_offset",
      "trailing_only_offset_is_reached", "minimal_roi", "order_types", "stake_currency",
      "stake_amount", "max_open_trades", "position_adjustment_enable", "unfilledtimeout"}
 )  # fmt: skip
-# Chemins connus, sur des objets quelconques, vers l'exécution de chaînes (pandas), la lecture
-# d'attributs par chaîne (str.format) ou les builtins (cadres d'exécution). Liste noire, donc
-# incomplète par nature : un complément, pas la garantie.
+# Known paths, on arbitrary objects, to string execution (pandas), attribute reading
+# by string (str.format) or builtins (execution frames). Denylist, hence
+# incomplete by nature: a complement, not the guarantee.
 _GADGET_ATTRS = frozenset({"eval", "query", "format", "format_map"})
 _FRAME_ATTR = re.compile(r"(gi|cr|ag|tb|f|co)_[a-z_]+")
-# Seules fonctions qui reçoivent une valeur de configuration : elles en rendent une copie scalaire.
+# Only functions that receive a configuration value: they return a scalar copy of it.
 _CONFIG_CONVERTERS = frozenset({"int", "float", "str", "bool", "len"})
 
 _CONFIG_RULE = (
@@ -233,8 +233,8 @@ def _allowed(module: str, name: str) -> bool:
 
 
 def _bound_names(node: ast.AST) -> Iterator[str]:
-    """Noms que `node` lie, toutes formes de la grammaire confondues (affectation, boucle, `with`,
-    `except`, compréhension, `:=`, `del`, import, définition, paramètre, motif, alias de type)."""
+    """Names that `node` binds, all forms of the grammar combined (assignment, loop, `with`,
+    `except`, comprehension, `:=`, `del`, import, definition, parameter, pattern, type alias)."""
     if isinstance(node, ast.Name) and not isinstance(node.ctx, ast.Load):
         yield node.id
     elif isinstance(node, (*_Def, ast.ClassDef, ast.TypeVar, ast.ParamSpec, ast.TypeVarTuple)):
@@ -256,8 +256,8 @@ def _is_self(node: ast.AST) -> bool:
 
 
 def _config_path(node: ast.AST) -> bool:
-    """`node` désigne la configuration ou l'un de ses sous-objets : `X.config`, puis `[...]`,
-    `.get` et `.get(...)` à volonté."""
+    """`node` designates the configuration or one of its sub-objects: `X.config`, then `[...]`,
+    `.get` and `.get(...)` as often as needed."""
     while True:
         if isinstance(node, ast.Attribute) and node.attr == "config":
             return True
@@ -278,8 +278,8 @@ def _config_path(node: ast.AST) -> bool:
 
 
 def _config_use_ok(node: ast.AST, up: dict[ast.AST, ast.AST]) -> bool:
-    """La configuration se lit et se convertit ; elle ne se lie à aucun nom, ne se passe à
-    aucune fonction, ne se renvoie pas et ne se modifie pas (aucun alias à suivre)."""
+    """The configuration is read and converted; it is not bound to any name, passed to
+    any function, returned or modified (no alias to follow)."""
     parent = up.get(node)
     if isinstance(node, ast.Attribute) and node.attr == "get":
         return isinstance(parent, ast.Call) and parent.func is node
@@ -289,7 +289,7 @@ def _config_use_ok(node: ast.AST, up: dict[ast.AST, ast.AST]) -> bool:
         return parent.value is node
     if isinstance(parent, ast.Attribute):
         return parent.attr == "get"
-    while isinstance(parent, ast.BoolOp):  # `a or b` rend l'un de ses opérandes : pas un chemin
+    while isinstance(parent, ast.BoolOp):  # `a or b` returns one of its operands: not a path
         node, parent = parent, up.get(parent)
     if isinstance(parent, ast.Call):
         return (
@@ -305,14 +305,14 @@ def _config_use_ok(node: ast.AST, up: dict[ast.AST, ast.AST]) -> bool:
 
 
 def check_strategy_source(source: str, class_name: str) -> list[str]:
-    """Erreurs (liste vide = accepté) pour le code de la classe `class_name`."""
+    """Errors (empty list = accepted) for the code of class `class_name`."""
     try:
         tree = ast.parse(source)
     except SyntaxError as e:
         return [f"syntaxe invalide : {e.msg} (ligne {e.lineno})"]
     except (ValueError, RecursionError, MemoryError):
         return ["source illisible"]
-    nodes = list(ast.walk(tree))  # parcours itératif : tout l'arbre, à toute profondeur
+    nodes = list(ast.walk(tree))  # iterative walk: the whole tree, at any depth
     up: dict[ast.AST, ast.AST] = {c: n for n in nodes for c in ast.iter_child_nodes(n)}
     errors: list[str] = []
 
@@ -338,20 +338,20 @@ def check_strategy_source(source: str, class_name: str) -> list[str]:
             and up.get(imp) is tree
         )
 
-    # --- 1. liaisons : tout nom lié, où que ce soit et par quelque forme que ce soit ----------
+    # --- 1. bindings: every bound name, wherever and in whatever form --------------------------
     bound: Counter[str] = Counter()
-    modules: dict[str, str] = {}  # nom lié par `import` -> module
-    imported: dict[str, tuple[str, str]] = {}  # nom lié par `from … import` -> (module, nom)
+    modules: dict[str, str] = {}  # name bound by `import` -> module
+    imported: dict[str, tuple[str, str]] = {}  # name bound by `from … import` -> (module, name)
     for node in nodes:
         for name in _bound_names(node):
             bound[name] += 1
             if name in PROTECTED_NAMES and not isinstance(node, ast.arg):
-                # Un paramètre est une variable locale ; le moteur en nomme un `leverage`.
+                # A parameter is a local variable; the engine names one `leverage`.
                 err(node, f"redéfinition d'un nom de la plateforme : {name}")
             elif name == BASE_CLASS and not base_import(node):
                 err(node, f"redéfinition d'un nom de la plateforme : {name}")
             elif name.startswith("__") or name in _BUILTIN_NAMES or name == "config":
-                # Lier un builtin quelque part rendrait licite le vrai builtin ailleurs.
+                # Binding a builtin somewhere would make the real builtin legal elsewhere.
                 err(node, f"nom réservé : {name}")
             elif name == "self" and not (isinstance(node, ast.arg) and first_param_of_method(node)):
                 err(node, "self ne désigne que l'instance : premier paramètre d'une méthode")
@@ -377,10 +377,10 @@ def check_strategy_source(source: str, class_name: str) -> list[str]:
     methods = {n.name for n in nodes if isinstance(n, _Def) and isinstance(up[n], ast.ClassDef)}
     base_aliases = {n for n, origin in imported.items() if origin == (BASE_MODULE, BASE_CLASS)}
     for name in sorted({*modules, *imported, *classes}):
-        if bound[name] != 1:  # ni second import, ni redéfinition sous if/try/with/match/def
+        if bound[name] != 1:  # no second import, no redefinition under if/try/with/match/def
             errors.append(f"nom lié plusieurs fois : {name}")
 
-    # --- 2. usages ---------------------------------------------------------------------------
+    # --- 2. uses -----------------------------------------------------------------------------
     for node in nodes:
         parent = up.get(node)
         if isinstance(node, ast.ClassDef):
@@ -436,11 +436,11 @@ def check_strategy_source(source: str, class_name: str) -> list[str]:
 
 
 def _check_inheritance(tree: ast.Module, class_name: str, bound: Counter[str]) -> list[str]:
-    """Passe séquentielle sur le niveau module : la base importée (sous son nom ou sous alias) et
-    les classes locales intermédiaires. Chaque nom suivi n'est lié qu'une fois dans le fichier."""
-    base_names: set[str] = set()  # noms liés à ControlPlaneStrategy
-    module_aliases: set[str] = set()  # noms liés au module control_plane
-    descendants: set[str] = set()  # classes locales héritant de la base
+    """Sequential pass over the module level: the imported base (under its name or an alias) and
+    the intermediate local classes. Each followed name is bound only once in the file."""
+    base_names: set[str] = set()  # names bound to ControlPlaneStrategy
+    module_aliases: set[str] = set()  # names bound to the control_plane module
+    descendants: set[str] = set()  # local classes inheriting from the base
 
     def is_base(expr: ast.expr) -> bool:
         if isinstance(expr, ast.Name):
@@ -494,8 +494,8 @@ def _check_params(schema: dict[str, Any], params: dict[str, Any]) -> list[str]:
 
 
 def validate(manifest: Manifest, params: dict[str, Any]) -> ValidationResult:
-    """Manifest Freqtrade (spot seul, stop-loss obligatoire) et paramètres du `params_schema`.
-    La clé `pairs` est fournie par la plateforme (config.render_config) : elle est ignorée ici."""
+    """Freqtrade manifest (spot only, stop-loss required) and `params_schema` parameters.
+    The `pairs` key is supplied by the platform (config.render_config): it is ignored here."""
     errors: list[str] = []
     if manifest.engine != ENGINE:
         errors.append("engine doit valoir freqtrade")
@@ -523,7 +523,7 @@ def validate(manifest: Manifest, params: dict[str, Any]) -> ValidationResult:
 
 
 def check_source(manifest: Manifest, source: str) -> ValidationResult:
-    """Contrôle AST du code ; la classe porte le nom du fichier d'entrée (voir `validate`)."""
+    """AST check of the code; the class bears the entry file's name (see `validate`)."""
     stem = manifest.entrypoint.rsplit("/", 1)[-1].removesuffix(".py")
     errors = tuple(check_strategy_source(source, stem))
     return ValidationResult(ok=not errors, errors=errors)

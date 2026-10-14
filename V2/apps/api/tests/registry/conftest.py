@@ -1,4 +1,4 @@
-"""Fixtures du registre : opérateur et lecteur connectés, stratégie d'exemple en entrée."""
+"""Registry fixtures: signed-in operator and viewer, sample strategy as input."""
 
 from collections.abc import Awaitable, Callable
 from pathlib import Path
@@ -9,7 +9,7 @@ import pytest
 import pytest_asyncio
 import yaml  # type: ignore[import-untyped]
 
-# Fixtures de la suite d'authentification (base, application, comptes), réemployées telles quelles.
+# Fixtures of the authentication suite (database, application, accounts), reused as they are.
 from auth.conftest import (  # type: ignore[import-not-found]  # noqa: F401
     app,
     clock,
@@ -28,7 +28,7 @@ SMA = Path(__file__).resolve().parents[4] / "strategies" / "sma-cross"
 
 @pytest.fixture
 def sma() -> tuple[dict[str, Any], str]:
-    """Manifest (JSON) et code de la stratégie d'exemple."""
+    """Manifest (JSON) and code of the sample strategy."""
     manifest = yaml.safe_load((SMA / "strategy.yaml").read_text(encoding="utf-8"))
     return manifest, (SMA / "SmaCross.py").read_text(encoding="utf-8")
 

@@ -1,7 +1,7 @@
-"""Routes des instances et des commandes (SPEC F9, §8).
+"""Routes of instances and commands (SPEC F9, §8).
 
-Une route d'action répond 202 : la commande est enregistrée, pas encore exécutée (I8).
-Aucune route ne crée d'ordre (SPEC §8).
+An action route answers 202: the command is recorded, not yet executed (I8).
+No route creates an order (SPEC §8).
 """
 
 from __future__ import annotations
@@ -162,7 +162,7 @@ async def create_instance(
         kind = engine.kind
     else:
         wanted = body.engine
-        if wanted is None:  # le serveur ne choisit que s'il n'y a rien à choisir
+        if wanted is None:  # the server chooses only when there is nothing to choose
             kinds = (await db.scalars(select(Engine.kind).distinct().limit(2))).all()
             if len(kinds) != 1:
                 raise HTTPException(422, "Moteur à préciser : aucun ou plusieurs sont enregistrés.")
@@ -181,7 +181,7 @@ async def create_instance(
         engine_id=engine.id,
         name=body.name,
         mode=body.mode,
-        desired_state="exits_only",  # une instance créée démarre en sorties seules (F9)
+        desired_state="exits_only",  # a created instance starts in exits-only (F9)
         observed_state="unknown",
         params=body.params,
         strategy_version_id=version.id if version else None,
@@ -199,7 +199,7 @@ async def create_instance(
     db.add(cmd)
     try:
         await db.flush()
-    except IntegrityError:  # même clé, demande concurrente
+    except IntegrityError:  # same key, concurrent request
         await db.rollback()
         if (again := await replayed()) is not None:
             return again
@@ -215,7 +215,7 @@ async def create_instance(
             "engine": kind,
             "mode": inst.mode,
             "params": inst.params,
-            # création depuis le registre seulement : l'empreinte de M1 reste inchangée
+            # creation from the registry only: the M1 fingerprint stays unchanged
             **(
                 {"strategy_version_id": str(version.id), "account_id": str(account.id)}
                 if version and account
@@ -276,7 +276,7 @@ async def list_commands(
     db: Db,
     now: Now,
     instance_id: UUID | None = None,
-    status: Annotated[list[Status] | None, Query()] = None,  # répétable : ?status=a&status=b
+    status: Annotated[list[Status] | None, Query()] = None,  # repeatable: ?status=a&status=b
     cursor: str | None = None,
     limit: Limit = 50,
 ) -> Page[CommandOut]:

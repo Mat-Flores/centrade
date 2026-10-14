@@ -1,5 +1,5 @@
-"""Croisement de deux moyennes mobiles simples. Exemple d'intégration, sans prétention de
-rentabilité (SPEC §0.6) : il sert à exercer le registre, le déploiement et les sorties."""
+"""Crossover of two simple moving averages. Integration example, with no claim of
+profitability (SPEC §0.6): it serves to exercise the registry, deployment and exits."""
 
 from control_plane import ControlPlaneStrategy
 from pandas import DataFrame

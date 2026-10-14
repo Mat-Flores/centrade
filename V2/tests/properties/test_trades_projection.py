@@ -1,5 +1,5 @@
-"""Les trades clos viennent du relevé : rejouer, dupliquer, permuter ou perdre des événements, ou
-redémarrer le worker, laisse une ligne `trades` par position close, avec sa cause (F10)."""
+"""Closed trades come from the snapshot: replaying, duplicating, reordering or losing events, or
+restarting the worker, leaves one `trades` row per closed position, with its cause (F10)."""
 
 import asyncio
 from collections.abc import Callable
@@ -14,7 +14,7 @@ from sqlalchemy import select
 
 
 async def _rows(w: World, ref: InstanceRef) -> frozenset[tuple[object, ...]]:
-    """Toutes les colonnes d'une ligne `trades`, hors identifiants propres à la base."""
+    """All columns of a `trades` row, excluding database-specific identifiers."""
     async with w.sessions() as s:
         rows = (await s.scalars(select(Trade).where(Trade.instance_id == ref.instance_id))).all()
     return frozenset(
@@ -54,14 +54,14 @@ async def _run(
         await w.worker.run_once()
         assert await _rows(w, ref) == want
 
-        await w.publish(pick(events))  # le même flux, abîmé, repassé après le premier tour
+        await w.publish(pick(events))  # the same stream, damaged, replayed after the first cycle
         await w.worker.run_once()
-        again = w.make_worker("w2")  # redémarrage : un autre worker reprend l'instance
+        again = w.make_worker("w2")  # restart: another worker takes over the instance
         again.register(ref)
         await again.run_once()
         got = await _rows(w, ref)
         assert got == want
-        await w.wipe(ref)  # ligne perdue : le relevé la restitue
+        await w.wipe(ref)  # lost row: the snapshot restores it
         await again.run_once()
         assert await _rows(w, ref) == want
 

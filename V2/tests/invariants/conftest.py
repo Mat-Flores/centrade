@@ -1,11 +1,11 @@
-"""Fixtures des tests d'invariants. Valeurs sentinelles uniquement."""
+"""Invariant test fixtures. Sentinel values only."""
 
 from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
-from centrade_api.testing import stack  # noqa: F401  (fixture partagée)
+from centrade_api.testing import stack  # noqa: F401  (shared fixture)
 from centrade_core.ids import uuid7
 from centrade_core.models.trading import Account, Engine, Instance
 from centrade_core.secrets import AesGcmSecretStore
@@ -22,7 +22,7 @@ def keyed_instance(session_factory: async_sessionmaker[AsyncSession]) -> Any:
     sessions = session_factory
 
     async def make(*, mode: str, account_type: str = "live") -> tuple[UUID, UUID, UUID, UUID]:
-        """Compte avec sa clé de trading, instance sur ce compte, identifiant de moteur."""
+        """Account with its trading key, instance on that account, engine identifier."""
         store = AesGcmSecretStore(KEY)
         engine_id, account_id, instance_id = uuid7(), uuid7(), uuid7()
         async with sessions() as s, s.begin():

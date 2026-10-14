@@ -1,7 +1,7 @@
-"""Empreinte de déploiement (I10) : ce qui fait le comportement d'une instance, hors mode.
+"""Deployment fingerprint (I10): what makes an instance's behaviour, mode aside.
 
-Paper et live d'une même version ont la même empreinte : les champs propres au mode
-(dry-run, base de trades, identifiants, nom du bot) n'en sont pas des entrées.
+Paper and live of the same version have the same fingerprint: mode-specific fields
+(dry-run, trades database, credentials, bot name) are not inputs to it.
 """
 
 from collections.abc import Collection, Mapping
@@ -11,7 +11,7 @@ from centrade_core.audit import fingerprint
 
 
 def config_hash(config: Mapping[str, Any], *, exclude: Collection[str] = ()) -> str:
-    """Hash de la configuration générée (JSON canonique), sans les clés propres au mode."""
+    """Hash of the generated configuration (canonical JSON), without mode-specific keys."""
     return fingerprint({k: v for k, v in config.items() if k not in exclude})
 
 

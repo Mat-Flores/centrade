@@ -1,4 +1,4 @@
-"""Fabriques partagées par les tests de contrat."""
+"""Factories shared by the contract tests."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from centrade_core.engine.types import Exits, InstanceSpec, Manifest, Mode, Sizi
 
 
 def make_clock() -> Callable[[], datetime]:
-    """Horloge injectée : avance d'une seconde à chaque lecture, aucun sommeil."""
+    """Injected clock: advances one second on each read, no sleeping."""
     t = count()
     return lambda: datetime(2026, 10, 10, tzinfo=UTC) + timedelta(seconds=next(t))
 

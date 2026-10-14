@@ -1,4 +1,4 @@
-"""Comptes et clés d'exchange : routes, schémas, sonde des droits d'une clé."""
+"""Accounts and exchange keys: routes, schemas, key-permission probe."""
 
 from centrade_api.accounts.routes import router
 

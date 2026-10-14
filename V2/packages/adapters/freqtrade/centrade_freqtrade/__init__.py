@@ -1,1 +1,1 @@
-"""Adaptateur Freqtrade, partie pure (SPEC §7, annexe C) : aucun conteneur, aucune base."""
+"""Freqtrade adapter, pure part (SPEC §7, annex C): no container, no database."""

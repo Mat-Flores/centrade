@@ -18,7 +18,7 @@ class Engine(Base):
     image: Mapped[str]
     version: Mapped[str]
     digest: Mapped[str | None]
-    memory_reservation_mb: Mapped[int | None]  # par instance, pour l'admission
+    memory_reservation_mb: Mapped[int | None]  # per instance, for admission
     cpu_reservation: Mapped[Decimal | None]
     capabilities: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default="{}")
     created_at: Mapped[datetime] = now_col()
@@ -31,7 +31,7 @@ class Instance(Base):
     id: Mapped[UUID] = uuid_pk()
     engine_id: Mapped[UUID] = mapped_column(ForeignKey("engines.id"), index=True)
     name: Mapped[str] = mapped_column(unique=True)
-    mode: Mapped[str]  # paper | live ; immuable (trigger)
+    mode: Mapped[str]  # paper | live; immutable (trigger)
     desired_state: Mapped[str]  # running | exits_only | stopped
     observed_state: Mapped[str] = mapped_column(server_default="unknown")
     observed_at: Mapped[datetime | None]
@@ -43,13 +43,13 @@ class Instance(Base):
     account_id: Mapped[UUID | None] = mapped_column(ForeignKey("accounts.id"), index=True)
     limits: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default="{}")
     container_ref: Mapped[str | None]
-    # Identifiants de l'API native du moteur (usage `engine_api`), renouvelés à chaque déploiement.
+    # The engine's native API credentials (usage `engine_api`), renewed on every deployment.
     engine_secret_ref: Mapped[UUID | None] = mapped_column(ForeignKey("secrets.id"))
     deployment_fingerprint: Mapped[str | None]  # I10
-    config_hash: Mapped[str | None]  # hash de la configuration générée
-    effective_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # relue (F9)
+    config_hash: Mapped[str | None]  # hash of the generated configuration
+    effective_config: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # re-read (F9)
     effective_config_at: Mapped[datetime | None]
-    # Dérive constatée : liste de {key, expected, observed}, écrite par le worker (F9).
+    # Observed drift: list of {key, expected, observed}, written by the worker (F9).
     drift: Mapped[list[dict[str, Any]] | dict[str, Any] | None] = mapped_column(JSONB)
     paper_origin_id: Mapped[UUID | None] = mapped_column(ForeignKey("instances.id"))
     created_at: Mapped[datetime] = now_col()
@@ -58,7 +58,7 @@ class Instance(Base):
 
 class Command(Base):
     __tablename__ = "commands"
-    # La clé d'idempotence est propre à son auteur.
+    # The idempotency key is specific to its author.
     __table_args__ = (UniqueConstraint("actor", "idempotency_key"),)
 
     id: Mapped[UUID] = uuid_pk()
@@ -67,7 +67,7 @@ class Command(Base):
     actor: Mapped[str]
     idempotency_key: Mapped[str]
     args: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # position_id, order_id
-    request_hash: Mapped[str] = mapped_column(server_default="")  # instance + type, anti-rejeu
+    request_hash: Mapped[str] = mapped_column(server_default="")  # instance + type, anti-replay
     status: Mapped[str] = mapped_column(server_default="requested", index=True)
     correlation_id: Mapped[UUID]
     deadline_at: Mapped[datetime]
@@ -83,16 +83,16 @@ class Command(Base):
 
 
 class Event(Base):
-    """Hypertable sur `ts` : l'unicité doit contenir `ts`."""
+    """Hypertable on `ts`: uniqueness must contain `ts`."""
 
     __tablename__ = "events"
 
     id: Mapped[UUID] = mapped_column(primary_key=True)
-    ts: Mapped[datetime] = mapped_column(primary_key=True)  # heure du moteur
+    ts: Mapped[datetime] = mapped_column(primary_key=True)  # engine time
     ts_ingest: Mapped[datetime] = mapped_column(server_default=func.now())
     type: Mapped[str]
     instance_id: Mapped[UUID] = mapped_column(ForeignKey("instances.id"))
-    seq: Mapped[int] = mapped_column(BigInteger)  # par instance
+    seq: Mapped[int] = mapped_column(BigInteger)  # per instance
     correlation_id: Mapped[UUID | None]
     schema_version: Mapped[int]
     payload: Mapped[dict[str, Any]] = mapped_column(JSONB)
@@ -103,14 +103,14 @@ class Position(Base):
 
     id: Mapped[UUID] = uuid_pk()
     instance_id: Mapped[UUID] = mapped_column(ForeignKey("instances.id"), index=True)
-    external_id: Mapped[str]  # identifiant côté moteur ; unique par instance
+    external_id: Mapped[str]  # engine-side identifier; unique per instance
     instrument: Mapped[str]
     side: Mapped[str]  # long | short
     quantity: Mapped[Decimal]
     entry_price: Mapped[Decimal | None]
     currency: Mapped[str]
     observed_at: Mapped[datetime]
-    # Protection (F10, I7) : le stop est dans la devise de la position.
+    # Protection (F10, I7): the stop is in the position's currency.
     stop_price: Mapped[Decimal | None]
     stop_venue: Mapped[str | None]  # venue | engine
     stop_type: Mapped[str | None]  # fixed | trailing | dynamic
@@ -121,7 +121,7 @@ class Position(Base):
 
 class Order(Base):
     __tablename__ = "orders"
-    __table_args__ = (Index("ix_orders_created_at_id", "created_at", "id"),)  # tri de GET /orders
+    __table_args__ = (Index("ix_orders_created_at_id", "created_at", "id"),)  # GET /orders sort
 
     id: Mapped[UUID] = uuid_pk()
     instance_id: Mapped[UUID] = mapped_column(ForeignKey("instances.id"), index=True)
@@ -158,7 +158,7 @@ class Alert(Base):
 
 
 class Secret(Base):
-    """Jamais renvoyé par l'API (I12) : seul le worker déchiffre."""
+    """Never returned by the API (I12): only the worker decrypts."""
 
     __tablename__ = "secrets"
 
@@ -183,11 +183,11 @@ class Account(Base):
     environment: Mapped[str]  # production | sandbox
     label: Mapped[str]
     currency: Mapped[str]
-    capital_cap: Mapped[Decimal | None]  # dans `currency`
+    capital_cap: Mapped[Decimal | None]  # in `currency`
     secret_ref: Mapped[UUID | None] = mapped_column(ForeignKey("secrets.id"))
     read_secret_ref: Mapped[UUID | None] = mapped_column(ForeignKey("secrets.id"))
-    permissions_verified_at: Mapped[datetime | None]  # vide = non vérifié, live bloqué
-    ip_restricted: Mapped[bool | None]  # constaté sur la venue ; None = inconnu
+    permissions_verified_at: Mapped[datetime | None]  # empty = unverified, live blocked
+    ip_restricted: Mapped[bool | None]  # observed on the venue; None = unknown
     created_at: Mapped[datetime] = now_col()
     updated_at: Mapped[datetime] = updated_at()
 
@@ -202,7 +202,7 @@ class Strategy(Base):
 
 
 class StrategyVersion(Base):
-    """Manifest, code et politique de sortie sont immuables (trigger) ; seul le statut change."""
+    """Manifest, code and exit policy are immutable (trigger); only the status changes."""
 
     __tablename__ = "strategy_versions"
     __table_args__ = (
@@ -214,35 +214,35 @@ class StrategyVersion(Base):
     strategy_id: Mapped[UUID] = mapped_column(ForeignKey("strategies.id"), index=True)
     version: Mapped[int]
     manifest: Mapped[dict[str, Any]] = mapped_column(JSONB)
-    code: Mapped[str]  # source déposé, immuable comme le manifest
-    idempotency_key: Mapped[str | None]  # rejeu d'un même dépôt
+    code: Mapped[str]  # submitted source, immutable like the manifest
+    idempotency_key: Mapped[str | None]  # replay of the same submission
     code_hash: Mapped[str]
     status: Mapped[str] = mapped_column(server_default="draft")  # draft | approved | retired
     author: Mapped[str]
     static_checks: Mapped[dict[str, Any]] = mapped_column(JSONB, server_default="{}")
-    exits: Mapped[dict[str, Any]] = mapped_column(JSONB)  # politique de sortie (F10)
+    exits: Mapped[dict[str, Any]] = mapped_column(JSONB)  # exit policy (F10)
     created_at: Mapped[datetime] = now_col()
     updated_at: Mapped[datetime] = updated_at()
 
 
 class Trade(Base):
-    """Position close ; projection dérivée des événements."""
+    """Closed position; projection derived from events."""
 
     __tablename__ = "trades"
     __table_args__ = (
         UniqueConstraint("instance_id", "external_id"),
-        Index("ix_trades_closed_at_id", "closed_at", "id"),  # tri de GET /trades
+        Index("ix_trades_closed_at_id", "closed_at", "id"),  # GET /trades sort
     )
 
     id: Mapped[UUID] = uuid_pk()
     instance_id: Mapped[UUID] = mapped_column(ForeignKey("instances.id"), index=True)
-    external_id: Mapped[str]  # identifiant côté moteur
+    external_id: Mapped[str]  # engine-side identifier
     instrument: Mapped[str]
     quantity: Mapped[Decimal]
     entry_price: Mapped[Decimal]
     exit_price: Mapped[Decimal]
     entry_cause: Mapped[str]
-    exit_cause: Mapped[str]  # énumération de F10
+    exit_cause: Mapped[str]  # F10 enumeration
     pnl: Mapped[Decimal]
     fees: Mapped[Decimal]
     currency: Mapped[str]

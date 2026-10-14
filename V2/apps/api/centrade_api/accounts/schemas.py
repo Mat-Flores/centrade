@@ -1,4 +1,4 @@
-"""Schémas des comptes et des clés (SPEC F6, I12) : aucune sortie ne porte un secret."""
+"""Schemas of accounts and keys (SPEC F6, I12): no output carries a secret."""
 
 from __future__ import annotations
 
@@ -25,7 +25,7 @@ class AccountCreate(BaseModel):
     environment: Literal["production", "sandbox"]
     label: str = Field(min_length=1, max_length=80)
     currency: str = Field(pattern=r"^[A-Z0-9]{2,10}$")
-    # Chaîne décimale, dans `currency`. Bornes de NUMERIC(38, 18).
+    # Decimal string, in `currency`. Bounds of NUMERIC(38, 18).
     capital_cap: Decimal | None = Field(
         default=None, gt=0, lt=Decimal("1e20"), max_digits=38, decimal_places=18
     )
@@ -34,7 +34,7 @@ class AccountCreate(BaseModel):
     @classmethod
     def _decimal_string(cls, v: object) -> object:
         if v is not None and not isinstance(v, str):
-            raise ValueError("chaîne décimale attendue")  # jamais de float pour de l'argent
+            raise ValueError("chaîne décimale attendue")  # never a float for money
         return v
 
 
@@ -80,11 +80,11 @@ class AccountOut(BaseModel):
     environment: str
     label: str
     currency: str
-    capital_cap: str | None  # chaîne décimale
+    capital_cap: str | None  # decimal string
     trade_key: KeyOut | None
     read_key: KeyOut | None
-    permissions_verified_at: AwareDatetime | None  # None : non vérifié, live bloqué
-    ip_restricted: bool | None  # None : inconnu
+    permissions_verified_at: AwareDatetime | None  # None: not verified, live blocked
+    ip_restricted: bool | None  # None: unknown
     created_at: AwareDatetime
     updated_at: AwareDatetime
 

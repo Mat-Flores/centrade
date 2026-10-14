@@ -1,5 +1,5 @@
-"""Lot G : création depuis le registre, détail d'instance, lectures de trading, fermeture et
-annulation d'un ordre d'entrée (F9, F10, §8, §9). Valeurs sentinelles, aucun moteur réel."""
+"""Batch G: creation from the registry, instance detail, trading reads, closing and
+cancellation of an entry order (F9, F10, §8, §9). Sentinel values, no real engine."""
 
 from datetime import timedelta
 from decimal import Decimal
@@ -156,7 +156,7 @@ async def _commands(stack: Stack, iid: UUID, type_: str) -> list[Command]:
         )
 
 
-# --- création -----------------------------------------------------------------------------
+# --- creation -----------------------------------------------------------------------------
 
 
 async def test_paper_creation_from_the_registry_writes_a_deploy_command(
@@ -183,7 +183,7 @@ async def test_paper_creation_from_the_registry_writes_a_deploy_command(
         ({"mode": "live"}, 422),
         ({"params": {"inconnu": 1}}, 422),
         ({"engine": "autre"}, 422),
-        ({"account_id": None, "strategy_version_id": None}, 201),  # création simulée de M1
+        ({"account_id": None, "strategy_version_id": None}, 201),  # simulated creation from M1
     ],
 )
 async def test_creation_rejections_and_compatibility(
@@ -211,7 +211,7 @@ async def test_creation_rejects_live_account_retired_version_and_unknown_engine(
     vid, aid = await _seed(stack)
     ghost = _body(uuid4(), aid)
     assert (await c.post(I, json=ghost, headers=_key())).status_code == 422
-    half = {"name": "x1", "account_id": str(aid)}  # un seul des deux
+    half = {"name": "x1", "account_id": str(aid)}  # only one of the two
     assert (await c.post(I, json=half, headers=_key())).status_code == 422
 
 
@@ -247,7 +247,7 @@ def test_no_route_changes_the_mode(stack: Stack) -> None:
             assert not (ctx.methods or set()) & {"PUT", "PATCH", "DELETE"}, ctx.path
 
 
-# --- détail -------------------------------------------------------------------------------
+# --- detail -------------------------------------------------------------------------------
 
 
 async def test_detail_drift_and_effective_config_are_dated_or_unknown(stack: Stack) -> None:
@@ -273,7 +273,7 @@ async def test_detail_drift_and_effective_config_are_dated_or_unknown(stack: Sta
     assert d["desired_state"] == "exits_only" and d["state"]["value"] == "unknown"
 
 
-# --- lectures de trading ------------------------------------------------------------------
+# --- trading reads ------------------------------------------------------------------
 
 
 async def test_reads_of_positions_orders_and_trades(stack: Stack) -> None:
@@ -350,7 +350,7 @@ async def test_stream_relays_orders_positions_and_trades(stack: Stack) -> None:
     assert await _message(stack.world.sessions, stack.settings, "trade", uuid4(), now) is None
 
 
-# --- fermeture et annulation --------------------------------------------------------------
+# --- close and cancel --------------------------------------------------------------
 
 
 @pytest.mark.parametrize("intent", get_args(Intent))
@@ -360,7 +360,7 @@ async def test_cancel_an_order_only_if_it_is_an_entry(stack: Stack, intent: str)
     order = await _row(stack, _order(inst, intent))
     r = await c.delete(f"/api/v1/orders/{order.id}", headers=_key())
     cmds = await _commands(stack, inst.id, "cancel_entry_order")
-    if intent == "entry":  # les renforts sont désactivés en V1 : le worker les refuse aussi
+    if intent == "entry":  # reinforcements are disabled in V1: the worker refuses them too
         assert r.status_code == 202, r.text
         assert [x.args for x in cmds] == [{"order_id": order.client_order_id}]
         assert r.json()["command_id"] == str(cmds[0].id)

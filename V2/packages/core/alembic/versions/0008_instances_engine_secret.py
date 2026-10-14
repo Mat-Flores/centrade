@@ -1,4 +1,4 @@
-"""Instances : référence du secret `engine_api` (identifiants de l'API native du moteur).
+"""Instances: reference of the `engine_api` secret (the engine's native API credentials).
 
 Revision ID: 0008
 Revises: 0007

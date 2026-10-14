@@ -1,6 +1,6 @@
-"""Freins aux tentatives de connexion (SPEC §13).
+"""Brakes on login attempts (SPEC §13).
 
-Débit par adresse, puis verrouillage progressif du compte après des échecs répétés.
+Rate per address, then progressive account lockout after repeated failures.
 """
 
 import math
@@ -20,18 +20,18 @@ LOCK_MAX = timedelta(minutes=15)
 
 
 def lock_duration(failed_attempts: int) -> timedelta | None:
-    """Verrouillage progressif : 1, 2, 4, 8 puis 15 min à partir du 5e échec consécutif."""
+    """Progressive lockout: 1, 2, 4, 8 then 15 min from the 5th consecutive failure."""
     if failed_attempts < LOCK_THRESHOLD:
         return None
-    # Exposant borné : un compteur très grand ne doit ni déborder ni verrouiller sans fin.
+    # Bounded exponent: a very large counter must neither overflow nor lock forever.
     return min(LOCK_BASE * (1 << min(failed_attempts - LOCK_THRESHOLD, 4)), LOCK_MAX)
 
 
 class RateLimiter:
-    """Fenêtre fixe par clé, en mémoire."""
+    """Fixed window per key, in memory."""
 
-    # shortcut: compteurs propres à ce processus et perdus au redémarrage ; les passer dans
-    # Redis dès que l'API tourne en plusieurs processus.
+    # shortcut: counters are local to this process and lost on restart; move them to
+    # Redis as soon as the API runs in several processes.
     MAX_KEYS = 10_000
 
     def __init__(self, limit: int, window: timedelta) -> None:
@@ -39,7 +39,7 @@ class RateLimiter:
         self._hits: dict[str, tuple[datetime, int]] = {}
 
     def retry_after(self, key: str, now: datetime) -> int | None:
-        """Compte une tentative. Renvoie None si elle passe, sinon les secondes à attendre."""
+        """Counts an attempt. Returns None if it passes, otherwise the seconds to wait."""
         start, count = self._hits.get(key, (now, 0))
         if now - start >= self._window:
             start, count = now, 0
@@ -47,7 +47,7 @@ class RateLimiter:
             return math.ceil((start + self._window - now).total_seconds())
         if key not in self._hits and len(self._hits) >= self.MAX_KEYS:
             self._hits = {k: v for k, v in self._hits.items() if now - v[0] < self._window}
-            if len(self._hits) >= self.MAX_KEYS:  # saturé de clés actives : refus plutôt qu'oubli
+            if len(self._hits) >= self.MAX_KEYS:  # full of active keys: refuse, do not forget
                 return math.ceil(self._window.total_seconds())
         self._hits[key] = (start, count + 1)
         return None
@@ -63,7 +63,7 @@ limiter = RateLimiter(limit=10, window=timedelta(minutes=1))
 
 
 def throttle(request: Request, now: Annotated[datetime, Depends(utcnow)]) -> None:
-    """Débit par adresse, avant toute lecture du corps, de la base ou calcul d'empreinte."""
+    """Rate per address, before any read of the body, the database or hash computation."""
     ip = client_ip(request)
     if (wait := limiter.retry_after(ip or "unknown", now)) is not None:
         log.warning("auth_rate_limited", ip=ip)

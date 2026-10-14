@@ -1,4 +1,4 @@
-"""Points du §7 qui exigent le Risk service : livrés à M3."""
+"""Points of §7 that require the Risk service: delivered at M3."""
 
 import pytest
 

@@ -1,6 +1,6 @@
-"""Authentification, 2FA et rôles (SPEC §13).
+"""Authentication, 2FA and roles (SPEC §13).
 
-Les autres domaines n'importent que d'ici : les rôles `Viewer`, `Operator`, `Admin`, et
+Other domains import only from here: the roles `Viewer`, `Operator`, `Admin`, and
 `current_user`, `require_role`, `require_recent_totp`.
 """
 

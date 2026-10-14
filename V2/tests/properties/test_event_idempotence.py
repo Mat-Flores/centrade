@@ -1,6 +1,6 @@
-"""Critère C3 : rejouer, dupliquer ou permuter les événements ne change ni les projections
-ni le nombre de lignes d'`events`, une fois la resynchronisation faite. En perdre une partie ne
-fausse pas les projections non plus : le relevé fait foi."""
+"""Criterion C3: replaying, duplicating or reordering events changes neither the projections
+nor the number of `events` rows, once resynchronization is done. Losing some of them does not
+skew the projections either: the snapshot is authoritative."""
 
 import asyncio
 from collections.abc import Callable
@@ -16,9 +16,9 @@ from hypothesis import strategies as st
 class Outcome:
     events: list[CanonicalEvent]
     variant: list[CanonicalEvent]
-    want: Projection  # l'instantané du moteur
-    single: Projection  # après un passage unique, dans l'ordre
-    again: Projection  # après le passage de la variante
+    want: Projection  # the engine's snapshot
+    single: Projection  # after a single pass, in order
+    again: Projection  # after the variant's pass
 
 
 async def _run(
@@ -34,7 +34,7 @@ async def _run(
         events = await w.drain_engine(ref)
         want = await w.expected(ref)
 
-        await w.publish(events)  # passage unique, dans l'ordre
+        await w.publish(events)  # single pass, in order
         await w.worker.run_once()
         single = await w.projection(ref)
         await w.wipe(ref)
@@ -63,12 +63,12 @@ def test_replaying_duplicating_or_permuting_events_leaves_projections_unchanged(
         perm.shuffle(out)
         out += [perm.choice(events) for _ in range(n_dup if events else 0)]
         if replay:
-            out += events  # tout le flux rejoué
+            out += events  # the whole stream replayed
         perm.shuffle(out)
         return out
 
     o = asyncio.run(_run(migrated_url, redis_url, seed, steps, pick))
-    assert o.single == o.again  # positions, ordres ouverts, statut de chaque ordre, événements
+    assert o.single == o.again  # positions, open orders, status of each order, events
     assert o.again.n_events == len({e.id for e in o.events}) == len(o.events)
     assert (o.again.positions, o.again.open_orders) == (o.want.positions, o.want.open_orders)
 
@@ -89,10 +89,10 @@ def test_losing_some_events_does_not_corrupt_projections(
         return kept
 
     o = asyncio.run(_run(migrated_url, redis_url, seed, steps, pick))
-    assert o.again.n_events == len(o.variant)  # rien d'inventé pour combler un trou
-    # Positions et ordres ouverts viennent du relevé : identiques à la vérité du moteur.
+    assert o.again.n_events == len(o.variant)  # nothing invented to fill a gap
+    # Positions and open orders come from the snapshot: identical to the engine's truth.
     assert (o.again.positions, o.again.open_orders) == (o.want.positions, o.want.open_orders)
-    # Statut d'un ordre : celui du flux complet, ou `unknown` si son issue a été perdue.
+    # Order status: that of the full stream, or `unknown` if its outcome was lost.
     full = dict(o.single.orders)
     for order_id, status in o.again.orders:
         assert status in (full[order_id], "unknown"), (order_id, status)

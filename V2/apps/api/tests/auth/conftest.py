@@ -1,6 +1,6 @@
-"""Fixtures des tests de l'API : application câblée sur la base de test, horloge injectée.
+"""API test fixtures: application wired to the test database, injected clock.
 
-Valeurs sentinelles uniquement : aucun vrai secret.
+Sentinel values only: no real secret.
 """
 
 import base64
@@ -36,7 +36,7 @@ from centrade_core.settings import Settings, get_settings
 from fastapi import Depends, FastAPI
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-# pytest ne propage pas tests/conftest.py hors de tests/ : on réemploie ses fixtures telles quelles.
+# pytest does not propagate tests/conftest.py outside tests/: reuse its fixtures as they are.
 _spec = importlib.util.spec_from_file_location(
     "centrade_root_conftest", Path(__file__).resolve().parents[4] / "tests" / "conftest.py"
 )
@@ -49,8 +49,8 @@ engine = _root.engine
 session_factory = _root.session_factory
 
 ORIGIN = "https://centrade.test"
-PASSWORD = "SENTINELLE-mot-de-passe-0xDEADBEEF"  # noqa: S105  # sentinelle de test
-_PASSWORD_HASH = security.hash_password(PASSWORD)  # argon2 est lent : une fois pour tous
+PASSWORD = "SENTINELLE-mot-de-passe-0xDEADBEEF"  # noqa: S105  # test sentinel
+_PASSWORD_HASH = security.hash_password(PASSWORD)  # argon2 is slow: once for all
 PROBE = "/api/v1/_probe"
 
 
@@ -84,7 +84,7 @@ def clock() -> FakeClock:
 
 @pytest.fixture
 def logs(monkeypatch: pytest.MonkeyPatch) -> Iterator[io.StringIO]:
-    monkeypatch.setenv("CENTRADE_LOG_LEVEL", "DEBUG")  # le niveau le plus bavard
+    monkeypatch.setenv("CENTRADE_LOG_LEVEL", "DEBUG")  # the most verbose level
     buffer = io.StringIO()
     configure_logging(stream=buffer)
     yield buffer
@@ -119,7 +119,7 @@ def app(
     application.dependency_overrides[get_settings] = lambda: settings
     throttle.limiter.reset()
 
-    # Routes témoins : aucune route de M1 n'emploie encore les rôles ni la ré-authentification.
+    # Witness routes: no M1 route uses roles or re-authentication yet.
     for role in ("viewer", "operator", "admin"):
 
         @application.get(f"{PROBE}/{role}")
@@ -147,7 +147,7 @@ async def make_client(app: FastAPI) -> AsyncIterator[MakeClient]:
         def make(ip: str = "203.0.113.10", origin: str | None = ORIGIN) -> httpx.AsyncClient:
             client = httpx.AsyncClient(
                 transport=httpx.ASGITransport(app=app, client=(ip, 4242)),
-                base_url=ORIGIN,  # https : les cookies `Secure` ne partent que sur TLS
+                base_url=ORIGIN,  # https: `Secure` cookies are sent only over TLS
                 headers={"Origin": origin} if origin else {},
             )
             stack.push_async_callback(client.aclose)
@@ -199,7 +199,7 @@ SignIn = Callable[[httpx.AsyncClient, Account], Awaitable[None]]
 
 @pytest.fixture
 def sign_in(clock: FakeClock) -> SignIn:
-    """Parcours complet : mot de passe puis code TOTP de l'instant de l'horloge."""
+    """Full flow: password then TOTP code for the clock's current instant."""
 
     async def run(client: httpx.AsyncClient, account: Account) -> None:
         r = await client.post(

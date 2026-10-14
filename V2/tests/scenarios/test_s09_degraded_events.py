@@ -1,5 +1,5 @@
-"""S9 (SPEC §14) : événements dupliqués, désordonnés ou perdus -> projections exactes après
-resynchronisation, sans doublon dans `events`."""
+"""S9 (SPEC §14): duplicated, out-of-order or lost events -> exact projections after
+resynchronization, with no duplicates in `events`."""
 
 import pytest
 from centrade_fake.engine import Failure
@@ -14,13 +14,13 @@ async def test_s09_projections_are_exact_after_resync(
     async with World(migrated_url, redis_url) as w:
         ref = await w.new_instance(seed=11)
         w.fake.set_failure(ref, mode)
-        w.step(ref, 60)  # le worker relève lui-même les événements dégradés
+        w.step(ref, 60)  # the worker itself picks up the degraded events
         await w.worker.run_once()
 
         got, want = await w.projection(ref), await w.expected(ref)
         assert got.positions == want.positions
         assert got.open_orders == want.open_orders
-        assert want.positions or want.open_orders  # le scénario n'est pas vide
+        assert want.positions or want.open_orders  # the scenario is not empty
         async with w.sessions() as s:
             dup_ids = (
                 await s.execute(text("SELECT id FROM events GROUP BY id HAVING count(*) > 1"))
@@ -36,7 +36,7 @@ async def test_s09_projections_are_exact_after_resync(
             ).all()
         assert dup_ids == [] and dup_seq == []
         if mode is Failure.DROP:
-            assert got.n_events <= 1  # seul le changement d'état d'avant la panne a survécu
+            assert got.n_events <= 1  # only the state change from before the outage survived
         else:
             assert got.n_events > 0
 

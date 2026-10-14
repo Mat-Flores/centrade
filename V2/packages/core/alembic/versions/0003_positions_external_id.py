@@ -1,4 +1,4 @@
-"""positions : identifiant du moteur (plusieurs positions sur un même instrument).
+"""positions: engine identifier (several positions on the same instrument).
 
 Revision ID: 0003
 Revises: 0002
@@ -24,8 +24,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Deux positions d'un même instrument violeraient l'ancienne unicité. `positions` est une
-    # projection dérivée : on la vide, le prochain relevé du worker la reconstruit.
+    # Two positions on the same instrument would violate the old uniqueness. `positions` is a
+    # derived projection: we empty it, the worker's next snapshot rebuilds it.
     op.execute("DELETE FROM positions")
     op.drop_constraint("uq_positions_instance_id_external_id", "positions", type_="unique")
     op.create_unique_constraint(

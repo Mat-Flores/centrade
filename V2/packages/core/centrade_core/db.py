@@ -1,4 +1,4 @@
-"""Moteur et sessions SQLAlchemy 2 async (asyncpg)."""
+"""SQLAlchemy 2 async engine and sessions (asyncpg)."""
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import (
 
 
 def make_engine(url: str) -> AsyncEngine:
-    # hide_parameters : une erreur SQL journalisée ne recopie aucune valeur liée (I12).
+    # hide_parameters: a logged SQL error copies no bound value (I12).
     return create_async_engine(url, pool_pre_ping=True, hide_parameters=True)
 
 

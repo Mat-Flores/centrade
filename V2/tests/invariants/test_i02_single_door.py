@@ -1,5 +1,5 @@
-"""I2 : toute commande passe par la plateforme ; les interfaces natives du moteur sont fermées.
-Côté configuration générée, puis côté réseau (Compose et gabarit du runner)."""
+"""I2: every command goes through the platform; the engine's native interfaces are closed.
+Generated configuration side, then network side (Compose and runner template)."""
 
 import json
 from pathlib import Path
@@ -22,8 +22,8 @@ def test_i02_generated_config_disables_native_interfaces(mode: Mode) -> None:
     doc = json.loads(config_file(spec))
     assert values["telegram.enabled"] == "false"
     assert values["webhook.allow_custom_messages"] == "false"
-    assert values["webhook.enabled"] == "false"  # activé par le lot du récepteur, URL secrète
-    assert doc["api_server"]["CORS_origins"] == []  # aucun navigateur (FreqUI)
+    assert values["webhook.enabled"] == "false"  # enabled by the receiver batch, secret URL
+    assert doc["api_server"]["CORS_origins"] == []  # no browser (FreqUI)
     assert not {"username", "password", "jwt_secret_key", "ws_token"} & set(doc["api_server"])
     assert values["api_server.listen_port"] == "8080"
 
@@ -31,15 +31,15 @@ def test_i02_generated_config_disables_native_interfaces(mode: Mode) -> None:
 @given(modes)
 def test_i02_manual_entry_is_forced_off(mode: Mode) -> None:
     values = render_config(make_spec(mode)).values
-    assert values["force_entry_enable"] == "false"  # /forceenter refusé par le moteur
-    assert values["position_adjustment_enable"] == "false"  # renfort sans hook fermé
+    assert values["force_entry_enable"] == "false"  # /forceenter refused by the engine
+    assert values["position_adjustment_enable"] == "false"  # reinforcement without a closed hook
     assert values["initial_state"] == "paused"
 
 
 def test_i02_engine_reaches_only_risk_and_receiver(tmp_path: Path) -> None:
-    """Le conteneur de moteur n'est que sur `engines` (interne), sans port publié ; ni la base,
-    ni le bus, ni l'API, ni Docker n'y sont joignables. Membres de `engines` : le worker (récepteur
-    d'événements) ; le Risk service s'y ajoute à M3."""
+    """The engine container is only on `engines` (internal), with no published port; the database,
+    the bus, the API and Docker are all unreachable from it. Members of `engines`: the worker (event
+    receiver); the Risk service joins it at M3."""
     import yaml  # type: ignore[import-untyped]
     from centrade_worker.runner import ContainerSpec, DockerRunner
 
@@ -51,7 +51,7 @@ def test_i02_engine_reaches_only_risk_and_receiver(tmp_path: Path) -> None:
         networks.update(doc["networks"])
         for svc, conf in doc["services"].items():
             merged = services.setdefault(svc, {})
-            for k, v in conf.items():  # fusion à la manière de Compose pour `networks`
+            for k, v in conf.items():  # Compose-style merge for `networks`
                 merged[k] = (
                     sorted({*merged.get(k, []), *v}) if k == "networks" and k in merged else v
                 )
@@ -67,7 +67,7 @@ def test_i02_engine_reaches_only_risk_and_receiver(tmp_path: Path) -> None:
         "ports" in c for n, c in services.items() if n in members("engines") | members("docker")
     )
 
-    # Gabarit : le moteur n'est que sur `centrade_engines` (projet `centrade` + réseau `engines`).
+    # Template: the engine is only on `centrade_engines` (project `centrade` + network `engines`).
     iid = uuid4()
     (tmp_path / str(iid)).mkdir()
     spec = ContainerSpec(

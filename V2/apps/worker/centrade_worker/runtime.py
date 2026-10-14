@@ -1,9 +1,9 @@
-"""`InstanceRuntime` du worker (SPEC F6, I12) : fichiers d'une instance dans le répertoire
-d'exécution en mémoire, identifiants de l'API native stockés par le SecretStore (`engine_api`).
+"""Worker `InstanceRuntime` (SPEC F6, I12): an instance's files in the in-memory runtime
+directory, native API credentials stored by the SecretStore (`engine_api`).
 
-Lien instance -> secret : `instances.engine_secret_ref`. Le secret est un objet JSON
-{nom: jeton aléatoire}, chiffré avec l'instance pour propriétaire : celui d'une autre instance
-ne se déchiffre pas. Aucune clé de venue ne passe par ici.
+Instance -> secret link: `instances.engine_secret_ref`. The secret is a JSON object
+{name: random token}, encrypted with the instance as owner: another instance's secret
+does not decrypt. No venue key goes through here.
 """
 
 from __future__ import annotations
@@ -31,7 +31,7 @@ from centrade_worker.secrets import (
     write_instance_file,
 )
 
-# Nom simple seulement : un nom de fichier dérive du manifest, donc d'une saisie.
+# Plain name only: a file name derives from the manifest, hence from user input.
 _FILE = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]{0,99}")
 _NAME = re.compile(r"[a-z][a-z0-9_]{0,39}")
 
@@ -46,15 +46,15 @@ class WorkerRuntime:
         clock: Callable[[], datetime],
     ) -> None:
         self._sessions = sessions
-        self._store = AesGcmSecretStore(master_key)  # valide la longueur de la clé
+        self._store = AesGcmSecretStore(master_key)  # validates the key length
         self._key = master_key
         self._dir = runtime_dir
         self._clock = clock
 
     def container_user(self) -> str:
-        # Fichiers en 0400 au nom du worker : le conteneur du moteur tourne sous ce même uid,
-        # sans privilège ni changement de propriétaire. Le groupe ne sert à aucune lecture : il
-        # est toujours explicite et jamais 0 (groupe root), même si le worker a le gid 0.
+        # Files are 0400 owned by the worker: the engine container runs under this same uid,
+        # with no privilege or ownership change. The group is never used for reading: it is
+        # always explicit and never 0 (root group), even if the worker has gid 0.
         return f"{os.getuid()}:{os.getgid() or os.getuid()}"
 
     async def issue_credentials(
@@ -74,7 +74,7 @@ class WorkerRuntime:
                 value=SecretStr(json.dumps(values)),
                 now=self._clock(),
             )
-            if old is not None:  # renouvelés à chaque déploiement : l'ancien chiffré est détruit
+            if old is not None:  # renewed on every deployment: the old ciphertext is destroyed
                 await s.flush()
                 await self._store.revoke(s, old)
         return {k: SecretStr(v) for k, v in values.items()}

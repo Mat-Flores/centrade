@@ -1,9 +1,9 @@
-"""Adaptateur d'exécution de Freqtrade (SPEC §7, F9, F10, annexe C, ADR 0008).
+"""Freqtrade execution adapter (SPEC §7, F9, F10, annex C, ADR 0008).
 
-La plateforme règle le moteur et lit ce qu'il fait ; elle n'émet aucun ordre : aucun appel à
-`/forceenter` (I2, I11). Tout passe par l'API du moteur, joignable sur le réseau `engines` avec les
-identifiants propres à l'instance. Moteur muet, lent ou incohérent : EngineUnreachable (donc
-`unknown`), jamais un état supposé (I1).
+The platform configures the engine and reads what it does; it places no order: no call to
+`/forceenter` (I2, I11). Everything goes through the engine's API, reachable on the `engines`
+network with the instance's own credentials. Silent, slow or inconsistent engine:
+EngineUnreachable (hence `unknown`), never an assumed state (I1).
 """
 
 from __future__ import annotations
@@ -64,19 +64,19 @@ log = structlog.get_logger("centrade_freqtrade")
 ENGINE = checks.ENGINE
 CONFIG_FILE = "config.json"
 BASE_FILE = "control_plane.py"
-FILES_DIR = "/run/centrade"  # point de montage fixé par le runner
+FILES_DIR = "/run/centrade"  # mount point set by the runner
 CRED_NAMES = ("username", "password", "jwt_secret_key", "ws_token")
-# Trades clos (`GET /trades`, `limit` et `offset`, tri par date de clôture décroissante : tag
-# 2026.9). Premier relevé d'un processus : tout l'historique, par pages. Ensuite : les pages
-# récentes, jusqu'à recouper un trade déjà relu.
+# Closed trades (`GET /trades`, `limit` and `offset`, sorted by descending close date: tag
+# 2026.9). A process's first snapshot: the whole history, in pages. After that: the recent
+# pages, until overlapping an already re-read trade.
 HISTORY_PAGE = 200
 RECENT_PAGE = 50
-HISTORY_CAP = 50_000  # au-delà : ClosedHistoryOverflow, jamais une perte silencieuse
-HEALTH_STALE_S = 120.0  # boucle du moteur muette plus longtemps : `error`
-STOP_GRACE_S = 10.0  # pause et annulation des entrées avant l'arrêt : au mieux, pas plus
+HISTORY_CAP = 50_000  # beyond: ClosedHistoryOverflow, never a silent loss
+HEALTH_STALE_S = 120.0  # engine loop silent for longer: `error`
+STOP_GRACE_S = 10.0  # pause and entry cancellation before stopping: best effort, no more
 _NS = uuid5(NAMESPACE_URL, "https://centrade.invalid/freqtrade")
 
-# Raison de sortie du moteur (ExitType, tag 2026.9) -> énumération de F10. Hors table : unknown.
+# Engine exit reason (ExitType, tag 2026.9) -> F10 enumeration. Outside the table: unknown.
 EXIT_CAUSE = {
     "roi": "take_profit",
     "stop_loss": "stop_loss",
@@ -84,20 +84,20 @@ EXIT_CAUSE = {
     "trailing_stop_loss": "trailing_stop",
     "exit_signal": "signal",
     "custom_exit": "signal",
-    "force_exit": "manual",  # indistinguable d'un flatten ou du kill switch côté moteur
+    "force_exit": "manual",  # engine cannot tell it from a flatten or the kill switch
     "emergency_exit": "engine_protection",
     "liquidation": "liquidation",
 }
 _STATES: dict[str, ObservedState] = {
     "running": "running",
     "paused": "exits_only",
-    "stopped": "halted",  # processus vivant, moteur arrêté, positions non gérées (F9)
+    "stopped": "halted",  # process alive, engine stopped, positions unmanaged (F9)
     "reload_config": "starting",
 }
 
 
 class EngineRunner(Protocol):
-    """Ce que l'adaptateur demande au runner (`centrade_worker.runner.DockerRunner`)."""
+    """What the adapter asks of the runner (`centrade_worker.runner.DockerRunner`)."""
 
     async def create(self, spec: Any) -> Any: ...
     async def start(self, instance_id: UUID) -> Any: ...
@@ -106,20 +106,20 @@ class EngineRunner(Protocol):
 
 
 class ClosedHistoryOverflow(EngineUnreachable):
-    """L'historique des trades clos dépasse HISTORY_CAP : le relevé est refusé plutôt que rendu
-    incomplet. Le worker le voit comme un moteur illisible, avec ce nom dans son journal."""
+    """The closed-trade history exceeds HISTORY_CAP: the snapshot is refused rather than returned
+    incomplete. The worker sees it as an unreadable engine, with this name in its log."""
 
 
-# Ce qu'une réponse du moteur mal formée fait lever en la lisant : clé absente, mauvais type,
-# valeur non décimale, date hors bornes, modèle refusé par pydantic (ValueError).
+# What a malformed engine response raises when read: missing key, wrong type,
+# non-decimal value, date out of bounds, model refused by pydantic (ValueError).
 _MALFORMED = (LookupError, TypeError, ValueError, ArithmeticError, AttributeError, OSError,
               RecursionError)  # fmt: skip
 
 
 @contextmanager
 def _engine_answers() -> Iterator[None]:
-    """Seul endroit où une réponse illisible devient EngineUnreachable : l'état de cette instance
-    est alors `unknown`, et le tour du worker continue pour les autres."""
+    """The only place where an unreadable response becomes EngineUnreachable: this instance's state
+    is then `unknown`, and the worker's round continues for the others."""
     try:
         yield
     except _MALFORMED as exc:
@@ -127,7 +127,7 @@ def _engine_answers() -> Iterator[None]:
 
 
 def default_address(instance_id: UUID) -> str:
-    # Nom DNS du conteneur sur le réseau `engines` (le runner nomme `centrade-engine-<id>`).
+    # Container DNS name on the `engines` network (the runner names it `centrade-engine-<id>`).
     return f"http://centrade-engine-{instance_id}:{config.API_PORT}"
 
 
@@ -166,7 +166,7 @@ def _open_orders(trade: Mapping[str, Any]) -> list[Mapping[str, Any]]:
 
 @dataclass
 class _Track:
-    """Ce que l'adaptateur a déjà annoncé d'une instance (le relevé reste la source de vérité)."""
+    """What the adapter has already announced about an instance (the snapshot stays the truth)."""
 
     seq: int | None = None
     state: tuple[str, str | None] | None = None
@@ -174,7 +174,7 @@ class _Track:
     positions: dict[str, tuple[Decimal, Decimal]] = field(default_factory=dict)
     stops: dict[str, Decimal | None] = field(default_factory=dict)
     closed: set[str] = field(default_factory=set)
-    history: bool = False  # l'historique entier des trades clos a été annoncé par ce processus
+    history: bool = False  # the whole closed-trade history was announced by this process
 
 
 class FreqtradeAdapter:
@@ -194,10 +194,10 @@ class FreqtradeAdapter:
         self._address = address
         self._creds: dict[UUID, tuple[str, str]] = {}
         self._tracks: dict[UUID, _Track] = {}
-        self._snap_closed: dict[UUID, set[str]] = {}  # trades clos déjà rendus par `snapshot`
+        self._snap_closed: dict[UUID, set[str]] = {}  # closed trades already returned by `snapshot`
         self._overflow: set[UUID] = set()
 
-    # --- contrôles purs ---------------------------------------------------------------------
+    # --- pure checks ------------------------------------------------------------------------
     def capabilities(self) -> Capabilities:
         return capabilities()
 
@@ -216,7 +216,7 @@ class FreqtradeAdapter:
         found = config.observed_drift(generated, effective.values)
         return tuple(Drift(key=d.key, expected=d.expected, observed=d.observed) for d in found)
 
-    # --- cycle de vie -----------------------------------------------------------------------
+    # --- lifecycle --------------------------------------------------------------------------
     async def deploy(self, spec: InstanceSpec) -> InstanceRef:
         iid = spec.instance_id
         ref = InstanceRef(engine=ENGINE, instance_id=iid)
@@ -245,10 +245,10 @@ class FreqtradeAdapter:
         return ref
 
     def _container(self, spec: InstanceSpec, strategy_file: str, directory: Path) -> Any:
-        from centrade_worker.runner import ContainerSpec  # le runner appartient au worker
+        from centrade_worker.runner import ContainerSpec  # the runner belongs to the worker
 
         dep = spec.deployment
-        assert dep is not None  # noqa: S101 (vérifié par l'appelant)
+        assert dep is not None  # noqa: S101 (checked by the caller)
         return ContainerSpec(
             instance_id=spec.instance_id,
             image=dep.image,
@@ -258,7 +258,7 @@ class FreqtradeAdapter:
                 "--config",
                 f"{FILES_DIR}/{CONFIG_FILE}",
                 "--config",
-                f"{FILES_DIR}/credentials.json",  # fusionné en dernier
+                f"{FILES_DIR}/credentials.json",  # merged last
                 "--strategy-path",
                 FILES_DIR,
                 "--strategy",
@@ -286,17 +286,17 @@ class FreqtradeAdapter:
             raise CommandRejected("conteneur absent : déployer d'abord")
         if c.status == "running":
             if await self._engine_state(ref) == "stopped":
-                await self._post(ref, "pause")  # moteur arrêté, processus vivant : sorties seules
+                await self._post(ref, "pause")  # engine stopped, process alive: exits-only
             return
-        # Le dossier de l'instance a gardé configuration et stratégie ; l'arrêt a retiré les
-        # identifiants, renouvelés ici. Le moteur redémarre en `paused` (configuration générée).
+        # The instance folder kept configuration and strategy; the stop removed the
+        # credentials, renewed here. The engine restarts in `paused` (generated configuration).
         await self._runtime.write_files(ref.instance_id, {}, await self._issue(ref.instance_id))
         await self._runner.start(ref.instance_id)
 
     async def stop(self, ref: InstanceRef) -> None:
-        """F9 : pause, annulation des ordres d'entrée, arrêt du conteneur. Les deux premières
-        sont tentées au mieux, dans un délai court ; le conteneur est arrêté dans tous les cas,
-        et leur échec remonte ensuite."""
+        """F9: pause, entry order cancellation, container stop. The first two
+        are attempted best effort, within a short delay; the container is stopped in every case,
+        and their failure is raised afterwards."""
         iid = ref.instance_id
         failed: Exception | None = None
         c = await self._runner.inspect(iid)
@@ -320,9 +320,9 @@ class FreqtradeAdapter:
             raise failed
 
     async def _reduce_entries(self, ref: InstanceRef) -> Exception | None:
-        """Pause, puis annulation des ordres d'entrée ouverts : chacune est tentée même si
-        l'autre échoue. La première erreur est rendue, pas levée : l'appelant fait d'abord passer
-        ce qui ne doit jamais attendre (une sortie, l'arrêt du conteneur)."""
+        """Pause, then cancellation of open entry orders: each is attempted even if the
+        other fails. The first error is returned, not raised: the caller first lets through
+        what must never wait (an exit, the container stop)."""
         first: Exception | None = None
         for step in (self._pause, self._cancel_entries):
             try:
@@ -339,14 +339,14 @@ class FreqtradeAdapter:
         return first
 
     async def _pause(self, ref: InstanceRef) -> None:
-        await self._post(ref, "pause")  # depuis `stopped`, démarre le moteur en pause
+        await self._post(ref, "pause")  # from `stopped`, starts the engine paused
 
     async def _cancel_entries(self, ref: InstanceRef) -> None:
         api = await self._api(ref)
         for trade in await self._open_trades(api):
             orders = _open_orders(trade)
-            # La route annule tous les ordres ouverts du trade (ADR 0008) : dès qu'un ordre de
-            # sortie ou de stop est ouvert, rien n'est annulé.
+            # The route cancels all the trade's open orders (ADR 0008): as soon as an exit
+            # or stop order is open, nothing is cancelled.
             if orders and all(_intent(o) == "entry" for o in orders):
                 await _cancel_open(api, trade["trade_id"])
 
@@ -358,9 +358,9 @@ class FreqtradeAdapter:
             raise CommandRejected(f"reprise des entrées impossible depuis l'état {state}")
 
     async def flatten(self, ref: InstanceRef) -> None:
-        """I4 : la sortie de tout part quoi qu'il arrive à la pause et à l'annulation des
-        entrées ; leur échec est journalisé et remonte après. La pause réveille aussi un moteur
-        arrêté, que `forceexit` refuserait. Sans trade ouvert, `forceexit` ne fait rien."""
+        """I4: the exit of everything goes out whatever happens to the pause and the cancellation
+        of entries; their failure is logged and raised afterwards. The pause also wakes a stopped
+        engine, which `forceexit` would refuse. With no open trade, `forceexit` does nothing."""
         failed = await self._reduce_entries(ref)
         api = await self._api(ref)
         await api.call("POST", "forceexit", {"tradeid": "all"}, read_s=EXIT_TIMEOUT_S)
@@ -369,12 +369,12 @@ class FreqtradeAdapter:
 
     async def close_position(self, ref: InstanceRef, position_id: str) -> None:
         api = await self._api(ref)
-        try:  # lectures préalables au mieux : illisibles, elles ne retiennent pas la sortie (I4)
+        try:  # best-effort prior reads: unreadable, they do not hold back the exit (I4)
             with _engine_answers():
                 if not any(str(t["trade_id"]) == position_id for t in await self._open_trades(api)):
-                    return  # déjà fermée
+                    return  # already closed
                 if await self._engine_state(ref) == "stopped":
-                    await self._post(ref, "pause")  # forceexit refuse un moteur arrêté
+                    await self._post(ref, "pause")  # forceexit refuses a stopped engine
         except (EngineUnreachable, CommandRejected) as exc:
             log.warning("read_before_exit_failed", instance_id=str(ref.instance_id),
                         error=str(exc))  # fmt: skip
@@ -388,9 +388,9 @@ class FreqtradeAdapter:
                 orders = _open_orders(trade)
                 if not any(str(_cid(iid, o["order_id"])) == order_id for o in orders):
                     continue
-                # La route annule tous les ordres ouverts du trade (ADR 0008) : sortie ou stop,
-                # jamais. Entre cette lecture et l'appel, un ordre de sortie peut naître : limite
-                # de la route du moteur, consignée dans l'ADR 0008, à lever avant le live.
+                # The route cancels all the trade's open orders (ADR 0008): exit or stop,
+                # never. Between this read and the call, an exit order may appear: a limit
+                # of the engine's route, recorded in ADR 0008, to lift before live.
                 if any(_intent(o) != "entry" for o in orders):
                     raise CommandRejected("le trade a un ordre de sortie ou de stop ouvert")
                 await _cancel_open(api, trade["trade_id"])
@@ -414,14 +414,14 @@ class FreqtradeAdapter:
         state = _STATES.get(str(cfg.get("state")))
         if state is None:
             raise EngineUnreachable("état du moteur inconnu")
-        # Le battement ne vaut que pour une boucle censée tourner : arrêté ou en rechargement, le
-        # moteur ne met pas `last_process` à jour (`process_stopped`, tag 2026.9).
+        # The heartbeat only matters for a loop that is supposed to run: stopped or reloading, the
+        # engine does not update `last_process` (`process_stopped`, tag 2026.9).
         if state in ("running", "exits_only"):
             beat = health.get("last_process_ts")
             if isinstance(beat, bool) or not isinstance(beat, int):
                 raise EngineUnreachable("battement du moteur absent ou illisible")
             if now.timestamp() - beat > HEALTH_STALE_S:
-                state = "error"  # le processus répond, sa boucle ne tourne plus
+                state = "error"  # the process answers, its loop no longer runs
         with _engine_answers():
             return InstanceStatus(state=state, mode=config.effective_mode(cfg), observed_at=now)
 
@@ -486,7 +486,7 @@ class FreqtradeAdapter:
                         opened_at=_when(t["open_fill_timestamp"] or t["open_timestamp"]),
                     )
                 )
-                # En dry-run le stop est toujours tenu par le moteur (ADR 0008, fait 6).
+                # in dry-run the stop is always held by the engine (ADR 0008, fact 6)
                 on_venue = not dry and any(
                     o["is_open"] and o["ft_order_side"] == "stoploss" for o in t["orders"]
                 )
@@ -507,16 +507,16 @@ class FreqtradeAdapter:
         )
 
     async def events(self, ref: InstanceRef) -> AsyncIterator[CanonicalEvent]:
-        """Événements nés de l'écart entre deux relevés. Un tour interrompu rejoue les mêmes
-        identifiants (déterministes) : jamais de doublon côté ingestion."""
+        """Events born from the difference between two snapshots. An interrupted round replays the
+        same (deterministic) identifiers: never a duplicate on the ingestion side."""
         iid = ref.instance_id
         tr = self._tracks.setdefault(iid, _Track())
-        if tr.seq is None:  # départ après les séquences d'un worker précédent (hors trou répété)
+        if tr.seq is None:  # start after a previous worker's sequences (excluding a repeated gap)
             tr.seq = int(self._clock().timestamp())
         c = await self._runner.inspect(iid)
         with _engine_answers():
             if c is None or c.status != "running":
-                # Conteneur arrêté : pas d'API à lire, mais l'arrêt lui-même s'annonce une fois.
+                # Stopped container: no API to read, but the stop itself is announced once.
                 raw: dict[str, Any] = {"state": ("stopped", None), "open": [], "closed": []}
                 whole = tr.history
             else:
@@ -546,7 +546,7 @@ class FreqtradeAdapter:
     async def backtest(self, spec: BacktestSpec) -> BacktestResult:
         raise CommandRejected("backtest : non disponible à ce jalon")
 
-    # --- interne ----------------------------------------------------------------------------
+    # --- internal ---------------------------------------------------------------------------
     async def _api(self, ref: InstanceRef) -> EngineApi:
         iid = ref.instance_id
         if iid not in self._creds:
@@ -579,13 +579,13 @@ class FreqtradeAdapter:
     async def _closed_trades(
         self, iid: UUID, api: EngineApi, seen: set[str] | None
     ) -> list[dict[str, Any]]:
-        """Trades clos, du plus ancien au plus récent. `seen` vaut None au premier relevé d'un
-        processus : tout l'historique est relu (I9, S5). Sinon : les pages récentes, jusqu'à
-        celle qui recoupe `seen` ; tout ce qui est plus ancien a déjà été rendu."""
+        """Closed trades, oldest to newest. `seen` is None at a process's first snapshot:
+        the whole history is re-read (I9, S5). Otherwise: the recent pages, up to the one
+        that overlaps `seen`; everything older has already been returned."""
         if iid in self._overflow:
             raise ClosedHistoryOverflow(f"plus de {HISTORY_CAP} trades clos : relevé refusé")
         size = HISTORY_PAGE if seen is None else RECENT_PAGE
-        found: dict[str, dict[str, Any]] = {}  # une clôture entre deux pages décale : doublons
+        found: dict[str, dict[str, Any]] = {}  # a close between two pages shifts them: duplicates
         offset = 0
         while True:
             page = await api.get(
@@ -631,7 +631,7 @@ async def _cancel_open(api: EngineApi, trade_id: int) -> None:
     try:
         await api.call("DELETE", f"trades/{trade_id}/open-order")
     except CommandRejected as exc:
-        # Ordre rempli, annulé ou trade retiré entre la lecture et l'appel : l'effet voulu est là.
+        # Order filled, canceled or trade removed between read and call: effect achieved.
         if not any(m in str(exc) for m in ("No open order", "no active trade", "Invalid trade_id")):
             raise
 
@@ -652,7 +652,7 @@ def _closed(venue: str, t: Mapping[str, Any]) -> ClosedTrade:
         exit_price=Decimal(t["close_rate"]),
         pnl=Decimal(pnl if pnl is not None else t["realized_profit"]),
         fees=Decimal(fees),
-        entry_cause=t.get("enter_tag") or "signal",  # force_entry_enable est faux : le signal
+        entry_cause=t.get("enter_tag") or "signal",  # force_entry_enable is false: the signal
         exit_cause=EXIT_CAUSE.get(t.get("exit_reason") or "", "unknown"),
         opened_at=_when(t["open_fill_timestamp"] or t["open_timestamp"]),
         closed_at=_when(t["close_timestamp"]),
@@ -682,7 +682,7 @@ def _diff(iid: UUID, raw: Mapping[str, Any], tr: _Track, now: datetime) -> list[
     dry_run: bool = raw.get("dry_run", True)
     state, mode = raw["state"]
     if state is not None and (state, mode) != tr.state:
-        key = ("state", state, mode, tr.seq + 1 + len(out))  # distinct même si l'état revient
+        key = ("state", state, mode, tr.seq + 1 + len(out))  # distinct even if the state comes back
         out.append(
             (now, key, EventType.INSTANCE_STATUS_CHANGED, StatusChanged(state=state, mode=mode))
         )

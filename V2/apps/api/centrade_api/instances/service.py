@@ -1,4 +1,4 @@
-"""Lecture et préparation des instances : vues de sortie, dérives, création depuis le registre."""
+"""Reading and preparing instances: output views, drifts, creation from the registry."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ async def instances_out(
             .where(Command.instance_id.in_(ids), Command.status.in_(ACTIVE))
             .order_by(Command.requested_at, Command.id)
         )
-        active = {c.instance_id: c for c in cmds}  # la plus récente l'emporte
+        active = {c.instance_id: c for c in cmds}  # the most recent wins
     return [
         InstanceOut.of(i, kind, active.get(i.id), now, cfg.observed_stale_after_s)
         for i, kind in rows
@@ -62,7 +62,7 @@ async def instance_out(
 
 
 def drift_items(raw: Any) -> list[DriftItem]:
-    """`instances.drift` : liste de {key, expected, observed}."""
+    """`instances.drift`: list of {key, expected, observed}."""
     if not raw:
         return []
     return [DriftItem.model_validate(x) for x in raw]
@@ -71,14 +71,14 @@ def drift_items(raw: Any) -> list[DriftItem]:
 async def from_registry(
     db: AsyncSession, body: InstanceCreate
 ) -> tuple[Engine, StrategyVersion, Account]:
-    """Version, compte et moteur d'une création depuis le registre ; refus au moindre doute."""
+    """Version, account and engine of a creation from the registry; refuse on any doubt."""
     version = await db.get(StrategyVersion, body.strategy_version_id)
     account = await db.get(Account, body.account_id)
     if version is None or account is None:
         raise HTTPException(422, "Version de stratégie ou compte inconnu.")
     if version.status == "retired":
         raise HTTPException(409, "Cette version de stratégie est retirée.")
-    if account.type != "paper":  # le live passe par la promotion (F1), jamais par ici (I3)
+    if account.type != "paper":  # live goes through promotion (F1), never through here (I3)
         raise HTTPException(409, "Seul un compte paper peut recevoir une instance créée ici.")
     manifest = Manifest.model_validate(version.manifest)
     if "paper" not in manifest.modes:

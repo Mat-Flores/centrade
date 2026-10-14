@@ -1,11 +1,11 @@
-"""Essai réel : une instance Freqtrade en dry-run sur le Docker local, de bout en bout.
+"""Real trial: a Freqtrade instance in dry-run on the local Docker, end to end.
 
-Sautée sans Docker, sans l'image épinglée (`make engines-pull`) ou sans réseau. Lancer :
+Skipped without Docker, without the pinned image (`make engines-pull`) or without network. Run:
 `CENTRADE_TEST_VENUE=kraken uv run pytest -q -s tests/freqtrade_adapter/test_ft_real.py`
-La venue ne sert qu'aux données publiques du dry-run (aucune clé) ; kraken est une valeur
-d'exemple, la première joignable depuis le poste d'essai, pas une recommandation.
-Le réseau d'essai est un pont ordinaire (le dry-run lit les données de la venue) : en production
-le réseau `engines` est interne, avec liste blanche de sorties (M7). Rien n'est publié sur l'hôte.
+The venue is only used for the dry-run's public data (no key); kraken is an example
+value, the first reachable from the test machine, not a recommendation.
+The test network is an ordinary bridge (the dry-run reads the venue's data): in production
+the `engines` network is internal, with an egress allowlist (M7). Nothing is published on the host.
 """
 
 from __future__ import annotations
@@ -168,11 +168,11 @@ async def test_dry_run_instance_starts_reports_trades_and_stops(stack: Any) -> N
     assert host["Memory"] == ENGINE_MEMORY_BYTES and host["CapDrop"] == ["ALL"]
     assert "FREQTRADE__" not in " ".join(c.attrs["Config"]["Env"])
     ls = c.exec_run(["ls", "/data/engine"])
-    assert b"trades-paper.sqlite" in ls.output, ls.output  # écrit sous /data
-    assert c.exec_run(["touch", "/freqtrade/essai"]).exit_code != 0  # racine en lecture seule
+    assert b"trades-paper.sqlite" in ls.output, ls.output  # written under /data
+    assert c.exec_run(["touch", "/freqtrade/essai"]).exit_code != 0  # read-only root
     note("utilisateur, racine en lecture seule, écriture sur /data : vérifiés")
 
-    # Vérification de F9, comme le worker la fait avant d'ouvrir les entrées.
+    # F9 verification, as the worker does it before opening entries.
     effective = await adapter.effective_config(ref)
     drifts = owned_drifts(generated, effective, tuple(adapter.config_drift(generated, effective)))
     refusals = entry_refusals(
@@ -187,7 +187,7 @@ async def test_dry_run_instance_starts_reports_trades_and_stops(stack: Any) -> N
     note(f"dérives : {[d.key for d in drifts]} ; refus : {[r.code for r in refusals]}")
     assert drifts == () and refusals == ()
 
-    await asyncio.sleep(12)  # une bougie courte passe : en sorties seules, aucune entrée
+    await asyncio.sleep(12)  # a short candle goes by: in exits-only, no entry
     snap = await adapter.snapshot(ref)
     assert snap.positions == () and snap.orders == ()
 
@@ -203,7 +203,7 @@ async def test_dry_run_instance_starts_reports_trades_and_stops(stack: Any) -> N
         return s if s.positions else None
 
     snap = await until(trade_visible, "un trade rempli", 240, 3)
-    # La position a pu apparaître entre le relevé des événements et l'instantané : on relit.
+    # The position may have appeared between the events read and the snapshot: we re-read.
     events.extend([e async for e in adapter.events(ref)])
     pos = snap.positions[0]
     note(
@@ -237,7 +237,7 @@ async def test_dry_run_instance_starts_reports_trades_and_stops(stack: Any) -> N
     assert len({e.id for e in events}) == len(events)
 
     await adapter.flatten(ref)
-    assert (await runner.inspect(iid)).status == "running"  # flatten n'arrête jamais le conteneur
+    assert (await runner.inspect(iid)).status == "running"  # flatten never stops the container
     await adapter.stop(ref)
     stopped = await adapter.status(ref)
     note(f"après stop : {stopped.state}")
@@ -247,7 +247,7 @@ async def test_dry_run_instance_starts_reports_trades_and_stops(stack: Any) -> N
     assert c.status == "exited"
     note("fichiers d'identifiants supprimés")
 
-    # Relance : identifiants renouvelés, sorties seules, historique du volume /data conservé.
+    # Restart: credentials renewed, exits-only, /data volume history kept.
     await adapter.start(ref)
     again = await until(_reachable(adapter, ref), "API après relance", 120)
     kept = len((await adapter.snapshot(ref)).closed)

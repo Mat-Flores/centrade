@@ -1,4 +1,4 @@
-"""Configuration. Aucun secret n'a de valeur par défaut : un fichier absent arrête le démarrage."""
+"""Configuration. No secret has a default value: a missing file stops startup."""
 
 import base64
 from functools import lru_cache
@@ -18,13 +18,13 @@ class Settings(BaseSettings):
     db_name: str = "centrade"
     redis_url: str = Field(repr=False, description="redis://hôte:port/db, sans mot de passe")
     worker_interval_s: float = 1.0
-    engine_silent_after_s: float = 30.0  # moteur muet au-delà : état observé `unknown`
+    engine_silent_after_s: float = 30.0  # engine silent beyond this: observed state `unknown`
     worker_heartbeat_ttl_s: int = 15
-    # Fraîcheur d'une valeur de moteur (SPEC §13) : au-delà, l'API la marque `stale`.
+    # Freshness of an engine value (SPEC §13): beyond it, the API marks it `stale`.
     observed_stale_after_s: float = 30.0
-    stream_heartbeat_s: float = 2.0  # battement du flux SSE ; le front attend 5 s au plus
-    stream_session_check_s: float = 5.0  # revérification de la session pendant le flux
-    # Échéance de chaque type de commande (F9) : sans effet observé avant, `timed_out`.
+    stream_heartbeat_s: float = 2.0  # SSE stream heartbeat; the front end waits 5 s at most
+    stream_session_check_s: float = 5.0  # session re-check during the stream
+    # Deadline of each command type (F9): without an observed effect before it, `timed_out`.
     deadline_pause_entries_s: float = 10.0
     deadline_resume_entries_s: float = 30.0
     deadline_flatten_s: float = 60.0
@@ -33,21 +33,21 @@ class Settings(BaseSettings):
     deadline_deploy_s: float = 60.0
     deadline_close_position_s: float = 60.0
     deadline_cancel_entry_order_s: float = 30.0
-    # Injection de pannes dans un moteur simulé par les paramètres d'une instance : jamais hors
-    # des tests et de la pile e2e jetable.
+    # Fault injection into an engine simulated by an instance's parameters: never outside
+    # tests and the disposable e2e stack.
     engine_failure_injection: bool = False
-    # Seule origine admise pour les requêtes qui changent un état (CSRF). Défaut : celui de Caddy.
+    # Only origin allowed for state-changing requests (CSRF). Default: Caddy's.
     public_origin: str = Field(default="https://localhost:8443", pattern=r"^https://[^/\s]+$")
-    # Chemins de Docker secrets (/run/secrets/…), jamais les valeurs.
+    # Docker secrets paths (/run/secrets/…), never the values.
     postgres_password_file: Path
-    # L'API la reçoit toujours ; le worker seulement avec le profil engines (identifiants de
-    # l'API native des moteurs). Sans elle, `master_key()` échoue.
+    # The API always receives it; the worker only with the engines profile (engines' native
+    # API credentials). Without it, `master_key()` fails.
     master_key_file: Path | None = None
-    # Fichier de configuration Redis du secret (`requirepass <valeur>`) : si présent, son mot de
-    # passe est inséré dans `redis_url` en mémoire seulement (jamais en variable d'environnement).
+    # Redis configuration file from the secret (`requirepass <value>`): if present, its
+    # password is inserted into `redis_url` in memory only (never in an environment variable).
     redis_conf_file: Path | None = None
-    # Répertoire en mémoire (tmpfs) des fichiers remis aux moteurs, un sous-dossier par instance.
-    # Même nom de variable que le runner : `ENGINE_RUNTIME_DIR`, sans préfixe.
+    # In-memory (tmpfs) directory of the files handed to engines, one subfolder per instance.
+    # Same variable name as the runner: `ENGINE_RUNTIME_DIR`, no prefix.
     engine_runtime_dir: Path = Field(
         default=Path("/run/centrade"), validation_alias="ENGINE_RUNTIME_DIR"
     )
@@ -80,7 +80,7 @@ class Settings(BaseSettings):
         )
 
     def master_key(self) -> bytes:
-        """Clé maître AES-256 : 32 octets encodés en base64 dans le fichier."""
+        """AES-256 master key: 32 bytes base64-encoded in the file."""
         if self.master_key_file is None:
             raise ValueError("clé maître non fournie à ce processus (CENTRADE_MASTER_KEY_FILE)")
         key = base64.b64decode(

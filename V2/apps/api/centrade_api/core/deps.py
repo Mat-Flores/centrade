@@ -1,7 +1,7 @@
-"""Dépendances communes des routes : session de base, heure, adresse du client, bus, réglages.
+"""Common route dependencies: database session, time, client address, bus, settings.
 
-Les alias `Annotated` en bas de fichier sont la façon de les demander dans une route. Aucun import
-de `auth` ici : c'est `auth` qui dépend de ce module, pas l'inverse.
+The `Annotated` aliases at the bottom of the file are how to request them in a route. No import
+of `auth` here: `auth` depends on this module, not the other way round.
 """
 
 import ipaddress
@@ -16,21 +16,21 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 
 async def get_db(request: Request) -> AsyncIterator[AsyncSession]:
-    """Une session par requête ; chaque unité de travail valide (`commit`) elle-même."""
+    """One session per request; each unit of work commits (`commit`) itself."""
     async with request.app.state.session_factory() as session:
         yield session
 
 
 def utcnow() -> datetime:
-    """Heure de la requête, injectée pour que les tests d'expiration n'attendent pas."""
+    """Request time, injected so that expiry tests do not have to wait."""
     return datetime.now(UTC)
 
 
 def client_ip(request: Request) -> str | None:
-    """Adresse du client telle que le serveur ASGI la rapporte, ou None si ce n'en est pas une.
+    """Client address as the ASGI server reports it, or None if it is not one.
 
-    Derrière Caddy, c'est l'adresse du proxy tant qu'uvicorn ne lui fait pas confiance
-    (`--forwarded-allow-ips`) : on ne lit jamais `X-Forwarded-For` soi-même, un client le forge.
+    Behind Caddy, this is the proxy address as long as uvicorn does not trust it
+    (`--forwarded-allow-ips`): we never read `X-Forwarded-For` ourselves, a client forges it.
     """
     if request.client is None:
         return None
@@ -41,7 +41,7 @@ def client_ip(request: Request) -> str | None:
 
 
 def get_session_factory(request: Request) -> async_sessionmaker[AsyncSession] | None:
-    """Fabrique de sessions du processus (None si le cycle de vie n'a pas tourné)."""
+    """Process-wide session factory (None if the lifespan did not run)."""
     return getattr(request.app.state, "session_factory", None)
 
 
@@ -53,7 +53,7 @@ Db = Annotated[AsyncSession, Depends(get_db)]
 Now = Annotated[datetime, Depends(utcnow)]
 Cfg = Annotated[Settings, Depends(get_settings)]
 Bus = Annotated[Redis | None, Depends(get_redis)]
-Limit = Annotated[int, Query(ge=1, le=200)]  # hors bornes ou non entier : 422
+Limit = Annotated[int, Query(ge=1, le=200)]  # out of bounds or not an integer: 422
 _KEY = Header(alias="Idempotency-Key", min_length=8, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")
 IdempotencyKey = Annotated[str, _KEY]
-OptionalKey = Annotated[str | None, _KEY]  # création : la clé est facultative (compatibilité M1)
+OptionalKey = Annotated[str | None, _KEY]  # creation: the key is optional (M1 compatibility)

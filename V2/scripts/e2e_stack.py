@@ -1,10 +1,11 @@
-"""Pile jetable pour `make e2e-live` : Postgres/Timescale et Redis (testcontainers), migrations, un
-administrateur aux identifiants aléatoires, l'API et le worker en processus locaux (FakeEngine).
+"""Disposable stack for `make e2e-live`: Postgres/Timescale and Redis (testcontainers),
+migrations, an administrator with random credentials, the API and the worker as local
+processes (FakeEngine).
 
-Rien n'est persistant : conteneurs sans volume, secrets et identifiants dans un dossier temporaire
-(hors du dépôt, mode 700) effacé à l'arrêt. Aucune clé de venue, aucun ordre réel : le seul moteur
-est le FakeEngine. Écrit `ready.json` et `creds.json` dans `--dir` quand tout répond, puis attend
-SIGTERM ou SIGINT.
+Nothing is persistent: containers without volumes, secrets and credentials in a temporary folder
+(outside the repo, mode 700) erased at shutdown. No venue key, no real order: the only engine
+is the FakeEngine. Writes `ready.json` and `creds.json` in `--dir` when everything answers,
+then waits for SIGTERM or SIGINT.
 
     uv run python scripts/e2e_stack.py --dir "$(mktemp -d -t centrade-e2e-XXXXXX)"
 """
@@ -40,8 +41,8 @@ ROOT = Path(__file__).resolve().parents[1]
 PYTHONPATH = ":".join(
     str(ROOT / p) for p in ("apps/api", "apps/worker", "packages/core", "packages/adapters/fake")
 )
-# Origine publique attendue par l'API (CSRF) ; le relais Vite la présente à la place de celle du
-# navigateur.
+# Public origin expected by the API (CSRF); the Vite relay presents it in place of the
+# browser's.
 PUBLIC_ORIGIN = "https://localhost:8443"
 
 
@@ -63,7 +64,7 @@ def wait_health(url: str, timeout_s: float = 60) -> None:
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
         try:
-            with urllib.request.urlopen(url, timeout=2) as response:  # noqa: S310 - 127.0.0.1 local
+            with urllib.request.urlopen(url, timeout=2) as response:  # noqa: S310 - local 127.0.0.1
                 if json.load(response)["status"] == "ok":
                     return
         except (OSError, ValueError, KeyError):
@@ -81,7 +82,7 @@ def main() -> int:
         help="dossier temporaire créé par l'appelant, effacé à l'arrêt",
     )
     args = parser.parse_args()
-    # Garde-fou : on n'efface qu'un sous-dossier du dossier temporaire du système, jamais le dépôt.
+    # Safeguard: we only erase a subfolder of the system's temporary folder, never the repo.
     shared = args.dir.resolve()
     if shared.parent != Path(tempfile.gettempdir()).resolve() or not shared.name.startswith(
         "centrade-e2e-"
@@ -149,7 +150,7 @@ def main() -> int:
                 "CENTRADE_REDIS_URL": redis_url,
                 "CENTRADE_PUBLIC_ORIGIN": PUBLIC_ORIGIN,
                 "CENTRADE_WORKER_INTERVAL_S": "0.5",
-                # Pile jetable seulement : les E2E simulent des pannes du FakeEngine.
+                # Disposable stack only: the E2E tests simulate FakeEngine failures.
                 "CENTRADE_ENGINE_FAILURE_INJECTION": "true",
             }
             os.environ.update({k: v for k, v in env.items() if k.startswith("CENTRADE_")})
@@ -159,7 +160,7 @@ def main() -> int:
             cfg.set_main_option("sqlalchemy.url", db_url.replace("%", "%%"))
             command.upgrade(cfg, "head")
 
-            # Identifiants propres à cette exécution ; jamais écrits dans le dépôt ni affichés.
+            # Credentials specific to this run; never written to the repo nor displayed.
             email = f"e2e-{secrets.token_hex(4)}@example.test"
             password = secrets.token_urlsafe(24)
 
@@ -181,7 +182,7 @@ def main() -> int:
 
             try:
                 procs.append(
-                    subprocess.Popen(  # noqa: S603 - arguments fixes, aucune entrée externe
+                    subprocess.Popen(  # noqa: S603 - fixed arguments, no external input
                         [
                             sys.executable,
                             "-m",
@@ -207,7 +208,7 @@ def main() -> int:
                 while not stop and all(p.poll() is None for p in procs):
                     time.sleep(0.5)
             finally:
-                stop_procs()  # avant les conteneurs : pas d'erreurs de connexion à l'arrêt
+                stop_procs()  # before the containers: no connection errors at shutdown
     finally:
         stop_procs()
         shutil.rmtree(work, ignore_errors=True)

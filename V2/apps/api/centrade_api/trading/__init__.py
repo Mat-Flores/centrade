@@ -1,4 +1,4 @@
-"""Ordres, positions et trades : routes, schémas, projections vers les schémas."""
+"""Orders, positions and trades: routes, schemas, projections onto the schemas."""
 
 from centrade_api.trading.routes import router
 

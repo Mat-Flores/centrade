@@ -1,4 +1,4 @@
-"""Fixture paramétrée par adaptateur : ajouter un adaptateur = ajouter une fabrique ci-dessous."""
+"""Fixture parametrized by adapter: adding an adapter = adding a factory below."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from .contract_support import make_clock, make_id_factory, make_spec
 @dataclass
 class Harness:
     adapter: EngineAdapter
-    drive: Callable[[InstanceRef, int], None]  # avance le moteur de n pas
+    drive: Callable[[InstanceRef, int], None]  # advances the engine by n steps
     make_unreachable: Callable[[InstanceRef], None]
     make_drift: Callable[[InstanceRef], None]
     spec: Callable[[], InstanceSpec]

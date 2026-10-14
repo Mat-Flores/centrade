@@ -1,4 +1,4 @@
-"""Adaptateur d'exécution contre la doublure de l'API REST (sans Docker)."""
+"""Execution adapter against the REST API double (without Docker)."""
 
 from __future__ import annotations
 
@@ -41,7 +41,7 @@ async def test_deploy_hands_files_to_the_engine_and_never_env() -> None:
     spec, ref = await deployed(rig)
     c = rig.runner.created[spec.instance_id]
     assert c.command[:4] == ("trade", "--config", "/run/centrade/config.json", "--config")
-    assert c.command[4] == "/run/centrade/credentials.json"  # fusionné en dernier
+    assert c.command[4] == "/run/centrade/credentials.json"  # merged last
     assert c.env == {} and c.user == "1000:1000"
     assert c.image == "freqtradeorg/freqtrade:2026.9" and c.digest.startswith("sha256:")
     files = rig.runtime.files[spec.instance_id]
@@ -89,13 +89,13 @@ async def test_stop_pauses_cancels_entries_then_stops_container_and_cleans_up() 
     rig = Rig()
     spec, ref = await deployed(rig)
     await rig.adapter.resume_entries(ref)
-    rig.server.step()  # un ordre d'entrée ouvert
+    rig.server.step()  # an open entry order
     assert (await rig.adapter.snapshot(ref)).orders
     rig.server.calls.clear()
     await rig.adapter.stop(ref)
     paths = [p for m, p in rig.server.calls]
     assert paths.index("pause") < paths.index("trades/1/open-order")
-    assert "stop" not in paths  # jamais un simple POST /stop
+    assert "stop" not in paths  # never a plain POST /stop
     assert rig.runner.status[spec.instance_id] == "exited"
     assert rig.runtime.cleaned == [spec.instance_id]
     assert not rig.server.trades[0]["orders"][0]["is_open"]
@@ -138,12 +138,12 @@ async def test_cancel_entry_order_refused_when_an_exit_order_is_open() -> None:
     rig = Rig()
     _, ref = await deployed(rig)
     t = rig.server.open_entry()
-    rig.server.open_exit_order(t)  # entrée encore ouverte et ordre de sortie ouvert
+    rig.server.open_exit_order(t)  # entry still open and exit order open
     snap = await rig.adapter.snapshot(ref)
     entry = next(o for o in snap.orders if o.intent == "entry")
     with pytest.raises(CommandRejected):
         await rig.adapter.cancel_entry_order(ref, entry.order_id)
-    assert all(o["is_open"] for o in t["orders"])  # rien n'a été annulé
+    assert all(o["is_open"] for o in t["orders"])  # nothing was cancelled
 
 
 async def test_cancel_entry_order_cancels_an_entry_only_trade() -> None:
@@ -159,11 +159,11 @@ async def test_cancel_entry_order_cancels_an_entry_only_trade() -> None:
 async def test_halted_engine_is_halted_and_cannot_resume() -> None:
     rig = Rig()
     _, ref = await deployed(rig)
-    rig.server.state = "stopped"  # processus vivant, moteur arrêté
+    rig.server.state = "stopped"  # process alive, engine stopped
     assert (await rig.adapter.status(ref)).state == "halted"
     with pytest.raises(CommandRejected):
         await rig.adapter.resume_entries(ref)
-    await rig.adapter.start(ref)  # conteneur en marche : remet le moteur en sorties seules
+    await rig.adapter.start(ref)  # container running: puts the engine back in exits-only
     assert (await rig.adapter.status(ref)).state == "exits_only"
 
 
@@ -186,7 +186,7 @@ async def test_mode_is_read_from_the_engine_not_from_the_request() -> None:
 async def test_stale_heartbeat_is_error() -> None:
     rig = Rig()
     _, ref = await deployed(rig)
-    rig.clock.now = NOW.replace(hour=14)  # le moteur n'a rien traité depuis des heures
+    rig.clock.now = NOW.replace(hour=14)  # the engine has processed nothing for hours
     rig.server.clock = lambda: NOW  # type: ignore[assignment]
     assert (await rig.adapter.status(ref)).state == "error"
 
@@ -242,7 +242,7 @@ async def test_closed_trade_is_read_with_translated_exit_cause() -> None:
     } == {"trailing_stop", "unknown"}
     c = next(c for c in closed if c.position_id == "1")
     assert c.pnl == Decimal("0.25") and c.fees == Decimal("0.10") and c.entry_cause == "signal"
-    assert c.position_id == "1"  # même identifiant que la position ouverte
+    assert c.position_id == "1"  # same identifier as the open position
 
 
 def close_many(rig: Rig, n: int) -> None:
@@ -252,7 +252,7 @@ def close_many(rig: Rig, n: int) -> None:
 
 
 def trade_pages(rig: Rig) -> list[tuple[int, int]]:
-    """(offset, limit) de chaque appel à GET /trades."""
+    """(offset, limit) of each call to GET /trades."""
     return [
         (int(q["offset"][0]), int(q["limit"][0]))
         for (_, path), q in zip(rig.server.calls, rig.server.queries, strict=True)
@@ -261,12 +261,12 @@ def trade_pages(rig: Rig) -> list[tuple[int, int]]:
 
 
 async def test_first_read_of_a_process_returns_the_whole_closed_history() -> None:
-    """I9, S5 : après un arrêt du worker, aucun trade clos n'est perdu, quel qu'en soit le rang."""
+    """I9, S5: after a worker stop, no closed trade is lost, whatever its rank."""
     rig = Rig()
     _, ref = await deployed(rig)
     close_many(rig, 60)
     closed = (await rig.adapter.snapshot(ref)).closed
-    assert [c.position_id for c in closed] == [str(i) for i in range(1, 61)]  # ancien -> récent
+    assert [c.position_id for c in closed] == [str(i) for i in range(1, 61)]  # old -> recent
 
 
 async def test_closed_history_is_read_by_pages_then_only_recent_pages(
@@ -278,21 +278,21 @@ async def test_closed_history_is_read_by_pages_then_only_recent_pages(
     _, ref = await deployed(rig)
     close_many(rig, 20)
     assert len((await rig.adapter.snapshot(ref)).closed) == 20
-    assert trade_pages(rig) == [(0, 7), (7, 7), (14, 7)]  # jusqu'à la page incomplète
+    assert trade_pages(rig) == [(0, 7), (7, 7), (14, 7)]  # up to the incomplete page
     rig.server.calls.clear()
     rig.server.queries.clear()
     close_many(rig, 1)
     recent = (await rig.adapter.snapshot(ref)).closed
-    assert trade_pages(rig) == [(0, 3)]  # régime courant : une page récente suffit
+    assert trade_pages(rig) == [(0, 3)]  # steady state: one recent page is enough
     assert "21" in {c.position_id for c in recent}
-    # Plus de clôtures qu'une page entre deux relevés : on pagine jusqu'à recouper le déjà-lu.
+    # More closures than one page between snapshots: paginate until overlapping what was read.
     rig.server.calls.clear()
     rig.server.queries.clear()
     close_many(rig, 8)
     recent = (await rig.adapter.snapshot(ref)).closed
     assert {str(i) for i in range(22, 30)} <= {c.position_id for c in recent}
     assert trade_pages(rig) == [(0, 3), (3, 3), (6, 3)]
-    # Un autre processus (worker redémarré) relit tout.
+    # Another process (restarted worker) re-reads everything.
     assert len((await rig.new_adapter().snapshot(ref)).closed) == 29
 
 
@@ -304,12 +304,12 @@ async def test_events_replay_the_whole_history_after_a_worker_restart(
     rig = Rig()
     _, ref = await deployed(rig)
     close_many(rig, 20)
-    await rig.adapter.snapshot(ref)  # le relevé ne doit pas priver les événements de l'historique
+    await rig.adapter.snapshot(ref)  # the snapshot must not deprive the events of the history
     out = await events(rig, ref, rig.new_adapter())
     closed = {e.payload.position_id for e in out if e.type.value == "position.closed"}
     assert closed == {str(i) for i in range(1, 21)}
     close_many(rig, 5)
-    more = await events(rig, ref)  # premier relevé de cet adaptateur-ci : tout, sans doublon
+    more = await events(rig, ref)  # first snapshot of this adapter: everything, without duplicates
     assert len({e.id for e in more}) == len(more)
     assert sum(e.type.value == "position.closed" for e in more) == 25
     close_many(rig, 5)
@@ -329,13 +329,13 @@ async def test_closed_history_beyond_the_cap_raises_instead_of_losing(
     close_many(rig, 14)
     with pytest.raises(ft.ClosedHistoryOverflow, match="14"):
         await rig.adapter.snapshot(ref)
-    with pytest.raises(EngineUnreachable):  # ce que le worker attrape
+    with pytest.raises(EngineUnreachable):  # what the worker catches
         await events(rig, ref)
-    assert (await rig.adapter.status(ref)).state == "exits_only"  # l'état, lui, reste lisible
-    await rig.adapter.flatten(ref)  # et une sortie n'en dépend pas (I4)
+    assert (await rig.adapter.status(ref)).state == "exits_only"  # the state remains readable
+    await rig.adapter.flatten(ref)  # and an exit does not depend on it (I4)
 
 
-# --- I4 : rien ne retient une sortie ni un arrêt ------------------------------------------------
+# --- I4: nothing holds back an exit or a stop ------------------------------------------------
 CANCEL = ("DELETE", "trades/1/open-order")
 REFUSED = (502, {"detail": "Order cancel failed"})
 
@@ -347,14 +347,14 @@ async def test_flatten_sends_forceexit_whatever_happens_to_pause_and_cancel(
 ) -> None:
     rig = Rig()
     _, ref = await deployed(rig)
-    run_to_position(rig)  # trade 1 : position ouverte
-    rig.server.open_entry()  # trade 2 : ordre d'entrée ouvert
+    run_to_position(rig)  # trade 1: open position
+    rig.server.open_entry()  # trade 2: open entry order
     rig.server.trades[0]["trade_id"], rig.server.trades[1]["trade_id"] = 2, 1
     rig.server.fail[broken] = failure
     try:
         await rig.adapter.flatten(ref)
     except (EngineUnreachable, CommandRejected):
-        pass  # l'échec de la pause ou de l'annulation remonte, mais après la sortie
+        pass  # the failure of the pause or the cancellation propagates, but after the exit
     assert ("POST", "forceexit") in rig.server.calls
     assert rig.server.open_trades() == []
 
@@ -377,23 +377,23 @@ async def test_stop_always_stops_the_container(
     rig = Rig()
     spec, ref = await deployed(rig)
     await rig.adapter.resume_entries(ref)
-    rig.server.step()  # un ordre d'entrée ouvert
+    rig.server.step()  # an open entry order
     rig.server.fail[broken] = failure
     with pytest.raises((EngineUnreachable, CommandRejected)):
-        await rig.adapter.stop(ref)  # l'échec remonte, après l'arrêt
+        await rig.adapter.stop(ref)  # the failure propagates, after the stop
     assert rig.runner.status[spec.instance_id] == "exited"
     assert rig.runtime.cleaned == [spec.instance_id]
     assert ("POST", "stop") not in rig.server.calls
     if broken != ("POST", "pause"):
-        assert ("POST", "pause") in rig.server.calls  # ce qui pouvait être tenté l'a été
-    await rig.adapter.stop(ref)  # idempotent : conteneur déjà arrêté, plus rien à signaler
+        assert ("POST", "pause") in rig.server.calls  # what could be attempted was attempted
+    await rig.adapter.stop(ref)  # idempotent: container already stopped, nothing more to report
 
 
 async def test_stop_does_not_wait_for_a_silent_engine_api(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(ft, "STOP_GRACE_S", 0.05)
     rig = Rig()
     spec, ref = await deployed(rig)
-    rig.server.delay_s = 0.4  # l'API répond trop tard
+    rig.server.delay_s = 0.4  # the API responds too late
     with pytest.raises(EngineUnreachable):
         await rig.adapter.stop(ref)
     assert rig.runner.status[spec.instance_id] == "exited"
@@ -412,15 +412,15 @@ async def test_pause_never_cancels_an_exit_order() -> None:
     rig = Rig()
     _, ref = await deployed(rig)
     run_to_position(rig)
-    rig.server.open_exit_order(rig.server.trades[0])  # trade 1 : sortie ouverte
-    both = rig.server.open_entry()  # trade 2 : entrée ET sortie ouvertes (la route annule tout)
+    rig.server.open_exit_order(rig.server.trades[0])  # trade 1: open exit
+    both = rig.server.open_entry()  # trade 2: entry AND exit open (the route cancels everything)
     rig.server.open_exit_order(both)
     await rig.adapter.pause_entries(ref)
     assert not [c for c in rig.server.calls if c[0] == "DELETE"]
     assert (
         all(o["is_open"] for o in both["orders"]) and rig.server.trades[0]["orders"][-1]["is_open"]
     )
-    only = rig.server.open_entry()  # trade 3 : entrée seule
+    only = rig.server.open_entry()  # trade 3: entry only
     await rig.adapter.pause_entries(ref)
     assert [c for c in rig.server.calls if c[0] == "DELETE"] == [("DELETE", "trades/3/open-order")]
     assert not only["orders"][0]["is_open"]
@@ -445,7 +445,7 @@ async def test_close_position_is_sent_even_when_the_engine_state_is_unreadable()
     assert rig.server.open_trades() == []
 
 
-# --- battement ----------------------------------------------------------------------------------
+# --- heartbeat ----------------------------------------------------------------------------------
 @pytest.mark.parametrize("beat", [None, "1760270400", 1.5, True, [], {}])
 async def test_missing_or_non_integer_heartbeat_is_unknown(beat: object) -> None:
     rig = Rig()
@@ -457,7 +457,7 @@ async def test_missing_or_non_integer_heartbeat_is_unknown(beat: object) -> None
 
 
 async def test_halted_engine_does_not_beat_and_stays_halted() -> None:
-    """Tag 2026.9 : `process_stopped` ne met pas `last_process` à jour. `halted` reste visible."""
+    """Tag 2026.9: `process_stopped` does not update `last_process`. `halted` remains visible."""
     rig = Rig()
     _, ref = await deployed(rig)
     rig.server.state = "stopped"
@@ -465,7 +465,7 @@ async def test_halted_engine_does_not_beat_and_stays_halted() -> None:
     assert (await rig.adapter.status(ref)).state == "halted"
 
 
-# --- réponses malformées --------------------------------------------------------------------------
+# --- malformed responses --------------------------------------------------------------------------
 json_values = st.recursive(
     st.none()
     | st.booleans()
@@ -482,7 +482,7 @@ ROUTES = ("show_config", "health", "whitelist", "status", "trades", "balance")
 
 @st.composite
 def damaged(draw: st.DrawFn, body: Any) -> Any:
-    """Une réponse plausible, abîmée : clés retirées, valeurs remplacées par n'importe quoi."""
+    """A plausible response, damaged: keys removed, values replaced by anything."""
     if isinstance(body, dict) and body:
         out = dict(body)
         for key in draw(st.lists(st.sampled_from(sorted(out)), max_size=3, unique=True)):
@@ -516,7 +516,7 @@ async def test_any_engine_answer_only_raises_contract_exceptions(
         try:
             await call(ref)
         except (EngineUnreachable, CommandRejected):
-            pass  # seules exceptions du contrat : l'instance devient `unknown`, pas le tour
+            pass  # the contract's only exceptions: the instance becomes `unknown`, not the round
 
 
 @pytest.mark.parametrize(
@@ -539,7 +539,7 @@ async def test_oversized_answer_is_refused_without_reading_it_all(
     monkeypatch.setattr(client, "MAX_RESPONSE_BYTES", 8192)
     rig = Rig()
     _, ref = await deployed(rig)
-    assert (await rig.adapter.status(ref)).state == "exits_only"  # réponses courtes : lues
+    assert (await rig.adapter.status(ref)).state == "exits_only"  # short responses: read
     rig.server.raw_body = b'{"a": "' + b"x" * 50_000 + b'"}'
     with pytest.raises(EngineUnreachable, match="volumineuse"):
         await rig.adapter.status(ref)
@@ -560,8 +560,8 @@ async def test_events_cover_the_trade_lifecycle_and_replay_without_duplicates() 
         assert expected in kinds
     closed = next(e for e in out if e.type.value == "position.closed")
     assert closed.payload.exit_cause == "take_profit"
-    assert await events(rig, ref) == []  # rien de nouveau : rien d'émis
-    # Un worker redémarré rejoue tout, avec les mêmes identifiants : l'ingestion les écarte.
+    assert await events(rig, ref) == []  # nothing new: nothing emitted
+    # A restarted worker replays everything, with the same identifiers: ingestion discards them.
     replay = await events(rig, ref, rig.new_adapter())
     assert {e.id for e in replay if e.type.value != "instance.status_changed"} <= {
         e.id for e in out

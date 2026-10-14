@@ -1,7 +1,7 @@
-"""Configuration Freqtrade possédée par la plateforme (SPEC §7, annexe C, ADR 0008).
+"""Freqtrade configuration owned by the platform (SPEC §7, annex C, ADR 0008).
 
-Tout est pur : même entrée, même sortie. Les identifiants de l'API native viennent d'un second
-fichier de configuration (fusion profonde, le dernier l'emporte), écrit par le worker.
+Everything is pure: same input, same output. The native API credentials come from a second
+configuration file (deep merge, the last one wins), written by the worker.
 """
 
 from __future__ import annotations
@@ -14,9 +14,9 @@ from typing import Any
 
 from centrade_core.engine.types import EngineConfig, InstanceSpec, Mode
 
-# Clés possédées (annexe C), en notation pointée. Valeurs de EngineConfig : chaînes canoniques.
-# Toute clé écrite dans le fichier généré en fait partie (I10) : un test le vérifie feuille par
-# feuille, et qu'en changer une change le hash de configuration.
+# Owned keys (annex C), in dotted notation. EngineConfig values: canonical strings.
+# Every key written in the generated file is one of them (I10): a test checks it leaf by
+# leaf, and that changing any one changes the configuration hash.
 OWNED_KEYS: tuple[str, ...] = (
     "dry_run",
     "db_url",
@@ -43,7 +43,7 @@ OWNED_KEYS: tuple[str, ...] = (
     "minimal_roi",
     "order_types",
     "cancel_open_orders_on_exit",
-    # Réglages d'exécution décidés par la plateforme (ADR 0008), pas par la stratégie.
+    # Runtime settings decided by the platform (ADR 0008), not by the strategy.
     "entry_pricing",
     "exit_pricing",
     "unfilledtimeout",
@@ -58,7 +58,7 @@ OWNED_KEYS: tuple[str, ...] = (
     "webhook.allow_custom_messages",
     "telegram.enabled",
 )
-# Jamais écrits pour paper ni backtest (I3) ; en live ils viennent du fichier d'identifiants.
+# Never written for paper or backtest (I3); in live they come from the credentials file.
 VENUE_CREDENTIAL_KEYS: tuple[str, ...] = (
     "exchange.key",
     "exchange.secret",
@@ -66,10 +66,10 @@ VENUE_CREDENTIAL_KEYS: tuple[str, ...] = (
     "exchange.uid",
 )
 
-# Clé possédée -> clé de GET /show_config. `exchange.pair_whitelist` n'y figure pas : l'adaptateur
-# d'exécution l'ajoute sous `pair_whitelist` depuis GET /whitelist. Les clés absentes de cette
-# table ne sont pas rendues par l'API du moteur : elles sont déclarées `unreadable`, chacune avec
-# sa justification dans l'ADR 0008.
+# Owned key -> GET /show_config key. `exchange.pair_whitelist` is not in it: the execution
+# adapter adds it under `pair_whitelist` from GET /whitelist. Keys absent from this
+# table are not rendered by the engine's API: they are declared `unreadable`, each with
+# its justification in ADR 0008.
 _SHOW_CONFIG_SOURCE: dict[str, str] = {
     "dry_run": "dry_run",
     "bot_name": "bot_name",
@@ -95,15 +95,15 @@ _SHOW_CONFIG_SOURCE: dict[str, str] = {
     "unfilledtimeout": "unfilledtimeout",
 }
 OBSERVABLE_KEYS: tuple[str, ...] = tuple(k for k in OWNED_KEYS if k in _SHOW_CONFIG_SOURCE)
-# Le moteur peut ajouter des valeurs par défaut à ces dictionnaires : seules nos clés comptent.
+# The engine may add default values to these dictionaries: only our keys count.
 _SUBSET_KEYS = frozenset({"order_types", "entry_pricing", "exit_pricing", "unfilledtimeout"})
 
-# Propres au mode ou à l'instance : hors du hash de configuration (I10).
+# Mode- or instance-specific: outside the configuration hash (I10).
 MODE_KEYS = frozenset({"dry_run", "db_url", "bot_name"})
 
 API_PORT = 8080
-# Sous-dossier de /data créé par le runner au nom de l'utilisateur du conteneur : la racine du
-# volume appartient à root, le moteur n'y écrit rien.
+# Subfolder of /data created by the runner under the container user's name: the volume root
+# belongs to root, the engine writes nothing there.
 USER_DATA = "/data/engine"
 
 
@@ -119,7 +119,7 @@ def _num(d: Decimal) -> str:
 
 
 def _norm(v: Any) -> Any:
-    """Forme canonique comparable : nombres décimaux normalisés (50, 50.0 et "50" s'égalent)."""
+    """Comparable canonical form: normalized decimal numbers (50, 50.0 and "50" are equal)."""
     if isinstance(v, bool) or v is None:
         return v
     if isinstance(v, float):
@@ -166,8 +166,8 @@ def _get(doc: Mapping[str, Any], dotted: str) -> Any:
 
 
 def _pairs(params: Mapping[str, Any]) -> tuple[str, list[str], str]:
-    """`params["pairs"]` : symboles normalisés `crypto:venue:BASE/QUOTE`, une seule venue et une
-    seule devise de cotation. Fournis par la plateforme, pas par l'auteur de la stratégie."""
+    """`params["pairs"]`: normalized symbols `crypto:venue:BASE/QUOTE`, a single venue and a
+    single quote currency. Supplied by the platform, not by the strategy author."""
     raw = params.get("pairs")
     if not isinstance(raw, list) or not raw:
         raise ValueError("params.pairs : liste non vide de symboles normalisés exigée")
@@ -185,7 +185,7 @@ def _pairs(params: Mapping[str, Any]) -> tuple[str, list[str], str]:
 
 
 def _document(spec: InstanceSpec) -> dict[str, Any]:
-    """Configuration imbriquée, argent en Decimal. Source unique de render_config et du fichier."""
+    """Nested configuration, money as Decimal. Single source of render_config and of the file."""
     m = spec.manifest
     if m.trading_mode != "spot":
         raise ValueError("seul le mode spot est admis en V1")
@@ -194,7 +194,7 @@ def _document(spec: InstanceSpec) -> dict[str, Any]:
     trailing_on = bool(ex.trailing.get("enabled", False))
     stake = m.sizing.stake_amount
     doc: dict[str, Any] = {
-        # Dérivé de l'énumération du mode : une instance paper ou backtest reste en dry-run.
+        # Derived from the mode enumeration: a paper or backtest instance stays in dry-run.
         "dry_run": spec.mode != "live",
         "db_url": f"sqlite:///{USER_DATA}/trades-{spec.mode}.sqlite",
         "bot_name": f"centrade-{spec.instance_id}",
@@ -218,7 +218,7 @@ def _document(spec: InstanceSpec) -> dict[str, Any]:
         if trailing_on
         else False,
         "minimal_roi": dict(sorted(ex.take_profit.items(), key=lambda kv: int(kv[0])))
-        or {"0": Decimal(100)},  # 10000 % : pas d'objectif de gain déclaré
+        or {"0": Decimal(100)},  # 10000 %: no declared profit target
         "order_types": {
             "entry": "limit",
             "exit": "limit",
@@ -231,7 +231,7 @@ def _document(spec: InstanceSpec) -> dict[str, Any]:
         "cancel_open_orders_on_exit": False,
         "api_server": {
             "enabled": True,
-            "listen_ip_address": "0.0.0.0",  # noqa: S104  réseau des moteurs seulement (Compose)
+            "listen_ip_address": "0.0.0.0",  # noqa: S104  engine network only (Compose)
             "listen_port": API_PORT,
             "verbosity": "error",
             "CORS_origins": [],
@@ -239,10 +239,10 @@ def _document(spec: InstanceSpec) -> dict[str, Any]:
         "webhook": {"enabled": False, "allow_custom_messages": False},
         "telegram": {"enabled": False},
         "pairlists": [{"method": "StaticPairList"}],
-        # Réglage d'exécution de la plateforme, le même pour toute stratégie (ADR 0008). Le
-        # moteur exige ces blocs (KeyError au démarrage sans eux). `other` : l'ordre limite
-        # traverse le carnet, donc se remplit ; avec `same` un ordre pouvait rester posé jusqu'au
-        # délai (observé), y compris en sortie, ce qui retarde une sortie (I4).
+        # Platform runtime setting, the same for every strategy (ADR 0008). The
+        # engine requires these blocks (KeyError at startup without them). `other`: the limit order
+        # crosses the book, so it fills; with `same` an order could stay posted until the
+        # timeout (observed), including on exit, which delays an exit (I4).
         "entry_pricing": {
             "price_side": "other",
             "use_order_book": True,
@@ -261,7 +261,7 @@ def _document(spec: InstanceSpec) -> dict[str, Any]:
 
 
 def render_config(spec: InstanceSpec) -> EngineConfig:
-    """Clés possédées uniquement, en chaînes canoniques (comparaison exacte avec drift)."""
+    """Owned keys only, as canonical strings (exact comparison with drift)."""
     doc = _document(spec)
     values = {k: _canon(_get(doc, k), k) for k in OWNED_KEYS if _get(doc, k) is not None}
     return EngineConfig(
@@ -272,8 +272,8 @@ def render_config(spec: InstanceSpec) -> EngineConfig:
 
 
 def observed_values(show_config: Mapping[str, Any], whitelist: Any) -> dict[str, str]:
-    """Relecture ramenée aux noms de clés possédées et aux chaînes canoniques de render_config.
-    C'est le seul endroit où une valeur relue est canonisée."""
+    """Re-read brought back to the owned key names and render_config's canonical strings.
+    This is the only place where a re-read value is canonicalized."""
     seen = {**show_config, "pair_whitelist": whitelist}
     out: dict[str, str] = {}
     for key in OBSERVABLE_KEYS:
@@ -284,7 +284,7 @@ def observed_values(show_config: Mapping[str, Any], whitelist: Any) -> dict[str,
 
 
 def _within(want: Any, got: Any) -> bool:
-    """Nos entrées sont dans la relecture, à toute profondeur ; les défauts du moteur en plus."""
+    """Our inputs are in the re-read, at any depth; the engine's defaults in addition."""
     if isinstance(want, dict):
         return isinstance(got, dict) and all(
             k in got and _within(v, got[k]) for k, v in want.items()
@@ -293,18 +293,18 @@ def _within(want: Any, got: Any) -> bool:
 
 
 def _same(key: str, want: str | None, got: str | None) -> bool:
-    """Compare deux chaînes canoniques d'une même clé."""
+    """Compares two canonical strings of the same key."""
     if key in _SUBSET_KEYS and want is not None and got is not None:
         try:
             return _within(json.loads(want), json.loads(got))
-        except ValueError:  # la relecture n'a pas la forme attendue : c'est un écart
+        except ValueError:  # the re-read does not have the expected shape: that is a drift
             return False
     return want == got
 
 
 def observed_drift(generated: EngineConfig, observed: Mapping[str, str]) -> list[Drift]:
-    """Écarts sur les clés relues, depuis les valeurs de `observed_values`. Une clé absente de
-    la relecture n'est pas signalée ici : `owned_drifts` s'en charge."""
+    """Drifts on the re-read keys, from the values of `observed_values`. A key absent from
+    the re-read is not reported here: `owned_drifts` handles it."""
     gen = generated.values
     return [
         Drift(k, gen.get(k), observed[k])
@@ -314,8 +314,8 @@ def observed_drift(generated: EngineConfig, observed: Mapping[str, str]) -> list
 
 
 def drift(generated: EngineConfig, effective: Mapping[str, Any]) -> list[Drift]:
-    """Écarts sur les clés possédées observables. `effective` : réponse de GET /show_config,
-    plus `pair_whitelist` (GET /whitelist). Une clé observable absente est un écart."""
+    """Drifts on the observable owned keys. `effective`: response of GET /show_config,
+    plus `pair_whitelist` (GET /whitelist). An absent observable key is a drift."""
     gen = generated.values
     seen = observed_values(effective, effective.get("pair_whitelist"))
     return [
@@ -326,7 +326,7 @@ def drift(generated: EngineConfig, effective: Mapping[str, Any]) -> list[Drift]:
 
 
 def _json_number(o: Any) -> Any:
-    # Format imposé par le moteur : nombres JSON lus en flottants. Refus si la conversion perd.
+    # Format imposed by the engine: JSON numbers read as floats. Refused if conversion loses data.
     if isinstance(o, Decimal):
         f = float(o)
         if Decimal(repr(f)) != o:
@@ -336,21 +336,21 @@ def _json_number(o: Any) -> Any:
 
 
 def _to_json(doc: Any) -> str:
-    # allow_nan=False : un nombre infini ou indéfini est refusé (ValueError), jamais écrit.
+    # allow_nan=False: an infinite or undefined number is refused (ValueError), never written.
     return json.dumps(doc, default=_json_number, sort_keys=True, indent=2, allow_nan=False)
 
 
 def config_file(spec: InstanceSpec) -> str:
-    """Texte JSON du premier fichier de configuration de l'instance (sans identifiants)."""
+    """JSON text of the instance's first configuration file (without credentials)."""
     doc = _document(spec)
-    # Le schéma du moteur exige token et chat_id dès que le bloc existe, même désactivé : on
-    # l'omet (absent = désactivé). `render_config` garde `telegram.enabled=false`.
+    # The engine's schema requires token and chat_id as soon as the block exists, even disabled: we
+    # omit it (absent = disabled). `render_config` keeps `telegram.enabled=false`.
     doc.pop("telegram")
     return _to_json(doc)
 
 
 def effective_mode(effective: Mapping[str, Any]) -> Mode | None:
-    """Mode relu dans le moteur (I3). Combinaison absente ou incohérente : None (inconnu)."""
+    """Mode re-read from the engine (I3). Missing or inconsistent combination: None (unknown)."""
     dry, run = _norm(effective.get("dry_run")), effective.get("runmode")
     if dry is True and run == "dry_run":
         return "paper"

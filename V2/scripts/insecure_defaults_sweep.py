@@ -1,10 +1,10 @@
-"""Repli de `insecure-defaults:audit` quand l'outil Workflow manque dans la session.
+"""Fallback for `insecure-defaults:audit` when the Workflow tool is missing from the session.
 
-Reproduit la première étape du pipeline du plugin : un `grep -rE` par catégorie, avec les
-motifs du plugin lui-même. Ne conclut rien : chaque ligne est un candidat, à juger contre la
-fiche `<catégorie>.md` du plugin (règles « Report when » / « Skip when »).
+Reproduces the first step of the plugin's pipeline: one `grep -rE` per category, with the
+plugin's own patterns. Concludes nothing: each line is a candidate, to be judged against the
+plugin's `<category>.md` sheet ("Report when" / "Skip when" rules).
 
-Usage : uv run python scripts/insecure_defaults_sweep.py [chemin ...]
+Usage: uv run python scripts/insecure_defaults_sweep.py [path ...]
 """
 
 import json
@@ -26,11 +26,11 @@ def main() -> int:
         cmd = ["grep", "-rnIE", *(f"--exclude-dir={d}" for d in EXCLUDE)]
         for seed in category["seeds"]:
             cmd += ["-e", seed]
-        # Liste d'arguments, sans shell : les motifs et les chemins ne sont pas interprétés.
+        # Argument list, no shell: patterns and paths are not interpreted.
         hits = subprocess.run(  # noqa: S603
             [*cmd, "--", *scopes], capture_output=True, text=True, check=False
         )
-        if hits.returncode > 1:  # 1 = aucun candidat ; au-delà, grep a échoué
+        if hits.returncode > 1:  # 1 = no candidate; beyond that, grep failed
             print(hits.stderr, file=sys.stderr)
             return 2
         lines = hits.stdout.splitlines()

@@ -1,5 +1,5 @@
-"""I4, côté commandes : ce qui réduit le risque part toujours vers le moteur, quelle que soit la
-panne de la plateforme (worker longtemps absent, bus en panne, autre instance en erreur)."""
+"""I4, commands side: what reduces risk is always sent to the engine, whatever the
+platform outage (worker absent for a long time, bus down, another instance in error)."""
 
 from datetime import datetime
 from typing import Any
@@ -26,7 +26,7 @@ async def _running(stack: Stack, **params: object) -> tuple[httpx.AsyncClient, s
 
 
 class _BrokenRedis:
-    """Tout appel échoue comme un Redis injoignable."""
+    """Every call fails like an unreachable Redis."""
 
     def __getattr__(self, name: str) -> Any:
         async def boom(*_: object, **__: object) -> None:
@@ -42,13 +42,13 @@ async def test_i04_risk_reducing_command_never_expires_before_dispatch(
     c, iid = await _running(stack)
     cid = (await act(c, iid, action)).json()["command_id"]
 
-    stack.world.clock.advance(600)  # worker absent bien au-delà de toute échéance
+    stack.world.clock.advance(600)  # worker absent well beyond any deadline
     await stack.world.worker.run_once()
 
     cmd = await get(c, f"/api/v1/commands/{cid}")
     assert cmd["dispatched_at"] is not None and cmd["status"] == "verified", cmd
     assert (await get(c, f"/api/v1/instances/{iid}"))["state"]["value"] == REDUCTIONS[action]
-    # L'échéance mesure l'effet, à compter de l'envoi.
+    # The deadline measures the effect, counted from the send.
     assert datetime.fromisoformat(cmd["deadline_at"]) > datetime.fromisoformat(cmd["dispatched_at"])
 
 
@@ -59,9 +59,9 @@ async def test_i04_pause_deadline_runs_from_dispatch(stack: Stack) -> None:
 
     w.clock.advance(600)
     await w.worker.run_once()
-    assert (await get(c, f"/api/v1/commands/{cid}"))["status"] == "acknowledged"  # envoyée
+    assert (await get(c, f"/api/v1/commands/{cid}"))["status"] == "acknowledged"  # sent
 
-    w.clock.advance(stack.settings.deadline_pause_entries_s + 1)  # sans effet : expire, et se voit
+    w.clock.advance(stack.settings.deadline_pause_entries_s + 1)  # no effect: expires, visible
     await w.worker.run_once()
     cmd = await get(c, f"/api/v1/commands/{cid}")
     assert cmd["status"] == "timed_out" and cmd["dispatched_at"] is not None
@@ -82,13 +82,13 @@ async def test_i04_bus_outage_blocks_neither_dispatch_nor_snapshot(stack: Stack)
     cid = (await act(c, iid, "pause-entries")).json()["command_id"]
     w.clock.advance(1)
 
-    with pytest.raises(RedisConnectionError):  # la panne reste visible : pas de battement
+    with pytest.raises(RedisConnectionError):  # the outage stays visible: no heartbeat
         await w.worker.run_once()
 
     assert (await get(c, f"/api/v1/commands/{cid}"))["status"] == "verified"
     inst = await get(c, f"/api/v1/instances/{iid}")
     assert inst["state"]["value"] == "exits_only"
-    assert datetime.fromisoformat(inst["state"]["observed_at"]) == w.clock.now  # relevé du tour
+    assert datetime.fromisoformat(inst["state"]["observed_at"]) == w.clock.now  # cycle snapshot
 
 
 async def test_i04_error_on_one_instance_does_not_block_the_others(stack: Stack) -> None:
@@ -144,7 +144,7 @@ async def test_i04_write_failure_for_one_command_does_not_block_dispatching_the_
     with pytest.raises(RuntimeError, match="écriture impossible"):
         await w.worker.run_once()
 
-    for iid in (first, second):  # les deux moteurs ont reçu la pause
+    for iid in (first, second):  # both engines received the pause
         assert (await w.fake.status(ref_of(iid))).state == "exits_only"
 
 
@@ -158,7 +158,7 @@ async def test_i04_pause_is_dispatched_even_if_engine_was_silent_on_previous_tic
     assert (await get(c, f"/api/v1/instances/{iid}"))["state"]["value"] == "unknown"
     w.fake.set_failure(ref_of(iid), Failure.SILENT, on=False)
 
-    r = await act(c, iid, "pause-entries")  # état inconnu : la pause reste acceptée
+    r = await act(c, iid, "pause-entries")  # unknown state: the pause is still accepted
     assert r.status_code == 202
     await w.worker.run_once()
     assert (await get(c, f"/api/v1/commands/{r.json()['command_id']}"))["status"] == "verified"

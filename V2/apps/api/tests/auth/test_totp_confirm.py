@@ -1,4 +1,4 @@
-"""Ré-authentification TOTP d'une session ouverte : `POST /auth/totp/confirm` (SPEC §9, §13)."""
+"""TOTP re-authentication of an open session: `POST /auth/totp/confirm` (SPEC §9, §13)."""
 
 import asyncio
 import io
@@ -81,15 +81,15 @@ async def test_valid_code_refreshes_the_session_totp(
 
     assert r.status_code == 204
     assert r.content == b""
-    assert "set-cookie" not in r.headers  # ni nouveau jeton ni nouvelle échéance de cookie
+    assert "set-cookie" not in r.headers  # neither a new token nor a new cookie deadline
     assert (await client.post(DANGEROUS)).status_code == 200
     (session,) = await _sessions(session_factory, account)
     assert session.totp_verified_at == clock.now
-    # Même session, même échéance absolue : seule la date du TOTP a bougé.
+    # Same session, same absolute deadline: only the TOTP date moved.
     assert (session.id, session.expires_at) == (opened.id, opened.expires_at)
     author = f"user:{account.id}"
     assert (await _actions(session_factory, account))[-1] == ("auth.totp_confirm.succeeded", author)
-    # La confirmation vaut cinq minutes, pas plus.
+    # The confirmation is worth five minutes, no more.
     clock.advance(minutes=5, seconds=1)
     assert (await client.post(DANGEROUS)).status_code == 403
 
@@ -129,9 +129,9 @@ async def test_replayed_code_is_rejected_like_a_wrong_code(
     await sign_in(client, account)
     (opened,) = await _sessions(session_factory, account)
 
-    # Le code qui vient d'ouvrir la session, encore dans sa fenêtre.
+    # The code that just opened the session, still in its window.
     from_login = _refused(await client.post(CONFIRM, json={"code": account.code(clock.now)}))
-    # Un pas plus ancien que le dernier accepté : refusé lui aussi.
+    # A step older than the last accepted: refused too.
     _refused(await client.post(CONFIRM, json={"code": account.code(clock.now, -1)}))
     (session,) = await _sessions(session_factory, account)
     assert session.totp_verified_at == opened.totp_verified_at
@@ -144,7 +144,7 @@ async def test_replayed_code_is_rejected_like_a_wrong_code(
     (session,) = await _sessions(session_factory, account)
     assert session.totp_verified_at == clock.now - timedelta(seconds=1)
 
-    # Aucun indice : rejeu et code faux donnent la même réponse.
+    # No hint: replay and wrong code give the same response.
     wrong = _refused(await client.post(CONFIRM, json={"code": _wrong(account, clock)}))
     assert from_login == replayed == wrong
 
@@ -166,8 +166,8 @@ async def test_recovery_code_is_rejected_and_not_consumed(
 
     assert (await client.post(DANGEROUS)).status_code == 403
     user = await _user(session_factory, account)
-    assert len(user.recovery_code_hashes) == len(account.recovery_codes)  # aucun n'est brûlé
-    assert user.failed_attempts == 3  # compté comme tout autre refus
+    assert len(user.recovery_code_hashes) == len(account.recovery_codes)  # none is burned
+    assert user.failed_attempts == 3  # counted like any other refusal
 
 
 async def test_request_without_full_session_is_rejected(
@@ -176,19 +176,19 @@ async def test_request_without_full_session_is_rejected(
     account = await make_account()
     code = {"code": account.code(clock.now)}
 
-    assert (await client.post(CONFIRM, json=code)).status_code == 401  # aucun cookie
+    assert (await client.post(CONFIRM, json=code)).status_code == 401  # no cookie
 
     creds = {"username": account.email, "password": account.password}
     assert (await client.post(LOGIN, json=creds)).status_code == 200
-    assert (await client.post(CONFIRM, json=code)).status_code == 401  # pré-session seule
-    # La pré-session présentée comme session ne passe pas davantage.
+    assert (await client.post(CONFIRM, json=code)).status_code == 401  # pre-session alone
+    # The pre-session presented as a session does not pass either.
     client.cookies.set(SESSION_COOKIE, client.cookies["__Host-centrade_pre"])
     assert (await client.post(CONFIRM, json=code)).status_code == 401
 
     (pre,) = await _sessions(session_factory, account)
     assert (pre.stage, pre.totp_verified_at) == ("pre_totp", None)
     user = await _user(session_factory, account)
-    assert (user.failed_attempts, user.totp_last_step) == (0, None)  # le code n'a pas été lu
+    assert (user.failed_attempts, user.totp_last_step) == (0, None)  # the code was not read
 
 
 async def test_request_from_another_origin_is_rejected(
@@ -214,7 +214,7 @@ async def test_request_from_another_origin_is_rejected(
 
     (session,) = await _sessions(session_factory, account)
     assert session.totp_verified_at == opened.totp_verified_at
-    assert (await legit.post(CONFIRM, json=code)).status_code == 204  # le code n'a pas été brûlé
+    assert (await legit.post(CONFIRM, json=code)).status_code == 204  # the code was not burned
 
 
 async def test_repeated_failures_lock_then_a_valid_code_is_rejected(
@@ -234,24 +234,24 @@ async def test_repeated_failures_lock_then_a_valid_code_is_rejected(
 
     assert statuses == [403, 403, 403, 403, 423]
     user = await _user(session_factory, account)
-    assert user.locked_until == clock.now + timedelta(minutes=1)  # le même verrou que la connexion
+    assert user.locked_until == clock.now + timedelta(minutes=1)  # the same lock as login
     locked = await client.post(CONFIRM, json={"code": account.code(clock.now)})
     assert locked.status_code == 423
     assert locked.headers["content-type"].startswith("application/problem+json")
     user = await _user(session_factory, account)
-    assert user.failed_attempts == 5  # un essai pendant le verrou ne le prolonge pas
+    assert user.failed_attempts == 5  # an attempt during the lock does not extend it
     (session,) = await _sessions(session_factory, account)
     assert session.totp_verified_at == opened.totp_verified_at
-    assert (await client.get(ME)).status_code == 200  # la session reste ouverte
+    assert (await client.get(ME)).status_code == 200  # the session stays open
     assert (await client.post(DANGEROUS)).status_code == 403
     author = f"user:{account.id}"
     assert (await _actions(session_factory, account))[-7:] == [
         *[("auth.totp_confirm.failed", author)] * 5,
         ("auth.account.locked", "system:auth"),
-        ("auth.totp_confirm.failed", author),  # essai pendant le verrou : audité, pas compté
+        ("auth.totp_confirm.failed", author),  # attempt during the lock: audited, not counted
     ]
 
-    # Le verrou levé, un code valide passe ; le compteur d'échecs ne repart pas de zéro.
+    # Once the lock is lifted, a valid code passes; the failure counter does not restart from zero.
     clock.advance(minutes=1, seconds=1)
     assert (await client.post(CONFIRM, json={"code": account.code(clock.now)})).status_code == 204
     assert (await _user(session_factory, account)).failed_attempts == 5
@@ -289,7 +289,7 @@ async def test_confirmation_refreshes_only_its_own_session(
     account = await make_account()
     first, second = make_client(), make_client(ip="203.0.113.11")
     await sign_in(first, account)
-    clock.advance(seconds=30)  # un autre pas TOTP pour la seconde ouverture
+    clock.advance(seconds=30)  # another TOTP step for the second opening
     await sign_in(second, account)
     before = {s.id: s.totp_verified_at for s in await _sessions(session_factory, account)}
     assert len(before) == 2
@@ -339,9 +339,9 @@ async def test_last_step_is_reread_under_lock_not_as_loaded_by_the_session(
     clock: FakeClock,
     session_factory: Factory,
 ) -> None:
-    # La course rendue déterministe : entre le contrôle de session (qui charge l'utilisateur)
-    # et le `FOR UPDATE`, une autre requête consomme le même code. L'objet déjà chargé ne doit
-    # pas masquer la ligne relue, que le ramasse-miettes l'ait libéré ou non.
+    # The race made deterministic: between the session check (which loads the user)
+    # and the `FOR UPDATE`, another request consumes the same code. The already loaded object must
+    # not mask the re-read row, whether the garbage collector freed it or not.
     account = await make_account()
     await sign_in(client, account)
     (opened,) = await _sessions(session_factory, account)
@@ -356,7 +356,7 @@ async def test_last_step_is_reread_under_lock_not_as_loaded_by_the_session(
         token: Annotated[str | None, Cookie(alias=SESSION_COOKIE)] = None,
     ) -> Principal:
         principal = await current_user(db, now, token)
-        # Tenu en vie : la session SQLAlchemy ne garde ses objets que par référence faible.
+        # Kept alive: the SQLAlchemy session keeps its objects only by weak reference.
         loaded.append(await db.get(User, account.id))
         await db.commit()
         async with session_factory() as other, other.begin():
@@ -379,11 +379,11 @@ async def test_confirmation_does_not_extend_the_session(
     account = await make_account()
     await sign_in(client, account)
 
-    for _ in range(28):  # 28 x 25 min = 11 h 40, une confirmation à chaque fois
+    for _ in range(28):  # 28 x 25 min = 11 h 40, one confirmation each time
         clock.advance(minutes=25)
         r = await client.post(CONFIRM, json={"code": account.code(clock.now)})
         assert r.status_code == 204
-    clock.advance(minutes=20)  # 12 h : durée absolue atteinte malgré les confirmations
+    clock.advance(minutes=20)  # 12 h: absolute duration reached despite the confirmations
 
     assert (await client.post(CONFIRM, json={"code": account.code(clock.now)})).status_code == 401
     assert (await client.get(ME)).status_code == 401
@@ -452,7 +452,7 @@ async def test_submitted_code_appears_neither_in_logs_nor_in_audit(
     assert (await client.post(CONFIRM, json={"code": bad})).status_code == 403
     assert (await client.post(CONFIRM, json={"code": account.recovery_codes[0]})).status_code == 403
     assert (await client.post(CONFIRM, json={"code": good})).status_code == 204
-    assert (await client.post(CONFIRM, json={"code": good})).status_code == 403  # rejeu
+    assert (await client.post(CONFIRM, json={"code": good})).status_code == 403  # replay
 
     async with session_factory() as s:
         audit = "\n".join(
@@ -467,12 +467,12 @@ async def test_submitted_code_appears_neither_in_logs_nor_in_audit(
     for haystack in (output, audit):
         assert sentinel not in haystack
         assert account.recovery_codes[0] not in haystack
-        for code in (good, bad):  # six chiffres : pas noyés dans un autre nombre
+        for code in (good, bad):  # six digits: not buried in another number
             assert not re.search(f"(?<![0-9]){code}(?![0-9])", haystack)
 
 
 _KEY = bytes(range(32))
-_SECRET = "JBSWY3DPEHPK3PXP"  # noqa: S105  # secret de la documentation de pyotp, pas un vrai
+_SECRET = "JBSWY3DPEHPK3PXP"  # noqa: S105  # pyotp documentation secret, not a real one
 _NOW = datetime(2026, 1, 1, 12, 0, 7, tzinfo=UTC)
 _RECOVERY = security.new_recovery_codes()
 
@@ -482,7 +482,7 @@ def _enrolled(last_step: int | None) -> User:
         id=uuid7(),
         username="sentinelle@example.test",
         role="admin",
-        password_hash="x",  # noqa: S106  # jamais vérifié ici
+        password_hash="x",  # noqa: S106  # never verified here
         recovery_code_hashes=[security.recovery_code_hash(c) for c in _RECOVERY],
         totp_last_step=last_step,
     )
@@ -501,7 +501,7 @@ assert _CURRENT is not None
     offset=st.integers(min_value=-3, max_value=3),
 )
 def test_property_a_step_is_accepted_only_if_fresh_and_close(back: int | None, offset: int) -> None:
-    """Accepté si et seulement si le pas est à un pas près de l'instant et après le dernier."""
+    """Accepted if and only if the step is within one step of the instant and after the last one."""
     assert _CURRENT is not None
     last = None if back is None else _CURRENT + back
     user = _enrolled(last)
@@ -511,7 +511,7 @@ def test_property_a_step_is_accepted_only_if_fresh_and_close(back: int | None, o
 
     step = _CURRENT + offset
     assert accepted == (abs(offset) <= 1 and (last is None or step > last))
-    assert user.totp_last_step == (step if accepted else last)  # ne recule jamais
+    assert user.totp_last_step == (step if accepted else last)  # never goes back
     assert user.recovery_code_hashes == hashes
 
 
@@ -530,6 +530,6 @@ def test_property_only_a_well_formed_totp_code_is_accepted(code: str) -> None:
     accepted = routes._totp_accepted(user, code, _NOW, _KEY)
 
     assert accepted == (code in valid)
-    assert user.recovery_code_hashes == hashes  # un code de récupération n'est jamais consommé
+    assert user.recovery_code_hashes == hashes  # a recovery code is never consumed
     if not accepted:
         assert user.totp_last_step is None

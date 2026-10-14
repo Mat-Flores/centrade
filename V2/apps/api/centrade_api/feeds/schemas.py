@@ -1,4 +1,4 @@
-"""Schémas des journaux en lecture : évènements, alertes, audit."""
+"""Schemas of the read-only logs: events, alerts, audit."""
 
 from __future__ import annotations
 
@@ -11,13 +11,13 @@ from pydantic import AwareDatetime, BaseModel
 
 class EventOut(BaseModel):
     id: UUID
-    ts: AwareDatetime  # heure du moteur
-    ts_ingest: AwareDatetime  # heure de réception
+    ts: AwareDatetime  # engine time
+    ts_ingest: AwareDatetime  # reception time
     type: str
     instance_id: UUID
     seq: int
     correlation_id: UUID | None
-    payload: dict[str, Any]  # décimaux en chaînes (enveloppe canonique)
+    payload: dict[str, Any]  # decimals as strings (canonical envelope)
 
     @classmethod
     def of(cls, e: Event) -> EventOut:

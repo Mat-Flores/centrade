@@ -1,5 +1,5 @@
-"""Instances, commandes et flux : idempotence, préemption, asymétrie (F9), RBAC, pagination,
-rechargement du worker, fermeture du flux à l'expiration de la session."""
+"""Instances, commands and stream: idempotency, preemption, asymmetry (F9), RBAC, pagination,
+worker reload, stream closing at session expiry."""
 
 import json
 from datetime import timedelta
@@ -39,9 +39,9 @@ async def test_same_key_replays_the_command_and_different_content_is_rejected(st
             select(func.count()).where(Command.idempotency_key == "cle-idempotence-1")
         )
     assert n == 1
-    assert (await act(c, iid, "flatten", key="cle-idempotence-1")).status_code == 422  # autre type
+    assert (await act(c, iid, "flatten", key="cle-idempotence-1")).status_code == 422  # other type
     assert (await act(c, other, "pause-entries", key="cle-idempotence-1")).status_code == 422
-    missing = await c.post(f"/api/v1/instances/{iid}/stop")  # sans Idempotency-Key
+    missing = await c.post(f"/api/v1/instances/{iid}/stop")  # without Idempotency-Key
     assert missing.status_code == 422
 
 
@@ -56,7 +56,7 @@ async def test_an_action_never_calls_the_engine(stack: Stack) -> None:
 
     stack.world.fake.resume_entries = spy  # type: ignore[method-assign]
     r = await act(c, iid, "resume-entries")
-    assert r.status_code == 202 and calls == []  # seul le worker appelle l'adaptateur
+    assert r.status_code == 202 and calls == []  # only the worker calls the adapter
     assert r.json()["command"]["status"] == "requested"
     await stack.world.worker.run_once()
     assert calls == ["resume"]
@@ -80,7 +80,7 @@ async def test_only_one_command_at_a_time_per_instance(stack: Stack) -> None:
     second = (await act(c, iid, "stop")).json()["command_id"]
     await stack.world.worker.run_once()
     assert (await get(c, f"/api/v1/commands/{first}"))["status"] == "verified"
-    assert (await get(c, f"/api/v1/commands/{second}"))["status"] == "requested"  # attend
+    assert (await get(c, f"/api/v1/commands/{second}"))["status"] == "requested"  # waiting
     await stack.world.worker.run_once()
     assert (await get(c, f"/api/v1/commands/{second}"))["status"] == "verified"
     assert (await get(c, f"/api/v1/instances/{iid}"))["state"]["value"] == "stopped"
@@ -92,10 +92,10 @@ async def test_resume_is_rejected_when_state_is_unknown_stale_or_in_another_mode
     w = stack.world
     c, iid = await _ready(stack)
 
-    w.clock.advance(stack.settings.observed_stale_after_s + 1)  # périmé : le worker ne tourne pas
+    w.clock.advance(stack.settings.observed_stale_after_s + 1)  # stale: the worker is not running
     r = await act(c, iid, "resume-entries")
     assert r.status_code == 409 and "périmé" in r.json()["detail"]
-    assert (await act(c, iid, "pause-entries")).status_code == 202  # réduit le risque : accepté
+    assert (await act(c, iid, "pause-entries")).status_code == 202  # reduces risk: accepted
     assert (await act(c, iid, "flatten")).status_code == 202
     assert (await act(c, iid, "stop")).status_code == 202
 
@@ -128,7 +128,7 @@ async def test_command_creation_validations_and_lists(stack: Stack) -> None:
     c = await stack.client("operator")
     body = {"name": f"n-{uuid4().hex[:8]}", "engine": "fake", "mode": "paper", "params": {}}
     assert (await c.post("/api/v1/instances", json=body)).status_code == 201
-    assert (await c.post("/api/v1/instances", json=body)).status_code == 409  # nom pris
+    assert (await c.post("/api/v1/instances", json=body)).status_code == 409  # name taken
     assert (await c.post("/api/v1/instances", json={**body, "mode": "live"})).status_code == 422
     assert (
         await c.post("/api/v1/instances", json={**body, "engine": "inconnu"})
@@ -170,7 +170,7 @@ async def test_rbac_viewer_cannot_command_and_audit_is_admin_only(stack: Stack) 
 async def test_no_route_or_schema_names_an_engine(stack: Stack) -> None:
     spec = json.dumps(stack.app.openapi()).lower()
     assert "fake" not in spec and "freqtrade" not in spec
-    paths = stack.app.openapi()["paths"]  # aucune création d'ordre ; l'annulation d'entrée existe
+    paths = stack.app.openapi()["paths"]  # no order creation; entry cancellation exists
     assert not [p for p in paths if "order" in p and "post" in paths[p]]
 
 
@@ -181,7 +181,7 @@ async def test_worker_reloads_instances_in_exits_only(stack: Stack) -> None:
     await w.worker.run_once()
     assert (await get(c, f"/api/v1/instances/{iid}"))["state"]["value"] == "running"
 
-    w.fake = FakeEngine(clock=w.clock, seed=5, new_id=uuid7)  # le processus redémarre
+    w.fake = FakeEngine(clock=w.clock, seed=5, new_id=uuid7)  # the process restarts
     w.worker = w.make_worker("apres")
     await w.worker.load_instances()
     await w.worker.run_once()
@@ -196,12 +196,12 @@ async def test_extended_health_requires_no_session(stack: Stack) -> None:
     await stack.world.worker.run_once()
     ok = (await anon.get("/api/v1/system/health")).json()
     assert ok["status"] == "ok" and all(c["observed_at"] for c in ok["checks"].values())
-    stack.world.clock.advance(60)  # battement trop ancien
+    stack.world.clock.advance(60)  # heartbeat too old
     assert (await anon.get("/api/v1/system/health")).json()["checks"]["worker"]["status"] == "down"
 
 
 class _JumpClock:
-    """Horloge qui saute d'une heure après quelques lectures : la session expire en plein flux."""
+    """Clock that jumps an hour after a few reads: the session expires mid-stream."""
 
     def __init__(self, base: object, after: int) -> None:
         self._base, self._after, self._n = base, after, 0
@@ -219,10 +219,10 @@ async def test_stream_closes_when_the_session_expires(stack: Stack) -> None:
     stack.app.dependency_overrides[utcnow] = _JumpClock(stack.world.clock, after=3)
     async with c.stream("GET", "/api/v1/stream") as r:
         assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
-        text = "".join([chunk async for chunk in r.aiter_text()])  # se termine : flux fermé
+        text = "".join([chunk async for chunk in r.aiter_text()])  # ends: stream closed
     assert "event: heartbeat" in text
     stack.app.dependency_overrides[utcnow] = stack.world.clock
-    assert (await c.get("/api/v1/instances")).status_code == 200  # session non touchée côté flux
+    assert (await c.get("/api/v1/instances")).status_code == 200  # session untouched by the stream
 
 
 async def test_stream_requires_a_session_and_does_not_extend_inactivity(stack: Stack) -> None:
@@ -251,7 +251,7 @@ async def test_stream_requires_a_session_and_does_not_extend_inactivity(stack: S
     async with stack.world.sessions() as s:
         after = await s.scalar(select(Session.last_activity_at).where(Session.id == row.id))
     assert after == before
-    stack.world.clock.advance(31 * 60)  # inactivité dépassée : le flux se ferme
+    stack.world.clock.advance(31 * 60)  # inactivity exceeded: the stream closes
     gen2 = stream_messages(
         factory=stack.world.sessions,
         redis=stack.world.redis,
@@ -260,7 +260,7 @@ async def test_stream_requires_a_session_and_does_not_extend_inactivity(stack: S
         cfg=stack.settings,
     )
     await gen2.__anext__()
-    assert [ev async for ev in gen2] == []  # se termine sans rien envoyer
+    assert [ev async for ev in gen2] == []  # ends without sending anything
 
 
 async def test_status_filter_is_repeatable_and_validated(stack: Stack) -> None:
@@ -301,7 +301,7 @@ async def test_invalid_page_limit_returns_422(stack: Stack) -> None:
 async def test_engine_is_optional_at_creation(stack: Stack) -> None:
     c = await stack.client("operator")
     r = await c.post("/api/v1/instances", json={"name": f"n-{uuid4().hex[:8]}"})
-    assert r.status_code == 201, r.text  # un seul moteur enregistré : le serveur le prend
+    assert r.status_code == 201, r.text  # a single engine registered: the server picks it
     engine = r.json()["engine"]
 
     other = uuid7()
@@ -310,7 +310,7 @@ async def test_engine_is_optional_at_creation(stack: Stack) -> None:
             text("INSERT INTO engines (id, kind, image, version) VALUES (:i, 'autre', 'x', '1')"),
             {"i": other},
         )
-    try:  # plusieurs moteurs : le serveur ne choisit pas à la place de l'opérateur
+    try:  # several engines: the server does not choose in place of the operator
         r = await c.post("/api/v1/instances", json={"name": f"n-{uuid4().hex[:8]}"})
         assert r.status_code == 422, r.text
         named = {"name": f"n-{uuid4().hex[:8]}", "engine": engine}
@@ -327,7 +327,7 @@ async def test_params_are_bounded_and_included_in_the_audit_fingerprint(stack: S
     deep = {"name": f"n-{uuid4().hex[:8]}", "params": {"x": [[["a"] * 50] * 50]}}
     assert (await c.post("/api/v1/instances", json=deep)).status_code == 422
     huge = {"name": f"n-{uuid4().hex[:8]}", "params": {"x": "a" * 200_000}}
-    r = await c.post("/api/v1/instances", json=huge)  # corps refusé avant d'être analysé
+    r = await c.post("/api/v1/instances", json=huge)  # body refused before being parsed
     assert r.status_code == 413 and r.headers["content-type"].startswith("application/problem")
 
     inst = await create_instance(c, fast=10)
@@ -348,7 +348,7 @@ async def test_params_are_bounded_and_included_in_the_audit_fingerprint(stack: S
 async def test_failure_injection_is_rejected_by_default(stack: Stack) -> None:
     w = stack.world
     assert stack.settings.engine_failure_injection is False
-    w.fake = FakeEngine(clock=w.clock, seed=1, new_id=uuid7)  # réglage par défaut
+    w.fake = FakeEngine(clock=w.clock, seed=1, new_id=uuid7)  # default setting
     w.worker = w.make_worker("defaut")
     c = await stack.client("operator")
     inst = await create_instance(c, failures=["silent"])
@@ -356,12 +356,12 @@ async def test_failure_injection_is_rejected_by_default(stack: Stack) -> None:
     deploy = (await get(c, "/api/v1/commands?instance_id=" + inst["id"]))["items"][0]
     assert deploy["type"] == "deploy" and deploy["status"] == "failed"
     assert "injection de pannes" in deploy["result"]["reason"]
-    with pytest.raises(CommandRejected, match="inconnue"):  # jamais démarrée
+    with pytest.raises(CommandRejected, match="inconnue"):  # never started
         await w.fake.status(ref_of(inst["id"]))
 
 
 async def _foreign_instance(stack: Stack, mode: str, state: str) -> str:
-    """Instance d'un autre mode que `paper`, posée en base : aucune route n'en crée (F1)."""
+    """Instance of a mode other than `paper`, placed in the database: no route creates one (F1)."""
     iid = uuid7()
     async with stack.world.sessions.begin() as s:
         await s.execute(
@@ -381,7 +381,7 @@ async def test_roles_anything_raising_risk_outside_paper_requires_admin(stack: S
     admin = await stack.client("admin")
     paper = (await create_instance(op))["id"]
     await stack.world.worker.run_once()
-    assert (await act(op, paper, "resume-entries")).status_code == 202  # paper : operator suffit
+    assert (await act(op, paper, "resume-entries")).status_code == 202  # paper: operator is enough
 
     live = await _foreign_instance(stack, "live", "exits_only")
     stopped = await _foreign_instance(stack, "live", "stopped")
@@ -390,8 +390,8 @@ async def test_roles_anything_raising_risk_outside_paper_requires_admin(stack: S
         assert r.status_code == 403, (action, r.text)
         async with stack.world.sessions() as s:
             n = await s.scalar(select(func.count()).where(Command.instance_id == iid))
-        assert n == 0  # refusé avant tout enregistrement
-    for action in ("pause-entries", "flatten", "stop"):  # réduire le risque reste ouvert
+        assert n == 0  # refused before any recording
+    for action in ("pause-entries", "flatten", "stop"):  # reducing risk stays open
         assert (await act(op, live, action)).status_code == 202, action
     assert (await act(admin, live, "resume-entries")).status_code == 202
     assert (await act(admin, stopped, "start")).status_code == 202

@@ -1,8 +1,8 @@
-"""Demande d'une commande (SPEC F9, I5, I8).
+"""Command request (SPEC F9, I5, I8).
 
-Demander une commande n'appelle jamais un moteur : on écrit une commande `requested`, on met à jour
-l'état voulu, on audite. Le worker la relève et ne la déclare `verified` que lorsque l'effet est
-observé. Une même clé d'idempotence rejouée rend la même commande, sans second effet.
+Requesting a command never calls an engine: we write a `requested` command, update the desired
+state, audit. The worker picks it up and declares it `verified` only once the effect is
+observed. The same idempotency key replayed returns the same command, with no second effect.
 """
 
 from __future__ import annotations
@@ -102,18 +102,18 @@ async def request_command(
     cfg: Settings,
     args: dict[str, Any] | None = None,
 ) -> tuple[Command, bool]:
-    """Enregistre la commande (jamais d'appel au moteur). Rend (commande, rejeu)."""
-    # Verrou de ligne : les demandes d'une même instance sont sérialisées.
+    """Records the command (never a call to the engine). Returns (command, replay)."""
+    # Row lock: requests for the same instance are serialized.
     inst = await db.scalar(select(Instance).where(Instance.id == instance_id).with_for_update())
     if inst is None:
         raise HTTPException(404, "Instance inconnue.")
-    # SPEC §13 : `operator` n'augmente le risque qu'en paper ; tout autre mode exige `admin`.
+    # SPEC §13: `operator` increases risk only in paper; any other mode requires `admin`.
     if type_ in RISK_INCREASING and inst.mode != "paper" and user.role != "admin":
         raise HTTPException(403, "Droits insuffisants pour cette action hors mode paper.")
     replay = await find_replay(db, user, key, _request_hash(instance_id, type_, args))
     if replay is not None:
         return replay, True
-    # I5 : refus au moindre doute. Le worker rejoue la même règle juste avant l'envoi.
+    # I5: refuse at the slightest doubt. The worker replays the same rule just before sending.
     reason = risk_increase_refusal(
         type_,
         mode=inst.mode,
@@ -129,7 +129,7 @@ async def request_command(
     cmd = new_command(inst, type_, user, key, now, cfg, args)
     db.add(cmd)
     superseded: list[UUID] = []
-    if type_ in PRIORITY:  # passe devant : remplace ce qui augmenterait le risque
+    if type_ in PRIORITY:  # goes first: replaces what would increase risk
         rows = await db.scalars(
             update(Command)
             .where(
@@ -143,13 +143,13 @@ async def request_command(
         superseded = list(rows)
     before = inst.desired_state
     wanted = DESIRED_AFTER[type_]
-    # Une pause ne « démarre » jamais une instance voulue arrêtée.
+    # A pause never "starts" an instance whose desired state is stopped.
     if wanted is not None and not (type_ == "pause_entries" and before != "running"):
         inst.desired_state = wanted
         inst.updated_at = now
     try:
         await db.flush()
-    except IntegrityError:  # même clé, demande concurrente d'une autre instance
+    except IntegrityError:  # same key, concurrent request from another instance
         await db.rollback()
         again = await find_replay(db, user, key, _request_hash(instance_id, type_, args))
         if again is None:
@@ -165,7 +165,7 @@ async def request_command(
             after={"status": "superseded", "by": str(cmd.id)},
             ip=ip,
         )
-    await write_audit(  # en dernier : même ordre de verrous que le worker
+    await write_audit(  # last: same lock order as the worker
         db,
         actor=user.actor,
         action=f"command.{type_}",

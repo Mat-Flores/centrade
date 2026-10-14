@@ -1,6 +1,6 @@
-"""Journalisation structlog avec masquage des secrets (K2, SPEC §13).
+"""structlog logging with secret masking (K2, SPEC §13).
 
-Tout passe par un seul pipeline, y compris les journaux d'uvicorn et de la stdlib.
+Everything goes through a single pipeline, including uvicorn and stdlib logs.
 """
 
 import logging
@@ -14,8 +14,8 @@ import structlog
 from structlog.typing import EventDict, WrappedLogger
 
 MASK = "***"
-# Nom de clé sensible, en sous-chaîne, sans casse : `X-Api-Key`, `totp_secret`, `Set-Cookie`…
-# `code` (TOTP, récupération) seulement en nom entier : `status_code` reste lisible.
+# Sensitive key name, as a substring, case-insensitive: `X-Api-Key`, `totp_secret`, `Set-Cookie`…
+# `code` (TOTP, recovery) only as a whole name: `status_code` stays readable.
 _SENSITIVE_KEY = re.compile(
     r"pass(word|wd)?$|pwd|secret|token|authorization|cookie|api[-_]?key|private[-_]?key"
     r"|master[-_]?key|totp|(^|[-_])otp|recovery|credential|session|bearer|signature|passphrase"
@@ -26,15 +26,15 @@ _NAMES = (
     r"(?:pass(?:word|wd|phrase)?|pwd|secret|token|api[-_]?key|totp|otp|authorization|cookie"
     r"|\bcodes?)"
 )
-# Valeurs sensibles dans du texte libre (message, URL, trace), dans l'ordre d'application.
+# Sensitive values in free text (message, URL, trace), in order of application.
 _SENSITIVE_TEXT = (
-    # Valeur refusée que Pydantic recopie dans son message : `input_value=…, input_type=…`.
+    # Rejected value that Pydantic copies into its message: `input_value=…, input_type=…`.
     re.compile(r"(input_value=).*?(?=, input_type=|$)", re.M),
-    # Identifiants d'une URL : `scheme://utilisateur:secret@hôte`.
+    # URL credentials: `scheme://user:secret@host`.
     re.compile(r"(://[^/\s:@]*:)[^/\s@]+(?=@)"),
     re.compile(r"(?i)((?:bearer|basic)\s+)[^\s&\"',;]+"),
-    # `nom=valeur`, `nom: valeur`. Entre guillemets : jusqu'au guillemet fermant. Sinon jusqu'à
-    # un séparateur ou la fin de ligne, espaces compris : on masque trop plutôt que pas assez.
+    # `name=value`, `name: value`. Quoted: up to the closing quote. Otherwise up to
+    # a separator or end of line, spaces included: we mask too much rather than too little.
     re.compile(rf"(?i)({_NAMES}[\"']?\s*[=:]\s*)(?:\"[^\"\n]*\"?|'[^'\n]*'?|[^&\"',;\n]+)"),
 )
 
@@ -52,12 +52,12 @@ def _mask(value: Any) -> Any:
             value = pattern.sub(lambda m: m.group(1) + MASK, value)
         return value
     if isinstance(value, bytes | bytearray):
-        return MASK  # du binaire dans un log est au mieux inutile, au pire une clé
+        return MASK  # binary in a log is at best useless, at worst a key
     return value
 
 
 def mask_secrets(_logger: WrappedLogger, _method: str, event_dict: EventDict) -> EventDict:
-    return _mask(event_dict)  # type: ignore[no-any-return]  # un dict reste un dict
+    return _mask(event_dict)  # type: ignore[no-any-return]  # a dict stays a dict
 
 
 def configure_logging(stream: TextIO | None = None) -> None:
@@ -79,11 +79,11 @@ def configure_logging(stream: TextIO | None = None) -> None:
     handler = logging.StreamHandler(stream or sys.stdout)
     handler.setFormatter(
         structlog.stdlib.ProcessorFormatter(
-            # Entrées de la stdlib (uvicorn…) seulement : elles reçoivent le même habillage.
+            # stdlib entries (uvicorn…) only: they get the same wrapping.
             foreign_pre_chain=[*shared, structlog.stdlib.ExtraAdder()],
             processors=[
                 structlog.processors.format_exc_info,
-                mask_secrets,  # après format_exc_info : une trace est du texte à masquer aussi
+                mask_secrets,  # after format_exc_info: a trace is text to mask too
                 structlog.stdlib.ProcessorFormatter.remove_processors_meta,
                 structlog.processors.JSONRenderer(),
             ],
@@ -92,7 +92,7 @@ def configure_logging(stream: TextIO | None = None) -> None:
     root = logging.getLogger()
     root.handlers[:] = [handler]
     root.setLevel(level)
-    # uvicorn installe ses propres gestionnaires au démarrage : on les remplace par le nôtre.
+    # uvicorn installs its own handlers at startup: we replace them with ours.
     for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
         lg = logging.getLogger(name)
         lg.handlers.clear()

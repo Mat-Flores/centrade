@@ -1,4 +1,4 @@
-"""Événements canoniques (SPEC §7, annexe B). Décimaux en chaînes une fois sérialisés."""
+"""Canonical events (SPEC §7, annex B). Decimals as strings once serialized."""
 
 from __future__ import annotations
 
@@ -44,11 +44,11 @@ class SignalCreated(_Payload):
 
 
 class OrderPayload(_Payload):
-    """Commun à order.submitted, filled, canceled et rejected."""
+    """Common to order.submitted, filled, canceled and rejected."""
 
     client_order_id: UUID
     intent: Intent
-    decision_id: UUID | None = None  # pour une entrée
+    decision_id: UUID | None = None  # for an entry
     symbol: Symbol
     side: Side
     qty: Dec
@@ -122,16 +122,16 @@ class CanonicalEvent(BaseModel):
 
     schema_version: Literal[1] = 1
     id: UUID
-    ts: AwareDatetime  # heure du moteur
-    ts_ingest: AwareDatetime | None = None  # heure de réception, posée à l'ingestion
-    seq: Annotated[int, Field(ge=1)]  # séquence par instance
+    ts: AwareDatetime  # engine time
+    ts_ingest: AwareDatetime | None = None  # reception time, set at ingestion
+    seq: Annotated[int, Field(ge=1)]  # per-instance sequence
     type: EventType
     engine: str
     instance_id: UUID
     strategy_version: str | None = None
     account_id: str | None = None
     correlation_id: UUID | None = None
-    payload: Payload  # déclaré après `type` : le validateur s'en sert
+    payload: Payload  # declared after `type`: the validator uses it
 
     @field_validator("payload", mode="before")
     @classmethod

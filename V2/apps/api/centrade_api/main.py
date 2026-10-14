@@ -34,7 +34,7 @@ log = structlog.get_logger()
 
 class Check(BaseModel):
     status: Literal["ok", "down"]
-    observed_at: AwareDatetime  # chaque état annoncé est observé et daté (I1)
+    observed_at: AwareDatetime  # every announced state is observed and dated (I1)
     detail: str | None = None
 
 
@@ -45,11 +45,11 @@ class Health(BaseModel):
 
 
 class NoStore:
-    """`Cache-Control: no-store` sur toute réponse : ni session ni état observé dans un cache.
+    """`Cache-Control: no-store` on every response: neither session nor observed state in a cache.
 
-    Seul en-tête de sécurité posé ici ; HSTS, CSP, nosniff, Referrer-Policy et X-Frame-Options
-    le sont par Caddy (deploy/caddy/Caddyfile). ASGI pur : compatible avec le SSE.
-    Source : https://www.starlette.io/middleware/#pure-asgi-middleware
+    Only security header set here; HSTS, CSP, nosniff, Referrer-Policy and X-Frame-Options
+    are set by Caddy (deploy/caddy/Caddyfile). Pure ASGI: compatible with SSE.
+    Source: https://www.starlette.io/middleware/#pure-asgi-middleware
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -68,14 +68,14 @@ class NoStore:
         await self.app(scope, receive, send_no_store)
 
 
-MAX_BODY_BYTES = 64 * 1024  # toutes les routes reçoivent de petits corps JSON
+MAX_BODY_BYTES = 64 * 1024  # all routes receive small JSON bodies
 
 
 class BodyLimit:
-    """Borne le corps des requêtes : au-delà, 413, sans le lire en entier ni l'analyser.
+    """Bounds the request body: beyond it, 413, without reading it whole or parsing it.
 
-    Compte ce qui arrive réellement (un `Content-Length` se déclare, un envoi par morceaux n'en
-    a pas). L'exception remonte de la lecture du corps jusqu'au gestionnaire d'erreurs.
+    Counts what actually arrives (a `Content-Length` is declared, a chunked upload has none).
+    The exception bubbles up from the body read to the error handler.
     """
 
     def __init__(self, app: ASGIApp) -> None:
@@ -99,7 +99,7 @@ class BodyLimit:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     settings = get_settings()
-    settings.master_key()  # clé absente ou invalide : l'API ne démarre pas
+    settings.master_key()  # missing or invalid key: the API does not start
     engine = make_engine(settings.database_url())
     app.state.session_factory = make_session_factory(engine)
     app.state.redis = Redis.from_url(settings.redis_url, decode_responses=True)
@@ -109,7 +109,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
-    # Pas de Swagger ni de ReDoc : ils chargent des scripts tiers, interdits par la CSP (SPEC §9).
+    # No Swagger or ReDoc: they load third-party scripts, forbidden by the CSP (SPEC §9).
     app = FastAPI(
         title="Centrade API",
         version="0.0.0",
@@ -117,7 +117,7 @@ def create_app() -> FastAPI:
         docs_url=None,
         redoc_url=None,
         lifespan=lifespan,
-        # CSRF sur toutes les routes, présentes et à venir (SPEC §13).
+        # CSRF on all routes, present and future (SPEC §13).
         dependencies=[Depends(require_same_origin)],
     )
     install_error_handlers(app)
@@ -146,7 +146,7 @@ def create_app() -> FastAPI:
                 async with asyncio.timeout(2):
                     detail = await check()
                 return Check(status="ok", observed_at=now, detail=detail)
-            except Exception as exc:  # panne de n'importe quelle nature : composant « down »
+            except Exception as exc:  # failure of any kind: component "down"
                 log.warning("health_component_down", component=name, error=type(exc).__name__)
                 return Check(status="down", observed_at=now)
 
@@ -166,7 +166,7 @@ def create_app() -> FastAPI:
         async def worker() -> str | None:
             if redis is None:
                 raise RuntimeError("bus not configured")
-            raw = await redis.get(HEARTBEAT_KEY)  # la clé expire si le worker se tait
+            raw = await redis.get(HEARTBEAT_KEY)  # the key expires if the worker goes quiet
             if raw is None:
                 raise RuntimeError("heartbeat missing")
             beat = str(raw)

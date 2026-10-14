@@ -1,6 +1,6 @@
-"""`WorkerRuntime` (SPEC F6, I12) : fichiers d'une instance et identifiants de l'API native du
-moteur. Jetons propres à l'instance, renouvelés à chaque déploiement, jamais lisibles d'un autre
-compte ni d'une autre instance."""
+"""`WorkerRuntime` (SPEC F6, I12) : files of an instance and credentials of the engine's native API.
+Tokens specific to the instance, renewed on each deployment, never readable by another
+account or another instance."""
 
 import json
 import logging
@@ -56,10 +56,10 @@ async def test_credentials_created_at_deploy_are_reread_and_renewed(
     session_factory: Sessions, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:
     caplog.set_level(logging.DEBUG)
-    rt: InstanceRuntime = _runtime(session_factory, tmp_path)  # conforme au Protocol du contrat
+    rt: InstanceRuntime = _runtime(session_factory, tmp_path)  # conforms to the contract's Protocol
     iid = await _instance(session_factory)
     with pytest.raises(LookupError):
-        await rt.credentials(iid)  # rien avant le premier déploiement
+        await rt.credentials(iid)  # nothing before the first deployment
 
     first = await rt.issue_credentials(iid, NAMES)
     assert set(first) == set(NAMES)
@@ -67,17 +67,17 @@ async def test_credentials_created_at_deploy_are_reread_and_renewed(
     assert len(set(values)) == len(NAMES) and all(len(v) >= 32 for v in values)
     old_ref = await _secret_ref(session_factory, iid)
     assert old_ref is not None
-    # Après un redémarrage du worker : mêmes valeurs, relues depuis le SecretStore.
+    # After a worker restart: same values, re-read from the SecretStore.
     again = await _runtime(session_factory, tmp_path).credentials(iid)
     assert {k: v.get_secret_value() for k, v in again.items()} == dict(
         zip(NAMES, values, strict=True)
     )
 
-    second = await rt.issue_credentials(iid, NAMES)  # nouveau déploiement
+    second = await rt.issue_credentials(iid, NAMES)  # new deployment
     assert not {v.get_secret_value() for v in second.values()} & set(values)
     new_ref = await _secret_ref(session_factory, iid)
     async with session_factory() as s:
-        assert await s.get(Secret, old_ref) is None  # l'ancien chiffré est détruit
+        assert await s.get(Secret, old_ref) is None  # the old ciphertext is destroyed
         row = await s.get_one(Secret, new_ref)
     assert row.usage == "engine_api" and row.last_used_at is None
     for value in values + [v.get_secret_value() for v in second.values()]:
@@ -92,7 +92,7 @@ async def test_credentials_are_bound_to_the_instance_and_the_master_key(
     mine, other = await _instance(session_factory), await _instance(session_factory)
     await rt.issue_credentials(mine, NAMES)
     ref = await _secret_ref(session_factory, mine)
-    # Le secret d'une instance, rattaché de force à une autre, ne se déchiffre pas (AAD).
+    # The secret of one instance, forcibly attached to another, does not decrypt (AAD).
     async with session_factory.begin() as s:
         await s.execute(update(Instance).where(Instance.id == mine).values(engine_secret_ref=None))
         await s.execute(update(Instance).where(Instance.id == other).values(engine_secret_ref=ref))
@@ -101,7 +101,7 @@ async def test_credentials_are_bound_to_the_instance_and_the_master_key(
     async with session_factory.begin() as s:
         await s.execute(update(Instance).where(Instance.id == other).values(engine_secret_ref=None))
         await s.execute(update(Instance).where(Instance.id == mine).values(engine_secret_ref=ref))
-    with pytest.raises(InvalidTag):  # autre clé maître
+    with pytest.raises(InvalidTag):  # other master key
         await _runtime(session_factory, tmp_path, bytes(32)).credentials(mine)
     with pytest.raises(ValueError, match="32 octets"):
         _runtime(session_factory, tmp_path, b"courte")
@@ -115,7 +115,7 @@ async def test_instance_files_are_written_as_0400_then_credentials_removed(
 ) -> None:
     rt = _runtime(session_factory, tmp_path)
     iid = await _instance(session_factory)
-    with pytest.raises(LookupError):  # pas d'identifiants : aucun fichier
+    with pytest.raises(LookupError):  # no credentials: no file
         await rt.write_files(iid, {"config.json": "{}"}, {})
     creds = await rt.issue_credentials(iid, NAMES)
     content: dict[str, Any] = {"api_server": {k: v.get_secret_value() for k, v in creds.items()}}
@@ -132,15 +132,15 @@ async def test_instance_files_are_written_as_0400_then_credentials_removed(
         assert stat.S_IMODE(st.st_mode) == 0o400 and st.st_uid == os.getuid()
     assert json.loads((directory / CREDENTIALS_FILE).read_text()) == content
     assert (directory / "strategie.py").read_text(encoding="utf-8") == "# é\n"
-    # Le conteneur du moteur tourne sous le compte du worker : il lit ses fichiers sans privilège.
+    # The engine container runs under the worker's account: it reads its files without privilege.
     assert rt.container_user() == f"{os.getuid()}:{os.getgid()}"
 
-    await rt.write_files(iid, {"config.json": '{"a": 2}'}, content)  # redéploiement : remplacés
+    await rt.write_files(iid, {"config.json": '{"a": 2}'}, content)  # redeployment: replaced
     assert (directory / "config.json").read_text() == '{"a": 2}'
-    assert not [n for n in os.listdir(directory) if n.startswith(".")]  # aucun temporaire
+    assert not [n for n in os.listdir(directory) if n.startswith(".")]  # no temporary file
 
     await rt.cleanup(iid)
-    await rt.cleanup(iid)  # sans effet la seconde fois
+    await rt.cleanup(iid)  # no effect the second time
     assert sorted(os.listdir(directory)) == ["config.json", "strategie.py"]
 
 
@@ -164,7 +164,7 @@ def test_container_user_is_explicit_and_never_in_the_root_group(
 ) -> None:
     rt = _runtime(session_factory, tmp_path)
     monkeypatch.setattr(os, "getuid", lambda: 10001)
-    monkeypatch.setattr(os, "getgid", lambda: 0)  # image dont l'utilisateur n'a pas de groupe
+    monkeypatch.setattr(os, "getgid", lambda: 0)  # image whose user has no group
     assert rt.container_user() == "10001:10001"
     monkeypatch.setattr(os, "getgid", lambda: 10002)
     assert rt.container_user() == "10001:10002"

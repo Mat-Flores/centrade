@@ -1,4 +1,4 @@
-"""Connexion en deux étapes, anti-rejeu, codes de récupération, verrouillage (SPEC §13)."""
+"""Two-step login, anti-replay, recovery codes, lockout (SPEC §13)."""
 
 import asyncio
 import hashlib
@@ -49,15 +49,15 @@ async def test_password_then_totp_opens_a_full_session(
     assert r.status_code == 200
     assert r.json() == {"totp_required": True}
     assert SESSION_COOKIE not in client.cookies
-    assert (await client.get(ME)).status_code == 401  # la pré-session n'ouvre rien
+    assert (await client.get(ME)).status_code == 401  # the pre-session opens nothing
 
     r = await client.post(TOTP, json={"code": account.code(clock.now)})
     assert r.status_code == 200
     cookie = _set_cookie(r, SESSION_COOKIE)
     for attribute in ("Secure", "HttpOnly", "SameSite=strict", "Path=/"):
         assert attribute in cookie
-    assert "Domain" not in cookie  # exigé par le préfixe __Host-
-    assert PRE_COOKIE not in client.cookies  # effacé
+    assert "Domain" not in cookie  # required by the __Host- prefix
+    assert PRE_COOKIE not in client.cookies  # cleared
 
     me = await client.get(ME)
     assert me.status_code == 200
@@ -92,7 +92,7 @@ async def test_no_full_session_without_totp(
 
     assert await _stages(session_factory, account) == ["pre_totp"]
     assert (await client.get(ME)).status_code == 401
-    # Sans pré-session, le second facteur seul n'ouvre rien non plus.
+    # Without a pre-session, the second factor alone opens nothing either.
     client.cookies.clear()
     assert (await client.post(TOTP, json={"code": "000000"})).status_code == 401
     assert await _stages(session_factory, account) == ["pre_totp"]
@@ -153,7 +153,7 @@ async def test_token_rotates_between_pre_session_and_session(
         (full,) = rows
     assert full.stage == "full"
     assert full.id != pre_id
-    # L'ancien jeton ne vaut plus rien, ni comme pré-session ni comme session.
+    # The old token is worth nothing, neither as a pre-session nor as a session.
     client.cookies.clear()
     client.cookies.set(PRE_COOKIE, pre_token)
     clock.advance(seconds=30)
@@ -174,7 +174,7 @@ async def test_session_token_is_never_stored_in_clear(
     await sign_in(client, account)
 
     token = client.cookies[SESSION_COOKIE]
-    assert len(token) >= 43  # 256 bits d'aléa en base64url
+    assert len(token) >= 43  # 256 bits of randomness in base64url
     async with session_factory() as s:
         dump = "\n".join(
             (await s.execute(text("SELECT row_to_json(s)::text FROM sessions s"))).scalars()
@@ -195,13 +195,13 @@ async def test_replayed_totp_code_is_rejected(
     await first.post(LOGIN, json=_creds(account))
     assert (await first.post(TOTP, json={"code": code})).status_code == 200
 
-    # Le même code, encore valide dans sa fenêtre, intercepté et rejoué.
+    # The same code, still valid in its window, intercepted and replayed.
     await second.post(LOGIN, json=_creds(account))
     replay = await second.post(TOTP, json={"code": code})
 
     assert replay.status_code == 401
     assert SESSION_COOKIE not in second.cookies
-    # Un code d'un pas antérieur au dernier accepté est refusé lui aussi.
+    # A code from a step earlier than the last accepted is refused too.
     assert (await second.post(TOTP, json={"code": account.code(clock.now, -1)})).status_code == 401
     clock.advance(seconds=30)
     assert (await second.post(TOTP, json={"code": account.code(clock.now)})).status_code == 200
@@ -226,7 +226,7 @@ async def test_recovery_code_is_usable_only_once(
     first, second = make_client(), make_client(ip="203.0.113.11")
 
     await first.post(LOGIN, json=_creds(account))
-    # Saisie tolérante : casse et tirets ne comptent pas.
+    # Tolerant input: case and dashes do not matter.
     used = await first.post(TOTP, json={"code": code.lower().replace("-", " ")})
     assert used.status_code == 200
     assert (await first.get(ME)).status_code == 200
@@ -239,7 +239,7 @@ async def test_recovery_code_is_usable_only_once(
     user = await _user(session_factory, account)
     assert len(user.recovery_code_hashes) == len(account.recovery_codes) - 1
     assert security.recovery_code_hash(code) not in user.recovery_code_hashes
-    # Les autres codes restent valables.
+    # The other codes remain valid.
     other = await second.post(TOTP, json={"code": account.recovery_codes[1]})
     assert other.status_code == 200
 
@@ -270,13 +270,13 @@ async def test_lockout_grows_progressively_after_repeated_failures(
     assert (await client.post(LOGIN, json=_creds(account, WRONG))).status_code == 401
     assert (await _user(session_factory, account)).locked_until == clock.now + timedelta(minutes=1)
 
-    # Verrouillé : même le bon mot de passe est refusé, avec la même réponse qu'un échec.
+    # Locked: even the right password is refused, with the same response as a failure.
     locked = await client.post(LOGIN, json=_creds(account))
     assert locked.status_code == 401
     assert "set-cookie" not in locked.headers
-    assert (await _user(session_factory, account)).failed_attempts == 5  # pas de surenchère
+    assert (await _user(session_factory, account)).failed_attempts == 5  # no escalation
 
-    # Le verrou levé, un nouvel échec verrouille deux fois plus longtemps.
+    # Once the lock is lifted, a new failure locks twice as long.
     clock.advance(minutes=1, seconds=1)
     assert (await client.post(LOGIN, json=_creds(account, WRONG))).status_code == 401
     assert (await _user(session_factory, account)).locked_until == clock.now + timedelta(minutes=2)
@@ -298,8 +298,8 @@ async def test_repeated_totp_failures_lock_the_account(
     statuses = [(await client.post(TOTP, json={"code": bad})).status_code for _ in range(5)]
 
     assert statuses == [401, 401, 401, 401, 423]
-    assert await _stages(session_factory, account) == []  # la pré-session est détruite
-    # Le bon code ne sert plus : ni cette pré-session, ni une nouvelle tant que le verrou tient.
+    assert await _stages(session_factory, account) == []  # the pre-session is destroyed
+    # The right code is no longer usable: not with this pre-session, nor a new one while locked.
     assert (await client.post(TOTP, json={"code": account.code(clock.now)})).status_code == 401
     assert (await client.post(LOGIN, json=_creds(account))).status_code == 401
 
@@ -307,7 +307,7 @@ async def test_repeated_totp_failures_lock_the_account(
 async def test_locked_account_with_live_pre_session_opens_nothing(
     client: httpx.AsyncClient, make_account: MakeAccount, clock: FakeClock, session_factory: Factory
 ) -> None:
-    # État que le code ne produit pas lui-même (verrou posé à la main) : refus quand même.
+    # State the code does not produce itself (lock set by hand): refused all the same.
     account = await make_account()
     await client.post(LOGIN, json=_creds(account))
     async with session_factory() as s, s.begin():
@@ -328,7 +328,7 @@ async def test_concurrent_submissions_of_the_same_factor_open_only_one_session(
     for code in (account.code(clock.now), account.recovery_codes[0]):
         first, second = make_client(), make_client(ip="203.0.113.11")
         await first.post(LOGIN, json=_creds(account))
-        second.cookies.set(PRE_COOKIE, first.cookies[PRE_COOKIE])  # la même pré-session, deux fois
+        second.cookies.set(PRE_COOKIE, first.cookies[PRE_COOKIE])  # the same pre-session, twice
 
         responses = await asyncio.gather(
             first.post(TOTP, json={"code": code}), second.post(TOTP, json={"code": code})
@@ -350,7 +350,7 @@ async def test_concurrent_failures_are_all_counted(
 
     assert {r.status_code for r in responses} == {401}
     user = await _user(session_factory, account)
-    # Huit essais en parallèle : cinq comptés, puis le verrou. Aucun compteur perdu.
+    # Eight parallel attempts: five counted, then the lock. No counter lost.
     assert user.failed_attempts == 5
     assert user.locked_until is not None
 
@@ -368,8 +368,8 @@ async def test_concurrent_wrong_codes_are_all_counted(
 
     responses = await asyncio.gather(*(c.post(TOTP, json={"code": bad}) for c in clients))
 
-    # Cinq essais comptés, le cinquième verrouille ; les suivants trouvent le compte verrouillé
-    # (423) ou la pré-session détruite (401), selon l'ordre d'arrivée. Aucun n'est compté en trop.
+    # Five attempts counted, the fifth locks; the following ones find the account locked
+    # (423) or the pre-session destroyed (401), depending on arrival order. None is over-counted.
     statuses = [r.status_code for r in responses]
     assert set(statuses) == {401, 423}
     assert statuses.count(401) >= 4
@@ -398,7 +398,7 @@ async def test_response_is_identical_whether_or_not_the_account_exists(
     assert known.status_code == unknown.status_code == 401
     assert known.json() == unknown.json()
     assert "set-cookie" not in known.headers and "set-cookie" not in unknown.headers
-    # Temps comparable : un calcul argon2 dans les deux cas (empreinte factice pour l'inconnu).
+    # Comparable time: one argon2 computation in both cases (dummy hash for the unknown).
     assert len(verifications) == 2
     assert verifications[1] is None
 
@@ -415,7 +415,7 @@ async def test_logout_closes_the_session(
     assert r.status_code == 204
     assert "Max-Age=0" in _set_cookie(r, SESSION_COOKIE)
     assert await _stages(session_factory, account) == []
-    client.cookies.set(SESSION_COOKIE, token)  # un jeton volé avant la déconnexion
+    client.cookies.set(SESSION_COOKIE, token)  # a token stolen before logout
     assert (await client.get(ME)).status_code == 401
 
 
@@ -450,12 +450,12 @@ async def test_login_is_rate_limited_per_ip(
     statuses = [(await noisy.post(LOGIN, json=body)).status_code for _ in range(11)]
 
     assert statuses == [401] * 10 + [429]
-    limited = await noisy.post(LOGIN, json=_creds(account))  # même avec de bons identifiants
+    limited = await noisy.post(LOGIN, json=_creds(account))  # even with good credentials
     assert limited.status_code == 429
     assert limited.headers["content-type"].startswith("application/problem+json")
     assert int(limited.headers["retry-after"]) == 60
     assert (await noisy.post(TOTP, json={"code": "000000"})).status_code == 429
-    assert (await quiet.post(LOGIN, json=_creds(account))).status_code == 200  # autre adresse
+    assert (await quiet.post(LOGIN, json=_creds(account))).status_code == 200  # other address
     clock.advance(seconds=61)
     assert (await noisy.post(LOGIN, json=_creds(account))).status_code == 200
 
@@ -477,4 +477,4 @@ async def test_login_strictly_validates_its_inputs(
     r = await client.post(LOGIN, json=body)
 
     assert r.status_code == 422
-    assert "x" * 50 not in r.text  # la valeur reçue n'est jamais renvoyée
+    assert "x" * 50 not in r.text  # the received value is never echoed back

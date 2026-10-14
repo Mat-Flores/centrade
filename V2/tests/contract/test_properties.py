@@ -1,4 +1,4 @@
-"""Propriétés (Hypothesis) : enveloppe canonique et FakeEngine."""
+"""Properties (Hypothesis): canonical envelope and FakeEngine."""
 
 from __future__ import annotations
 
@@ -134,7 +134,7 @@ def test_clean_sequences_strictly_increase(seed: int, script: list[str]) -> None
 def test_snapshot_stays_the_truth_under_stream_faults(
     seed: int, script: list[str], failures: tuple[Failure, ...]
 ) -> None:
-    """Les pannes de flux ne touchent que les événements : instantané == moteur sain."""
+    """Stream failures only affect events: snapshot == healthy engine."""
     _, faulty = asyncio.run(_run(seed, script, failures))
     _, clean = asyncio.run(_run(seed, script, ()))
     assert faulty == clean

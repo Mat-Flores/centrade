@@ -1,6 +1,6 @@
-"""Comptes et clés (SPEC F6, §8) : RBAC, TOTP récent, test de permissions, rotation, audit.
+"""Accounts and keys (SPEC F6, §8): RBAC, recent TOTP, permissions test, rotation, audit.
 
-Valeurs sentinelles uniquement : aucune vraie clé.
+Sentinel values only: no real key.
 """
 
 import asyncio
@@ -35,7 +35,7 @@ LIVE = {
 
 
 class Probe:
-    """Sonde de test : aucune venue réelle. Rend le résultat donné, ou lève s'il en est un."""
+    """Test probe: no real venue. Returns the given result, or raises if it is an exception."""
 
     def __init__(self, outcome: KeyPermissions | Exception | float) -> None:
         self.outcome = outcome
@@ -83,14 +83,14 @@ async def test_account_creation_and_list_return_money_as_decimal_strings(stack: 
 
     viewer = await stack.client("viewer")
     ids = [a["id"] for a in (await viewer.get(A, params={"limit": 200})).json()["items"]]
-    assert ids.index(paper["id"]) < ids.index(created["id"])  # plus récent d'abord
+    assert ids.index(paper["id"]) < ids.index(created["id"])  # most recent first
     page = (await viewer.get(A, params={"limit": 1})).json()
     nxt = (await viewer.get(A, params={"limit": 1, "cursor": page["next_cursor"]})).json()
     assert [a["id"] for a in page["items"] + nxt["items"]] == ids[:2]
-    assert "engine" not in created  # aucun nom de moteur dans le schéma
+    assert "engine" not in created  # no engine name in the schema
 
     for bad in (
-        {"capital_cap": 1500.5},  # float refusé : chaîne décimale exigée
+        {"capital_cap": 1500.5},  # float refused: decimal string required
         {"capital_cap": 1500},
         {"capital_cap": "NaN"},
         {"capital_cap": "-1"},
@@ -131,7 +131,7 @@ async def test_old_totp_is_rejected_for_adding_or_replacing_a_key(stack: Stack) 
     before = await _row(stack, aid)
     assert (await admin.put(f"{A}/{aid}/secret", json=KEY)).status_code == 403
     assert (await admin.post(f"{A}/{aid}/rotate", json=KEY)).status_code == 403
-    assert (await admin.get(A)).status_code == 200  # la session, elle, reste valide
+    assert (await admin.get(A)).status_code == 200  # the session, though, stays valid
     assert (await _row(stack, aid)).secret_ref == before.secret_ref
 
 
@@ -158,7 +158,7 @@ async def test_put_is_write_only_and_response_has_no_value_or_derivative(stack: 
     listed = next(a for a in (await admin.get(A)).json()["items"] if a["id"] == aid)
     assert listed["trade_key"]["usage"] == "trade" and listed["read_key"]["usage"] == "read"
 
-    # Remplacer une clé : l'ancienne ligne disparaît, la vérification repart de zéro.
+    # Replacing a key: the old row disappears, verification starts over from zero.
     stack.app.dependency_overrides[get_permission_probe] = lambda: Probe(OK)
     assert (await admin.post(f"{A}/{aid}/test")).json()["result"] == "verified"
     assert (await admin.put(f"{A}/{aid}/secret", json=KEY)).status_code == 200
@@ -169,7 +169,7 @@ async def test_put_is_write_only_and_response_has_no_value_or_derivative(stack: 
         assert await s.get(Secret, row.secret_ref) is None
 
     for bad in (
-        {**KEY, "usage": "engine_api"},  # réservé au worker
+        {**KEY, "usage": "engine_api"},  # reserved for the worker
         {**KEY, "usage": "webhook"},
         {**KEY, "key": ""},
         {**KEY, "secret": "x" * 2000},
@@ -190,10 +190,10 @@ async def test_a_paper_account_receives_no_key(stack: Stack) -> None:
 
 
 async def test_probe_defaults_to_unverified(stack: Stack) -> None:
-    """Sans venue réelle : `permissions_verified_at` reste vide, `ip_restricted` inconnu."""
+    """Without a real venue: `permissions_verified_at` stays empty, `ip_restricted` unknown."""
     admin = await stack.client("admin")
     aid = (await _account(admin))["id"]
-    assert (await admin.post(f"{A}/{aid}/test")).status_code == 409  # aucune clé à tester
+    assert (await admin.post(f"{A}/{aid}/test")).status_code == 409  # no key to test
     await admin.put(f"{A}/{aid}/secret", json=KEY)
     r = await admin.post(f"{A}/{aid}/test")
     assert r.status_code == 200 and r.json()["result"] == "unverified"
@@ -212,8 +212,8 @@ async def test_probe_defaults_to_unverified(stack: Stack) -> None:
         (KeyPermissions(trading=None, withdrawal=False, ip_restricted=True), "unverified"),
         (RuntimeError("TEST-SECRET-DO-NOT-USE-erreur"), "unverified"),
         (TimeoutError(), "unverified"),
-        (60.0, "unverified"),  # sonde muette : délai dépassé
-        (None, "unverified"),  # réponse qui n'est pas du type attendu
+        (60.0, "unverified"),  # silent probe: timeout exceeded
+        (None, "unverified"),  # response that is not of the expected type
         ({"trading": True, "withdrawal": False}, "unverified"),
     ],
 )
@@ -226,7 +226,7 @@ async def test_permissions_check_decision(
     admin = await stack.client("admin")
     aid = (await _account(admin))["id"]
     await admin.put(f"{A}/{aid}/secret", json=KEY)
-    # Un compte d'abord vérifié : un test qui n'aboutit plus retire la vérification (I5).
+    # An account verified first: a test that no longer succeeds removes the verification (I5).
     stack.app.dependency_overrides[get_permission_probe] = lambda: Probe(OK)
     assert (await admin.post(f"{A}/{aid}/test")).json()["result"] == "verified"
     probe = Probe(outcome)
@@ -237,7 +237,7 @@ async def test_permissions_check_decision(
     assert r.status_code == 200 and r.json()["result"] == expected
     assert "TEST-SECRET" not in r.text
     row = await _row(stack, aid)
-    assert probe.seen == [row.secret_ref]  # la sonde reçoit une référence, jamais une valeur
+    assert probe.seen == [row.secret_ref]  # the probe receives a reference, never a value
     if expected == "verified":
         assert row.permissions_verified_at == stack.world.clock() and row.ip_restricted is True
     else:
@@ -255,7 +255,7 @@ def test_verdict_is_rejected_by_default(
         KeyPermissions(trading=trading, withdrawal=withdrawal, ip_restricted=ip), usage
     )
     wanted_trading = usage == "trade"
-    # Vérifié seulement si tout est connu et conforme ; jamais avec un retrait possible.
+    # Verified only if everything is known and compliant; never with a withdrawal possible.
     assert (result == "verified") == (trading is wanted_trading and withdrawal is False)
     if withdrawal is True:
         assert result == "refused"
@@ -264,7 +264,7 @@ def test_verdict_is_rejected_by_default(
 def test_verdict_of_an_incomplete_response_is_unverified() -> None:
     for junk in (None, {}, "ok", True, object()):
         assert verdict(junk, "trade") == "unverified"  # type: ignore[arg-type]
-    # Des valeurs « vraies » qui ne sont pas des booléens ne valent pas permission constatée.
+    # "Truthy" values that are not booleans do not count as an observed permission.
     assert (
         verdict(KeyPermissions(trading=1, withdrawal=0, ip_restricted=None), "trade")  # type: ignore[arg-type]
         != "verified"
@@ -274,7 +274,7 @@ def test_verdict_of_an_incomplete_response_is_unverified() -> None:
 async def test_successful_rotation_switches_then_revokes_the_old_key(stack: Stack) -> None:
     admin = await stack.client("admin")
     aid = (await _account(admin))["id"]
-    assert (await admin.post(f"{A}/{aid}/rotate", json=KEY)).status_code == 409  # rien à remplacer
+    assert (await admin.post(f"{A}/{aid}/rotate", json=KEY)).status_code == 409  # no key to replace
     await admin.put(f"{A}/{aid}/secret", json=KEY)
     old = (await _row(stack, aid)).secret_ref
     probe = Probe(OK)
@@ -285,10 +285,10 @@ async def test_successful_rotation_switches_then_revokes_the_old_key(stack: Stac
     assert r.status_code == 200 and r.json()["rotated_at"] is not None
     assert "TEST-SECRET" not in r.text
     row = await _row(stack, aid)
-    assert row.secret_ref not in (None, old) and probe.seen == [row.secret_ref]  # la nouvelle
+    assert row.secret_ref not in (None, old) and probe.seen == [row.secret_ref]  # the new one
     assert row.permissions_verified_at == stack.world.clock() and row.ip_restricted is True
     async with stack.world.sessions() as s:
-        assert await s.get(Secret, old) is None  # révoquée après la bascule
+        assert await s.get(Secret, old) is None  # revoked after the switch
         assert await s.get(Secret, row.secret_ref) is not None
 
 
@@ -325,7 +325,7 @@ async def test_failed_rotation_leaves_the_old_key_intact(
     after = await _row(stack, aid)
     assert after.secret_ref == before.secret_ref
     assert after.permissions_verified_at == before.permissions_verified_at is not None
-    assert await _secret_count(stack) == count  # la nouvelle n'est pas restée
+    assert await _secret_count(stack) == count  # the new one did not remain
     async with stack.world.sessions() as s:
         kept = await s.get(Secret, before.secret_ref)
         assert kept is not None

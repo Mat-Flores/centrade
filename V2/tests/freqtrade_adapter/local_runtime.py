@@ -1,4 +1,4 @@
-"""Pièces communes à l'essai réel et à mesure de capacité : stratégie de TEST et runtime local."""
+"""Parts shared by the real trial and the capacity measurement: TEST strategy and local runtime."""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from control_plane import ControlPlaneStrategy
 
 
 class EnterEveryCandle(ControlPlaneStrategy):
-    """Stratégie de TEST : un signal d'entrée à chaque bougie. Jamais dans strategies/."""
+    """TEST strategy: an entry signal on every candle. Never in strategies/."""
 
     timeframe = "1m"
     startup_candle_count = 2
@@ -35,7 +35,7 @@ class EnterEveryCandle(ControlPlaneStrategy):
 
 
 class LocalRuntime:
-    """InstanceRuntime sans base : vrais fichiers 0400 au nom de l'utilisateur d'essai."""
+    """InstanceRuntime without a database: real 0400 files owned by the test user."""
 
     def __init__(self, root: Path) -> None:
         self.root = root

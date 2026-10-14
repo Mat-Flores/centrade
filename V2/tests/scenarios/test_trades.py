@@ -1,4 +1,4 @@
-"""Projection des trades clos (SPEC §6, §7, F10) : du moteur à `GET /trades`."""
+"""Closed trades projection (SPEC §6, §7, F10): from the engine to `GET /trades`."""
 
 import re
 from datetime import UTC, datetime, timedelta
@@ -66,7 +66,7 @@ async def test_closed_position_becomes_a_row_with_its_cause(stack: Stack) -> Non
     )
     assert (t.opened_at, t.closed_at, t.duration_s) == (T0, T0 + timedelta(seconds=90), 90)
     assert notes == [("trade", t.id)]
-    assert await _apply(stack, iid, _closed()) == []  # revu : une ligne, rien à annoncer
+    assert await _apply(stack, iid, _closed()) == []  # seen again: one row, nothing to announce
     assert len(await _rows(stack, iid)) == 1
 
 
@@ -155,6 +155,6 @@ async def test_exit_cause_db_constraint_equals_exit_causes(stack: Stack) -> None
 )
 async def test_paged_sort_uses_its_index(stack: Stack, query: str, index: str) -> None:
     async with stack.world.sessions.begin() as s:
-        await s.execute(text("SET LOCAL enable_seqscan = off"))  # tables vides
+        await s.execute(text("SET LOCAL enable_seqscan = off"))  # empty tables
         plan = "\n".join((await s.scalars(text("EXPLAIN " + query))).all())
     assert index in plan, plan

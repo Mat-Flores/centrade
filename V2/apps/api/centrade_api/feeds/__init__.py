@@ -1,4 +1,4 @@
-"""Journaux en lecture : évènements, alertes, audit."""
+"""Read-only logs: events, alerts, audit."""
 
 from centrade_api.feeds.routes import router
 

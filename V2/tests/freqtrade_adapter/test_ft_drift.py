@@ -17,8 +17,8 @@ from .support import make_spec, make_trailing_spec
 
 
 def show_config(spec: InstanceSpec) -> dict[str, Any]:
-    """Réponse de GET /show_config telle que le tag la forme (flottants, `exchange` en chaîne,
-    infini en -1, `state` à la place de initial_state), plus `pair_whitelist` de GET /whitelist."""
+    """Response of GET /show_config as the tag shapes it (floats, `exchange` as a string,
+    infinity as -1, `state` instead of initial_state), plus `pair_whitelist` from GET /whitelist."""
     d = json.loads(config_file(spec))
     return {
         **{
@@ -66,7 +66,7 @@ def _mutate(key: str, v: Any) -> Any:
         return [*v, "SOL/USDT"]
     if key == "minimal_roi":
         return {**v, "999": 1.0}
-    first = next(iter(v))  # comparées par sous-ensemble : on change une de nos entrées
+    first = next(iter(v))  # compared by subset: we change one of our entries
     return {**v, first: _mutate(first, v[first])}
 
 
@@ -127,7 +127,7 @@ def test_drift_on_a_nested_execution_setting() -> None:
     spec = make_spec()
     eff = show_config(spec)
     eff["entry_pricing"] = {**eff["entry_pricing"], "price_side": "same"}
-    eff["exit_pricing"] = {"use_order_book": True, "order_book_top": 1}  # price_side retiré
+    eff["exit_pricing"] = {"use_order_book": True, "order_book_top": 1}  # price_side removed
     depth = {**eff["entry_pricing"]["check_depth_of_market"], "enabled": True}
     assert [d.key for d in drift(render_config(spec), eff)] == ["entry_pricing", "exit_pricing"]
     eff = show_config(spec)

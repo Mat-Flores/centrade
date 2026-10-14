@@ -1,4 +1,4 @@
-"""Rien de sensible dans les logs ; chaque événement d'auth a sa ligne d'audit (I12, I14)."""
+"""Nothing sensitive in the logs; each auth event has its audit row (I12, I14)."""
 
 import base64
 import io
@@ -20,7 +20,7 @@ IP = "203.0.113.77"
 
 
 async def _journey(make_client: MakeClient, account: Account, clock: FakeClock) -> list[str]:
-    """Échecs, connexion, lecture, déconnexion, code de récupération. Renvoie les secrets vus."""
+    """Failures, login, read, logout, recovery code. Returns the secrets seen."""
     client = make_client(ip=IP)
     creds = {"username": account.email, "password": account.password}
     bad_code = "000000" if account.code(clock.now) != "000000" else "111111"
@@ -74,10 +74,10 @@ async def test_i12_no_sensitive_value_in_logs_of_a_full_journey(
     secrets.append(base64.b64encode(settings.master_key()).decode())
     for secret in secrets[:10] + secrets[-1:]:
         assert secret not in output
-    for pattern in secrets[10:12]:  # codes à 6 chiffres : pas noyés dans un autre nombre
+    for pattern in secrets[10:12]:  # 6-digit codes: not buried in another number
         assert not re.search(pattern, output)
-    assert account.email not in output  # ni l'identifiant complet
-    # Le parcours a bien été journalisé, en JSON, avec de quoi enquêter.
+    assert account.email not in output  # nor the full identifier
+    # The flow was indeed logged, as JSON, with enough to investigate.
     events = [json.loads(line) for line in output.splitlines() if line.startswith("{")]
     names = [e["event"] for e in events]
     for expected in (
@@ -117,7 +117,7 @@ async def test_i14_auth_events_leave_an_audit_row_with_author_and_ip(
         assert await verify_chain(s) is None
     author = f"user:{account.id}"
     assert [tuple(r) for r in rows] == [
-        ("auth.login.failed", "anonymous", IP),  # mot de passe faux : identité non prouvée
+        ("auth.login.failed", "anonymous", IP),  # wrong password: identity not proven
         ("auth.password.accepted", author, IP),
         ("auth.totp.failed", author, IP),
         ("auth.login.succeeded", author, IP),
@@ -137,7 +137,7 @@ async def test_i14_correct_password_without_totp_leaves_a_trace(
     client = make_client(ip=IP)
     creds = {"username": account.email, "password": account.password}
 
-    assert (await client.post(LOGIN, json=creds)).status_code == 200  # puis plus rien
+    assert (await client.post(LOGIN, json=creds)).status_code == 200  # then nothing more
 
     async with session_factory() as s:
         rows = (
@@ -177,6 +177,6 @@ async def test_i14_lockout_and_failure_on_unknown_account_are_audited(
     assert [tuple(r) for r in rows] == [
         *[("auth.login.failed", "anonymous", author, IP)] * 5,
         ("auth.account.locked", "system:auth", author, IP),
-        ("auth.login.failed", "anonymous", author, IP),  # tentative pendant le verrou
+        ("auth.login.failed", "anonymous", author, IP),  # attempt during the lock
         ("auth.login.failed", "anonymous", "user:unknown", IP),
     ]

@@ -1,6 +1,6 @@
-"""S8 (SPEC §14, §13) : clé possédée modifiée hors plateforme. Détectée en 60 s (horloge
-injectée), sorties seules, alerte critique ; la dérive et la configuration relue sont enregistrées
-et datées."""
+"""S8 (SPEC §14, §13): owned key modified outside the platform. Detected within 60 s (injected
+clock), exits only, critical alert; the drift and the re-read configuration are recorded
+and dated."""
 
 from datetime import timedelta
 
@@ -19,10 +19,10 @@ async def test_s08_drift_detected_within_60_s_exits_only_critical_alert(stack: S
     assert (await get(c, f"/api/v1/instances/{iid}"))["state"]["value"] == "running"
     calls = spy(w.fake)
 
-    w.fake.set_failure(ref_of(iid), Failure.DRIFT)  # modifiée dans le moteur, hors plateforme
+    w.fake.set_failure(ref_of(iid), Failure.DRIFT)  # modified in the engine, outside the platform
     drifted_at = w.clock.now
     detected_at = None
-    for _ in range(12):  # le worker tourne ; l'horloge avance de 5 s par tour
+    for _ in range(12):  # the worker runs; the clock advances 5 s per cycle
         w.clock.advance(5)
         await w.worker.run_once()
         if await alerts(w, iid, "config_drift"):
@@ -33,7 +33,7 @@ async def test_s08_drift_detected_within_60_s_exits_only_critical_alert(stack: S
     (alert,) = await alerts(w, iid, "config_drift")
     assert (alert.severity, alert.status) == ("critical", "open")
     assert "max_open_positions" in alert.message
-    # Sorties seules : la pause est partie d'office, sans attendre le tour suivant.
+    # Exits only: the pause was sent automatically, without waiting for the next cycle.
     assert calls == ["pause_entries"]
     assert (await w.fake.status(ref_of(iid))).state == "exits_only"
     (pause,) = await commands(w, iid, "pause_entries")
@@ -50,7 +50,7 @@ async def test_s08_drift_detected_within_60_s_exits_only_critical_alert(stack: S
     shown = await get(c, f"/api/v1/instances/{iid}")
     assert shown["state"]["value"] == "exits_only" and shown["desired_state"] == "running"
 
-    # Tant que la dérive dure, les entrées ne se rouvrent pas.
+    # While the drift lasts, entries do not reopen.
     r = await act(c, iid, "resume-entries")
     assert r.status_code == 202
     await w.worker.run_once()
@@ -59,7 +59,7 @@ async def test_s08_drift_detected_within_60_s_exits_only_critical_alert(stack: S
     assert {x["code"] for x in cmd["result"]["reasons"]} == {"drift"}
     assert calls == ["pause_entries"]
 
-    # La configuration redevient conforme : l'alerte se résout, la dérive enregistrée s'efface.
+    # The configuration is compliant again: the alert resolves, the recorded drift is cleared.
     w.fake.set_failure(ref_of(iid), Failure.DRIFT, on=False)
     w.clock.advance(30)
     await w.worker.run_once()
@@ -68,7 +68,7 @@ async def test_s08_drift_detected_within_60_s_exits_only_critical_alert(stack: S
 
 
 async def test_s08_owned_key_missing_from_the_reread_is_drift(stack: Stack) -> None:
-    """Jamais d'ignorance silencieuse : une clé que l'adaptateur ne relit pas, sans la déclarer."""
+    """Never silent ignorance: a key the adapter does not re-read, without declaring it."""
     w = stack.world
     c = await stack.client("operator")
     iid = str((await create_instance(c))["id"])
@@ -87,7 +87,7 @@ async def test_s08_owned_key_missing_from_the_reread_is_drift(stack: Stack) -> N
     ]
     assert [a.severity for a in await alerts(w, iid, "config_drift")] == ["critical"]
 
-    # Déclarée non relisible par l'adaptateur : ce n'est plus une dérive.
+    # Declared not re-readable by the adapter: it is no longer a drift.
     render = w.fake.render_config
     w.fake.render_config = lambda spec: render(spec).model_copy(  # type: ignore[method-assign]
         update={"unreadable": frozenset({"stoploss"})}

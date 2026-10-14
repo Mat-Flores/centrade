@@ -1,9 +1,9 @@
-"""Runner Docker : seul code qui parle à Docker, par le socket proxy (SPEC §13, F9).
+"""Docker runner: the only code that talks to Docker, through the socket proxy (SPEC §13, F9).
 
-Il ne connaît aucun moteur : image, digest, commande, réservations. Tout conteneur naît du même
-gabarit (`_template`), jamais d'un réglage de l'appelant. Aucun arrêt de la plateforme ne touche
-un conteneur (I9) ; seul `remove`, demandé explicitement, en supprime un.
-Sources : https://docker-py.readthedocs.io/en/stable/containers.html
+It knows no engine: image, digest, command, reservations. Every container is born from the same
+template (`_template`), never from a caller setting. No platform stop touches a container (I9);
+only `remove`, explicitly requested, deletes one.
+Sources: https://docker-py.readthedocs.io/en/stable/containers.html
 """
 
 from __future__ import annotations
@@ -34,32 +34,32 @@ LABEL_INSTANCE = "centrade.instance"
 LABEL_FINGERPRINT = "centrade.fingerprint"
 LABEL_MODE = "centrade.mode"
 
-DATA_PATH = "/data"  # volume de données de l'instance, en écriture
-# Un volume neuf appartient à root : le runner y crée ce sous-dossier au nom de l'utilisateur du
-# conteneur, seul endroit où un moteur sans privilège peut écrire (racine du volume : rien).
+DATA_PATH = "/data"  # instance data volume, writable
+# A new volume belongs to root: the runner creates this subfolder there under the container
+# user's name, the only place where an unprivileged engine can write (volume root: nothing).
 DATA_SUBDIR = "engine"
-FILES_PATH = "/run/centrade"  # configuration, stratégie, identifiants : lecture seule
-ENV_ALLOWED = frozenset({"TZ", "PYTHONUNBUFFERED"})  # jamais de secret en variable (I12)
-_ACTIVE = ("running", "created", "restarting", "paused")  # états qui occupent de la mémoire
+FILES_PATH = "/run/centrade"  # configuration, strategy, credentials: read-only
+ENV_ALLOWED = frozenset({"TZ", "PYTHONUNBUFFERED"})  # never a secret in a variable (I12)
+_ACTIVE = ("running", "created", "restarting", "paused")  # states that occupy memory
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 _IMAGE = re.compile(r"[a-z0-9][a-z0-9._/-]*(:[A-Za-z0-9._-]+)?")
-_USER = re.compile(r"([1-9][0-9]*):([1-9][0-9]*)")  # ni uid 0 ni gid 0
+_USER = re.compile(r"([1-9][0-9]*):([1-9][0-9]*)")  # neither uid 0 nor gid 0
 _T = TypeVar("_T")
 
 
 @dataclass(frozen=True)
 class ContainerSpec:
     instance_id: UUID
-    image: str  # `dépôt` ou `dépôt:tag`, sans digest
-    digest: str  # sha256:… de la table `engines`
+    image: str  # `repo` or `repo:tag`, without digest
+    digest: str  # sha256:… from the `engines` table
     command: tuple[str, ...]
-    files_dir: Path  # doit être `<runtime_dir>/<instance_id>`
+    files_dir: Path  # must be `<runtime_dir>/<instance_id>`
     mode: str
     fingerprint: str
     memory_bytes: int
     nano_cpus: int
     env: Mapping[str, str] = field(default_factory=dict)
-    user: str = "1000:1000"  # uid:gid numériques, non nuls
+    user: str = "1000:1000"  # numeric uid:gid, non-zero
 
 
 @dataclass(frozen=True)
@@ -67,12 +67,12 @@ class RunnerContainer:
     container_id: str
     instance_id: UUID
     status: str
-    started_at: str  # StartedAt de Docker, tel quel : il prouve l'absence de redémarrage
+    started_at: str  # Docker's StartedAt, as is: it proves there was no restart
     fingerprint: str
     mode: str
 
 
-_Views = list[RunnerContainer]  # `list` est aussi une méthode du runner
+_Views = list[RunnerContainer]  # `list` is also a runner method
 
 
 def _name(instance_id: UUID) -> str:
@@ -86,7 +86,7 @@ def _own_data_subdir(container: Any, user: str) -> None:
         info = tarfile.TarInfo(DATA_SUBDIR)
         info.type, info.mode, info.uid, info.gid = tarfile.DIRTYPE, 0o700, uid, gid
         tar.addfile(info)
-    # Sans effet sur un dossier déjà là : le contenu d'une instance relancée reste intact.
+    # No effect on an already existing folder: a restarted instance's content stays intact.
     if not container.put_archive(DATA_PATH, buf.getvalue()):
         raise CommandRejected("volume de données : dossier du moteur non créé")
 
@@ -130,7 +130,7 @@ class DockerRunner:
         self._host_memory_bytes = int(mem) * 1024 * 1024 if mem else None
         self._client = client
 
-    # --- accès Docker -------------------------------------------------------------------------
+    # --- Docker access ------------------------------------------------------------------------
 
     def _cli(self) -> Any:
         if self._client is None:
@@ -138,7 +138,7 @@ class DockerRunner:
         return self._client
 
     async def _call(self, fn: Callable[[Any], _T]) -> _T:
-        """Appel synchrone du SDK hors de la boucle ; erreurs traduites vers le contrat."""
+        """Synchronous SDK call outside the loop; errors translated to the contract."""
 
         def run() -> _T:
             return fn(self._cli())
@@ -156,17 +156,17 @@ class DockerRunner:
         except (DockerException, requests.RequestException, OSError) as exc:
             raise EngineUnreachable(f"Docker injoignable : {type(exc).__name__}") from exc
 
-    # --- gabarit ------------------------------------------------------------------------------
+    # --- template -----------------------------------------------------------------------------
 
     def _template(self, spec: ContainerSpec) -> dict[str, Any]:
-        """Seul gabarit de conteneur de moteur (§13). Valide l'entrée, refuse au moindre doute."""
+        """The only engine container template (§13). Validates input, refuses at any doubt."""
         if not _DIGEST.fullmatch(spec.digest) or not _IMAGE.fullmatch(spec.image):
             raise CommandRejected(
                 "image ou digest mal formé (attendu dépôt[:tag] et sha256:64 hex)"
             )
         if not _USER.fullmatch(spec.user):
             raise CommandRejected("utilisateur du conteneur : uid:gid numériques, non nuls")
-        if spec.memory_bytes <= 0 or spec.nano_cpus <= 0:  # 0 = illimité pour Docker
+        if spec.memory_bytes <= 0 or spec.nano_cpus <= 0:  # 0 = unlimited for Docker
             raise CommandRejected("plafonds de mémoire et de CPU obligatoires")
         if not spec.command or not spec.mode or not spec.fingerprint:
             raise CommandRejected("commande, mode et empreinte obligatoires")
@@ -179,7 +179,7 @@ class DockerRunner:
             )
         name = _name(spec.instance_id)
         return {
-            "image": f"{spec.image}@{spec.digest}",  # le démon refuse un digest qu'il n'a pas
+            "image": f"{spec.image}@{spec.digest}",  # the daemon refuses a digest it does not have
             "command": list(spec.command),
             "name": name,
             "user": spec.user,
@@ -190,12 +190,12 @@ class DockerRunner:
                 LABEL_MODE: spec.mode,
             },
             "read_only": True,
-            "tmpfs": {"/tmp": "rw,noexec,nosuid,size=64m"},  # noqa: S108 (tmpfs du conteneur)
+            "tmpfs": {"/tmp": "rw,noexec,nosuid,size=64m"},  # noqa: S108 (container tmpfs)
             "cap_drop": ["ALL"],
             "security_opt": ["no-new-privileges:true"],
             "privileged": False,
             "mem_limit": spec.memory_bytes,
-            "memswap_limit": spec.memory_bytes,  # pas de swap
+            "memswap_limit": spec.memory_bytes,  # no swap
             "nano_cpus": spec.nano_cpus,
             "pids_limit": 256,
             "restart_policy": {"Name": "on-failure", "MaximumRetryCount": 3},
@@ -207,13 +207,13 @@ class DockerRunner:
         }
 
     async def _admit(self, new_bytes: int) -> None:
-        """Refus si la mémoire réservée dépasserait celle de l'hôte, ou si on ne sait pas (I5)."""
+        """Refuse if reserved memory would exceed the host's, or if unknown (I5)."""
 
         def reserved(cli: Any) -> tuple[int, int | None]:
             total: int | None = None
             try:
                 total = int(cli.info()["MemTotal"])
-            except (APIError, KeyError, ValueError):  # proxy sans `info` : paramètre
+            except (APIError, KeyError, ValueError):  # proxy without `info`: a parameter
                 pass
             used = 0
             for c in cli.containers.list(all=True, filters={"label": LABEL_INSTANCE}):
@@ -231,7 +231,7 @@ class DockerRunner:
                 f"mémoire réservée insuffisante : {used + new_bytes} octets demandés pour {total}"
             )
 
-    # --- opérations ---------------------------------------------------------------------------
+    # --- operations ---------------------------------------------------------------------------
 
     async def create(self, spec: ContainerSpec) -> RunnerContainer:
         kwargs = self._template(spec)
@@ -239,11 +239,11 @@ class DockerRunner:
 
         def go(cli: Any) -> RunnerContainer:
             image = kwargs.pop("image")
-            c = cli.containers.create(image, **kwargs)  # `create` ne télécharge jamais
+            c = cli.containers.create(image, **kwargs)  # `create` never downloads
             try:
                 _own_data_subdir(c, spec.user)
             except BaseException:
-                c.remove(v=False)  # pas de conteneur à moitié préparé
+                c.remove(v=False)  # no half-prepared container
                 raise
             c.reload()
             return _view(c)
@@ -256,14 +256,14 @@ class DockerRunner:
                 c = cli.containers.get(_name(instance_id))
             except NotFound as exc:
                 raise CommandRejected("conteneur absent") from exc
-            c.start()  # déjà en marche : Docker répond 304, sans erreur
+            c.start()  # already running: Docker answers 304, no error
             c.reload()
             return _view(c)
 
         return await self._call(go)
 
     async def stop(self, instance_id: UUID, timeout_s: int = 30) -> None:
-        """Arrête un conteneur déjà arrêté ou absent sans erreur."""
+        """Stops an already stopped or absent container without error."""
 
         def go(cli: Any) -> None:
             try:
@@ -274,7 +274,7 @@ class DockerRunner:
         await self._call(go)
 
     async def remove(self, instance_id: UUID) -> None:
-        """Supprime le conteneur arrêté de l'instance ; jamais le volume de données."""
+        """Removes the instance's stopped container; never the data volume."""
 
         def go(cli: Any) -> None:
             try:
@@ -283,7 +283,7 @@ class DockerRunner:
                 return
             if LABEL_INSTANCE not in c.attrs["Config"]["Labels"]:
                 raise CommandRejected("conteneur non étiqueté : jamais supprimé")
-            c.remove(v=False)  # sans force : un conteneur en marche reste
+            c.remove(v=False)  # no force: a running container stays
 
         await self._call(go)
 
@@ -308,5 +308,5 @@ class DockerRunner:
         return await self._call(go)
 
     async def adopt(self) -> _Views:
-        """Conteneurs étiquetés en marche, rendus tels quels : ni redémarrés ni modifiés."""
+        """Labelled running containers, returned as is: neither restarted nor modified."""
         return [c for c in await self.list() if c.status == "running"]

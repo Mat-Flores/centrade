@@ -1,1 +1,1 @@
-"""Socle commun à tous les domaines de l'API : dépendances, erreurs, valeur observée, pagination."""
+"""Foundation shared by all API domains: dependencies, errors, observed value, pagination."""

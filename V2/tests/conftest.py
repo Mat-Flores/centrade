@@ -1,4 +1,4 @@
-"""Postgres/TimescaleDB et Redis réels (testcontainers), images de deploy/compose/core.yml."""
+"""Real Postgres/TimescaleDB and Redis (testcontainers), images from deploy/compose/core.yml."""
 
 import re
 from collections.abc import AsyncIterator, Callable, Iterator
@@ -50,7 +50,7 @@ def redis_url() -> Iterator[str]:
 
 @pytest.fixture(scope="session")
 def migrated_url(pg_url: str) -> str:
-    """Migration appliquée une seule fois par session de tests."""
+    """Migration applied only once per test session."""
     command.upgrade(alembic_config(pg_url), "head")
     return pg_url
 

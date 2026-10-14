@@ -1,5 +1,5 @@
-"""I1 : tout état affiché est observé et daté ; périmé au-delà du seuil ; inconnu s'affiche
-inconnu ; l'état voulu n'est jamais présenté comme réel (SPEC §1.2, §9)."""
+"""I1: every displayed state is observed and dated; stale beyond the threshold; unknown is displayed
+as unknown; the wanted state is never presented as real (SPEC §1.2, §9)."""
 
 from centrade_api.testing import Stack, act, create_instance, get, ref_of
 from centrade_fake.engine import Failure
@@ -9,7 +9,7 @@ from centrade_worker.testing import T0
 async def test_i01_displayed_state_carries_observation_timestamp(stack: Stack) -> None:
     c = await stack.client("operator")
     created = await create_instance(c)
-    await stack.world.worker.run_once()  # déploiement, puis premier relevé
+    await stack.world.worker.run_once()  # deployment, then first snapshot
 
     inst = await get(c, f"/api/v1/instances/{created['id']}")
     assert inst["state"]["value"] == "exits_only"
@@ -27,10 +27,10 @@ async def test_i01_state_is_stale_beyond_threshold(stack: Stack) -> None:
     stack.world.clock.advance(stack.settings.observed_stale_after_s - 1)
     assert (await get(c, f"/api/v1/instances/{created['id']}"))["state"]["stale"] is False
 
-    stack.world.clock.advance(2)  # le worker ne tourne plus : la valeur vieillit
+    stack.world.clock.advance(2)  # the worker no longer runs: the value ages
     inst = await get(c, f"/api/v1/instances/{created['id']}")
     assert inst["state"]["stale"] is True and inst["observed_mode"]["stale"] is True
-    assert inst["state"]["value"] == "exits_only"  # la valeur garde sa date, jamais « actuelle »
+    assert inst["state"]["value"] == "exits_only"  # the value keeps its date, never "current"
     assert inst["state"]["observed_at"] and inst["server_time"] > inst["state"]["observed_at"]
 
 
@@ -42,7 +42,7 @@ async def test_i01_unknown_state_is_displayed_as_unknown(stack: Stack) -> None:
     inst = await get(c, f"/api/v1/instances/{created['id']}")
     assert inst["state"]["value"] == "unknown" and inst["observed_mode"]["value"] == "unknown"
 
-    # Une instance saine, puis muette : plus de dernière valeur connue.
+    # A healthy instance, then silent: no last known value any more.
     healthy = await create_instance(c)
     await stack.world.worker.run_once()
     stack.world.fake.set_failure(ref_of(healthy["id"]), Failure.SILENT)
@@ -53,7 +53,7 @@ async def test_i01_unknown_state_is_displayed_as_unknown(stack: Stack) -> None:
 
 async def test_i01_desired_state_is_never_shown_as_observed(stack: Stack) -> None:
     c = await stack.client("operator")
-    created = await create_instance(c)  # jamais observé : le worker n'a pas tourné
+    created = await create_instance(c)  # never observed: the worker did not run
     assert created["desired_state"] == "exits_only"
     assert created["state"] == {"value": "unknown", "observed_at": None, "stale": False}
 
@@ -61,8 +61,8 @@ async def test_i01_desired_state_is_never_shown_as_observed(stack: Stack) -> Non
     r = await act(c, created["id"], "resume-entries")
     assert r.status_code == 202
     inst = await get(c, f"/api/v1/instances/{created['id']}")
-    assert inst["desired_state"] == "running"  # voulu changé tout de suite…
-    assert inst["state"]["value"] == "exits_only"  # …observé inchangé tant que rien n'est vu
+    assert inst["desired_state"] == "running"  # wanted state changed immediately...
+    assert inst["state"]["value"] == "exits_only"  # ...observed unchanged until seen
     assert inst["active_command"]["status"] == "requested"
 
     await stack.world.worker.run_once()

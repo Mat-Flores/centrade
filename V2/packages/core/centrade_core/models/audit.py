@@ -8,7 +8,7 @@ from centrade_core.models.base import Base, uuid_pk
 
 
 class AuditLog(Base):
-    """Append-only (trigger) ; chaque ligne porte l'empreinte de la précédente (I14)."""
+    """Append-only (trigger); each row carries the previous row's fingerprint (I14)."""
 
     __tablename__ = "audit_log"
 

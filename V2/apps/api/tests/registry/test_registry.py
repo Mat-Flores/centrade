@@ -1,4 +1,4 @@
-"""Registre de stratégies (SPEC F1, §7, §8) : dépôt d'une version, contrôles, immuabilité."""
+"""Strategy registry (SPEC F1, §7, §8): deposit of a version, checks, immutability."""
 
 import asyncio
 import json
@@ -43,7 +43,7 @@ async def test_example_strategy_is_accepted_end_to_end(as_user: AsUser, sma: Dep
     v = r.json()
     assert (v["version"], v["status"], v["engine"]) == (1, "draft", sma[0]["engine"])
     assert len(v["code_hash"]) == 64
-    assert v["exits"]["stoploss"] == "-0.05"  # chaîne décimale, jamais un flottant
+    assert v["exits"]["stoploss"] == "-0.05"  # decimal string, never a float
     assert v["manifest"]["sizing"]["stake_amount"] == "50"
     assert v["static_checks"]["ok"] is True
     assert v["author"].startswith("user:")
@@ -117,7 +117,7 @@ async def test_no_route_modifies_a_version(as_user: AsUser, sma: Dep, app: FastA
     url = f"/api/v1/strategies/{sid}/versions/1"
     for method in ("PUT", "DELETE"):
         assert (await c.request(method, url, json={})).status_code == 405
-    # Le seul PATCH change le statut : tout autre champ est refusé.
+    # The only PATCH changes the status: any other field is refused.
     bodies: list[dict[str, Any]] = [
         {"manifest": sma[0]},
         {"code": "x"},
@@ -154,7 +154,7 @@ async def test_same_submission_with_same_key_creates_no_second_version(
     assert again.json()["id"] == first.json()["id"]
     assert len((await c.get(f"/api/v1/strategies/{sid}/versions")).json()["items"]) == 1
     other = await _deposit(c, sid, sma[0], sma[1] + "\n# autre", key="rejeu-0001")
-    assert other.status_code == 422  # même clé, autre contenu : échec bruyant
+    assert other.status_code == 422  # same key, other content: loud failure
 
 
 async def test_two_concurrent_submissions_get_two_numbers(as_user: AsUser, sma: Dep) -> None:
@@ -170,7 +170,7 @@ async def test_code_hash_depends_on_code_and_manifest_only(as_user: AsUser, sma:
     sid = await _strategy(c)
     base = (await _deposit(c, sid, m, code)).json()["code_hash"]
     same = (await _deposit(c, sid, dict(reversed(list(m.items()))), code)).json()
-    assert same["code_hash"] == base and same["version"] == 2  # ordre des clés sans effet
+    assert same["code_hash"] == base and same["version"] == 2  # key order has no effect
     other_code = (await _deposit(c, sid, m, code + "\n# x")).json()["code_hash"]
     other_manifest = (await _deposit(c, sid, {**m, "timeframes": ["1h"]}, code)).json()["code_hash"]
     assert len({base, other_code, other_manifest}) == 3
@@ -186,7 +186,7 @@ async def test_statuses_rbac_and_audit(
     v = (await _deposit(op, sid, *sma)).json()
     url = f"/api/v1/strategies/{sid}/versions/1"
     assert (await viewer.patch(url, json={"status": "approved"})).status_code == 403
-    assert (await viewer.get(url)).status_code == 200  # lecture permise
+    assert (await viewer.get(url)).status_code == 200  # read allowed
     assert (await op.patch(url, json={"status": "retired"})).status_code == 409  # draft -> approved
     ok = await op.patch(url, json={"status": "approved"})
     assert ok.status_code == 200 and ok.json()["status"] == "approved"

@@ -1,4 +1,4 @@
-"""Index du tri des pages GET /orders (created_at, id) et GET /trades (closed_at, id).
+"""Index for sorting the GET /orders pages (created_at, id) and GET /trades (closed_at, id).
 
 Revision ID: 0009
 Revises: 0008

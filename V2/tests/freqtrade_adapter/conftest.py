@@ -1,3 +1,3 @@
-"""Ajoute le paquet de l'adaptateur au chemin d'import avant la collecte."""
+"""Adds the adapter package to the import path before collection."""
 
 from . import support  # noqa: F401

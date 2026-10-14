@@ -1,5 +1,5 @@
-"""Compléments de lecture demandés par les écrans : filtre `strategy_id`, compte sur les lignes de
-trading, version du moteur observée (datée) ou inconnue."""
+"""Read additions requested by the screens: `strategy_id` filter, count on the trading
+rows, engine version observed (dated) or unknown."""
 
 from datetime import timedelta
 from decimal import Decimal
@@ -82,7 +82,7 @@ async def _strategy_of(stack: Stack, inst: Instance) -> UUID:
 
 
 async def test_strategy_id_filter_returns_only_that_strategys_instances(stack: Stack) -> None:
-    await stack.world.worker.run_once()  # assure la ligne `engines` du moteur simulé
+    await stack.world.worker.run_once()  # ensures the simulated engine's `engines` row
     a = await _instance(stack, strategy=True, account=False)
     await _instance(stack, strategy=True, account=False)
     await _instance(stack, strategy=False, account=False)

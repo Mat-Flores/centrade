@@ -1,13 +1,13 @@
-"""Commandes côté worker (SPEC F9, I8) : relever, appeler l'adaptateur, vérifier l'effet, expirer.
+"""Worker-side commands (SPEC F9, I8): claim, call the adapter, verify the effect, expire.
 
-La table `commands` sert de file (`FOR UPDATE SKIP LOCKED`) : pas de double écriture base + bus.
-Une commande n'est `verified` que si un relevé postérieur à l'accusé montre l'effet du §7.
-Un moteur qui ne répond pas laisse la commande `dispatched` : elle n'est jamais rejouée, elle
-expire (`timed_out`, alerte). Les actions du worker sont auditées sous `system:worker` (I14).
+The `commands` table serves as the queue (`FOR UPDATE SKIP LOCKED`): no database + bus double write.
+A command is `verified` only if a snapshot later than the acknowledgement shows the §7 effect.
+An engine that does not answer leaves the command `dispatched`: it is never replayed, it
+expires (`timed_out`, alert). Worker actions are audited under `system:worker` (I14).
 
-Asymétrie (I4, I5) : ce qui réduit le risque n'expire jamais avant d'être envoyé, et son échéance
-court à compter de l'envoi ; ce qui l'augmente passe la vérification de F9 (`guard`) sur un relevé
-frais juste avant l'envoi, et n'est pas envoyé au moindre doute.
+Asymmetry (I4, I5): what reduces risk never expires before being sent, and its deadline
+runs from sending; what increases it goes through the F9 verification (`guard`) on a fresh
+snapshot just before sending, and is not sent at the slightest doubt.
 """
 
 from __future__ import annotations
@@ -45,12 +45,12 @@ Note = Callable[[str, UUID], None]
 class Observation:
     status: InstanceStatus
     snapshot: Snapshot
-    # Vérification de F9 passée sur ce relevé. Faux tant qu'elle n'a pas eu lieu.
+    # F9 verification passed on this snapshot. False until it has happened.
     conform: bool = False
 
 
 _Args = Mapping[str, Any]
-# Effet attendu de chaque commande (SPEC §7, « Confirmée quand »).
+# Expected effect of each command (SPEC §7, "Confirmed when").
 EFFECT: dict[str, Callable[[Observation, _Args], bool]] = {
     "deploy": lambda o, a: o.status.state == "exits_only" and o.conform,
     "start": lambda o, a: o.status.state == "exits_only",
@@ -65,10 +65,10 @@ EFFECT: dict[str, Callable[[Observation, _Args], bool]] = {
         a.get("order_id") not in {x.order_id for x in o.snapshot.orders}
     ),
 }
-# Liste blanche des méthodes d'adaptateur appelables sans argument (`deploy` et les deux
-# commandes à argument sont traitées à part).
+# Whitelist of adapter methods callable without arguments (`deploy` and the two
+# commands with an argument are handled separately).
 _METHOD = {k: k for k in ("start", "stop", "pause_entries", "resume_entries", "flatten")}
-# Jamais retenues derrière une autre commande de la même instance (F9, « Asymétrie »).
+# Never held behind another command of the same instance (F9, "Asymmetry").
 _IMMEDIATE = PRIORITY | {"close_position", "cancel_entry_order"}
 
 
@@ -111,8 +111,8 @@ class Commands:
         self._note = note
 
     async def expire(self, statuses: tuple[str, ...]) -> None:
-        """Échéance dépassée sans effet observé : `timed_out`, alerte, aucune relance.
-        Une commande qui réduit le risque n'expire pas tant qu'elle n'est pas partie (I4)."""
+        """Deadline passed with no observed effect: `timed_out`, alert, no retry.
+        A command that reduces risk does not expire until it has been sent (I4)."""
         now = self._clock()
         async with self._sessions.begin() as s:
             due = await s.scalars(
@@ -126,7 +126,7 @@ class Commands:
             )
             for cmd in due.all():
                 reason = {"reason": "échéance dépassée sans effet observé"}
-                before = cmd.status  # lu avant : la transition met l'objet à jour
+                before = cmd.status  # read beforehand: the transition updates the object
                 if not await transition(s, cmd.id, "timed_out", now, result=reason):
                     continue
                 alert = Alert(
@@ -155,11 +155,11 @@ class Commands:
     async def claim(
         self, only: UUID | None = None, skip: Collection[UUID] = ()
     ) -> dict[UUID, list[_Claimed]]:
-        """Relève les commandes `requested` (une à la fois par instance, sauf celles qui
-        réduisent le risque) et les marque `dispatched` AVANT tout appel au moteur. Rend, par
-        instance, la file à envoyer dans l'ordre : ce qui ne se retient jamais d'abord (I4).
-        `only` : cette instance seulement ; `skip` : instances dont un envoi est encore en cours,
-        leurs commandes restent `requested` (aucune échéance ne court sans envoi)."""
+        """Claims the `requested` commands (one at a time per instance, except those that
+        reduce risk) and marks them `dispatched` BEFORE any engine call. Returns, per
+        instance, the queue to send in order: what is never held comes first (I4).
+        `only`: this instance only; `skip`: instances with a send still in progress,
+        their commands stay `requested` (no deadline runs without a send)."""
         now = self._clock()
         claimed: dict[UUID, list[_Claimed]] = {}
         async with self._sessions.begin() as s:
@@ -185,8 +185,8 @@ class Commands:
                 (await s.execute(stmt)).all(),
                 key=lambda r: (
                     r[0].type not in PRIORITY,
-                    # Fermeture et annulation d'entrée : jamais derrière la vérification d'une
-                    # reprise. `stop` garde son rang d'arrivée (une commande à la fois, F9).
+                    # Close and entry cancellation: never behind a resume's verification.
+                    # `stop` keeps its arrival rank (one command at a time, F9).
                     r[0].type not in _IMMEDIATE,
                     r[0].requested_at,
                     r[0].id,
@@ -196,8 +196,8 @@ class Commands:
                 if cmd.type not in _IMMEDIATE and cmd.instance_id in busy:
                     continue
                 if cmd.type not in RISK_REDUCING and cmd.deadline_at <= now:
-                    continue  # périmée : elle ne part jamais (I5) ; `expire` la clôt
-                # Réduit le risque : l'échéance mesure l'effet, à compter de l'envoi (I4).
+                    continue  # stale: it is never sent (I5); `expire` closes it
+                # Reduces risk: the deadline measures the effect, from sending (I4).
                 deadline = (
                     now + (cmd.deadline_at - cmd.requested_at)
                     if cmd.type in RISK_REDUCING
@@ -219,8 +219,8 @@ class Commands:
         return claimed
 
     async def send(self, claimed: Sequence[_Claimed]) -> None:
-        """Envoie la file d'UNE instance, dans l'ordre, une commande à la fois (F9). Un échec
-        pour une commande n'empêche pas d'envoyer les suivantes."""
+        """Sends ONE instance's queue, in order, one command at a time (F9). A failure
+        for one command does not prevent sending the following ones."""
         failures: list[Exception] = []
         for c in claimed:
             try:
@@ -232,8 +232,8 @@ class Commands:
             raise failures[0]
 
     async def dispatch(self, only: UUID | None = None) -> None:
-        """Relève puis envoie, instance après instance. Le tour du worker envoie en parallèle
-        (`claim` puis une tâche par instance) ; ceci sert à une instance seule."""
+        """Claims then sends, instance after instance. The worker's round sends in parallel
+        (`claim` then one task per instance); this serves a single instance."""
         failures: list[Exception] = []
         for batch in (await self.claim(only)).values():
             try:
@@ -254,7 +254,7 @@ class Commands:
             order = next((o for o in orders if o.order_id == order_id), None)
             if order is None:
                 raise CommandRejected("ordre introuvable parmi les ordres ouverts")
-            if order.intent != "entry":  # annuler une sortie ou un stop augmente le risque (F9)
+            if order.intent != "entry":  # cancelling an exit or a stop increases risk (F9)
                 raise CommandRejected("cet ordre n'est pas un ordre d'entrée : jamais annulé")
             await adapter.cancel_entry_order(ref, order_id)
         else:
@@ -264,19 +264,19 @@ class Commands:
         try:
             adapter = self._adapters[c.kind]
             ref = InstanceRef(engine=c.kind, instance_id=c.instance_id)
-            # Vide, sans rien lire, pour tout ce qui n'augmente pas le risque (I4).
+            # Empty, reading nothing, for everything that does not increase risk (I4).
             refusals = await self._guard.gate(c.type, ref, c.mode, c.correlation_id)
             if not refusals:
                 async with asyncio.timeout(self._call_timeout_s):
                     await self._send(c, adapter, ref)
         except (EngineUnreachable, TimeoutError):
-            # Ni accusé ni échec : on ignore si le moteur a reçu l'ordre. Pas de rejeu.
+            # Neither ack nor failure: unknown whether the engine got the order. No replay.
             log.warning("command_unanswered", command_id=str(c.id), type=c.type)
             return
         except Exception as exc:
             await self._finish(c.id, "failed", {"reason": f"{type(exc).__name__}: {exc}"[:200]})
             return
-        if refusals:  # rien n'a été envoyé au moteur
+        if refusals:  # nothing was sent to the engine
             result = {
                 "reason": " ".join(r.message for r in refusals),
                 "reasons": [{"code": r.code, "message": r.message} for r in refusals],
@@ -300,7 +300,7 @@ class Commands:
                 self._note("command", command_id)
 
     async def verify(self, observed: Mapping[UUID, Observation]) -> None:
-        """`verified` seulement si un relevé postérieur à l'accusé montre l'effet attendu."""
+        """`verified` only if a snapshot later than the acknowledgement shows the effect."""
         now = self._clock()
         async with self._sessions.begin() as s:
             acked = await s.scalars(

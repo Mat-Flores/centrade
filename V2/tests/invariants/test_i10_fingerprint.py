@@ -1,4 +1,4 @@
-"""I10 : l'empreinte de déploiement ne dépend que de ce qui fait le comportement, jamais du mode."""
+"""I10: the deployment fingerprint depends only on what makes up behavior, never on the mode."""
 
 import json
 from typing import Any
@@ -39,7 +39,7 @@ def test_i10_mode_is_not_part_of_the_fingerprint() -> None:
     paper = {"dry_run": True, "db_url": "sqlite:///paper.db", "bot_name": "p", "exchange": {"k": 1}}
     live = {"dry_run": False, "db_url": "sqlite:///live.db", "bot_name": "l", "exchange": {"k": 2}}
     shared = {"strategy": "sma-cross", "stoploss": "-0.05"}
-    # Les champs propres au mode sont retirés de la configuration avant le hash : même hash.
+    # Mode-specific fields are removed from the configuration before hashing: same hash.
     assert config_hash({**shared, **paper}, exclude=set(paper)) == config_hash(
         {**shared, **live}, exclude=set(live)
     )
@@ -76,14 +76,14 @@ def test_i10_different_params_give_different_fingerprints(
     fa = deployment_fingerprint(**{**BASE, "params": a})
     fb = deployment_fingerprint(**{**BASE, "params": b})
 
-    # JSON canonique, pas `a == b` : en Python `{"": True} == {"": 1}`, pas en JSON.
+    # Canonical JSON, not `a == b`: in Python `{"": True} == {"": 1}`, not in JSON.
     def canon(d: dict[str, Any]) -> str:
         return json.dumps(d, sort_keys=True)
 
     assert (fa == fb) == (canon(a) == canon(b))
 
 
-# --- au déploiement et à la vérification de F9 (worker) -----------------------------------------
+# --- at deployment and at the F9 verification (worker) -----------------------------------------
 
 
 def _rows() -> tuple[Any, Any, Any]:
@@ -127,7 +127,7 @@ def _fake() -> Any:
     return FakeEngine(clock=lambda: T0, seed=1, new_id=uuid7)
 
 
-# Ce qui change le comportement : un autre code, une autre image, une autre configuration.
+# What changes behavior: other code, another image, another configuration.
 CHANGES: dict[str, Any] = {
     "code": lambda i, e, v: setattr(v, "code_hash", "d" * 64),
     "image": lambda i, e, v: setattr(e, "image", "img:2"),
@@ -150,9 +150,7 @@ def test_i10_different_image_code_or_config_rejects_entries(names: list[str]) ->
     fake = _fake()
     deployed, _ = spec_for(*_rows(), fake)
     assert deployed.deployment is not None
-    recorded = (
-        deployed.deployment.fingerprint
-    )  # enregistrée au déploiement, portée par ce qui tourne
+    recorded = deployed.deployment.fingerprint  # recorded at deployment, carried by what is running
 
     def codes(spec: Any) -> set[str]:
         return {
@@ -170,7 +168,7 @@ def test_i10_different_image_code_or_config_rejects_entries(names: list[str]) ->
             )
         }
 
-    assert codes(deployed) == set()  # rien n'a changé : les entrées peuvent s'ouvrir
+    assert codes(deployed) == set()  # nothing changed: entries may open
     rows = _rows()
     for name in names:
         CHANGES[name](*rows)
@@ -187,11 +185,11 @@ def test_i10_mode_specific_fields_are_excluded_from_comparison() -> None:
     fake = _fake()
     base, generated = spec_for(*_rows(), fake)
     inst, engine, version = _rows()
-    inst.id, inst.name, inst.account_id = uuid7(), "autre", uuid7()  # autre instance, autre compte
+    inst.id, inst.name, inst.account_id = uuid7(), "autre", uuid7()  # other instance and account
     other, other_generated = spec_for(inst, engine, version, fake)
     assert base.deployment is not None and other.deployment is not None
-    assert generated.values != other_generated.values  # la configuration diffère bien…
-    assert other.deployment.fingerprint == base.deployment.fingerprint  # … pas l'empreinte
+    assert generated.values != other_generated.values  # the configuration does differ...
+    assert other.deployment.fingerprint == base.deployment.fingerprint  # ... not the fingerprint
 
 
 async def test_i10_fingerprint_recorded_at_deploy_is_that_of_what_runs(
@@ -205,7 +203,7 @@ async def test_i10_fingerprint_recorded_at_deploy_is_that_of_what_runs(
     w = stack.world
     c = await stack.client("operator")
     iid = str((await create_instance(c))["id"])
-    assert (await instance(w, iid)).deployment_fingerprint is None  # rien n'est encore déployé
+    assert (await instance(w, iid)).deployment_fingerprint is None  # nothing is deployed yet
     await w.worker.run_once()
 
     row = await instance(w, iid)
@@ -217,8 +215,8 @@ async def test_i10_fingerprint_recorded_at_deploy_is_that_of_what_runs(
     detail = await get(c, f"/api/v1/instances/{iid}")
     assert detail["deployment_fingerprint"] == row.deployment_fingerprint
 
-    # L'image du moteur change dans la table `engines` : ce qui tourne n'est plus ce que le
-    # registre décrit. La reprise est refusée et rien ne part vers le moteur.
+    # The engine image changes in the `engines` table: what is running is no longer what the
+    # registry describes. The resume is refused and nothing is sent to the engine.
     calls = spy(w.fake)
     r = await act(c, iid, "resume-entries")
     assert r.status_code == 202
@@ -228,7 +226,7 @@ async def test_i10_fingerprint_recorded_at_deploy_is_that_of_what_runs(
         async with w.sessions.begin() as s:
             await s.execute(update(Engine).where(Engine.id == row.engine_id).values(image="autre"))
         await w.worker.run_once()
-    finally:  # la ligne `engines` est partagée entre les tests
+    finally:  # the `engines` row is shared between tests
         async with w.sessions.begin() as s:
             await s.execute(update(Engine).where(Engine.id == row.engine_id).values(image=image))
     cmd = await get(c, f"/api/v1/commands/{r.json()['command_id']}")

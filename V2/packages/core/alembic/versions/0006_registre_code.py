@@ -1,6 +1,6 @@
-"""Registre : code source et clé d'idempotence d'une version de stratégie.
+"""Registry: source code and idempotency key of a strategy version.
 
-Le code entre dans les colonnes protégées par le trigger d'immuabilité.
+The code enters the columns protected by the immutability trigger.
 
 Revision ID: 0006
 Revises: 0005

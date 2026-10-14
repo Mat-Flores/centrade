@@ -1,7 +1,7 @@
-"""Premier administrateur, créé depuis l'hôte : `make bootstrap-admin` (SPEC §13).
+"""First administrator, created from the host: `make bootstrap-admin` (SPEC §13).
 
-Aucun identifiant par défaut. Le mot de passe est saisi sans écho ; l'URI TOTP et les codes de
-récupération ne sont affichés qu'ici, une fois : la base n'en garde que des formes non lisibles.
+No default credentials. The password is entered without echo; the TOTP URI and the recovery
+codes are displayed only here, once: the database keeps only unreadable forms of them.
 """
 
 import asyncio
@@ -52,7 +52,7 @@ async def create_first_admin(
     )
     password_hash = security.hash_password(password)
     async with session_factory() as s, s.begin():
-        # Deux lancements simultanés ne créent pas deux administrateurs.
+        # Two simultaneous launches do not create two administrators.
         await s.execute(text("LOCK TABLE users IN SHARE ROW EXCLUSIVE MODE"))
         if (await s.execute(select(User.id).where(User.role == "admin").limit(1))).first():
             raise AdminExistsError

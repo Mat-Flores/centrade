@@ -1,8 +1,8 @@
-"""Schémas des instances et des commandes (SPEC §8, §9).
+"""Schemas of instances and commands (SPEC §8, §9).
 
-Les réponses qui portent une valeur observée ont `server_time`, l'horloge du serveur au moment de
-la réponse : le client calcule l'âge sans se fier à la sienne. Aucun schéma ne nomme un moteur
-précis.
+Responses carrying an observed value have `server_time`, the server clock at the time of the
+response: the client computes the age without relying on its own. No schema names a specific
+engine.
 """
 
 from __future__ import annotations
@@ -61,13 +61,13 @@ class CommandOut(BaseModel):
 class InstanceOut(BaseModel):
     id: UUID
     name: str
-    engine: str  # type de moteur (table `engines`)
-    desired_mode: Literal["paper", "live"]  # voulu, fixé à la création (I3)
-    desired_state: Literal["running", "exits_only", "stopped"]  # voulu
-    state: Observed[ObservedState]  # observé
-    observed_mode: Observed[ObservedMode]  # observé
-    mode_mismatch: bool  # mode observé connu et différent du mode voulu (I3)
-    active_command: CommandOut | None  # commande non terminale la plus récente
+    engine: str  # engine type (`engines` table)
+    desired_mode: Literal["paper", "live"]  # desired, set at creation (I3)
+    desired_state: Literal["running", "exits_only", "stopped"]  # desired
+    state: Observed[ObservedState]  # observed
+    observed_mode: Observed[ObservedMode]  # observed
+    mode_mismatch: bool  # observed mode known and different from the desired mode (I3)
+    active_command: CommandOut | None  # most recent non-terminal command
     created_at: AwareDatetime
     server_time: AwareDatetime
 
@@ -80,7 +80,7 @@ class InstanceOut(BaseModel):
         now: datetime,
         stale_after_s: float,
     ) -> InstanceOut:
-        # `unknown` : jamais la dernière valeur connue présentée comme actuelle.
+        # `unknown`: never the last known value presented as current.
         state = cast(ObservedState, i.observed_state if i.observed_at is not None else "unknown")
         mode = cast(
             ObservedMode, i.observed_mode if i.observed_mode and i.observed_at else "unknown"
@@ -100,20 +100,20 @@ class InstanceOut(BaseModel):
         )
 
 
-MAX_PARAMS_CHARS = 4096  # JSON des paramètres d'une instance : stocké, audité, rendu au moteur
+MAX_PARAMS_CHARS = 4096  # JSON of an instance's parameters: stored, audited, given to the engine
 
 
 class InstanceCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     name: str = Field(min_length=1, max_length=64, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
-    # Absent : le serveur prend l'unique moteur enregistré (aucun écran ne nomme un moteur, §7).
+    # Absent: the server takes the only registered engine (no screen names an engine, §7).
     engine: str | None = Field(
         default=None, min_length=1, max_length=32, pattern=r"^[a-z][a-z0-9_-]*$"
     )
-    mode: Literal["paper"] = "paper"  # le passage en live suit la procédure de promotion (F1)
-    params: dict[str, Any] = Field(default_factory=dict, max_length=32)  # transmis à l'adaptateur
-    # Création depuis le registre : les deux ensemble, ou aucun (création simulée de M1).
+    mode: Literal["paper"] = "paper"  # going live follows the promotion procedure (F1)
+    params: dict[str, Any] = Field(default_factory=dict, max_length=32)  # passed to the adapter
+    # Creation from the registry: both together, or neither (simulated creation of M1).
     strategy_version_id: UUID | None = None
     account_id: UUID | None = None
 
@@ -126,7 +126,7 @@ class InstanceCreate(BaseModel):
     @field_validator("params")
     @classmethod
     def _bounded(cls, value: dict[str, Any]) -> dict[str, Any]:
-        # `max_length` ne compte que les clés : on borne aussi ce qu'elles contiennent.
+        # `max_length` counts only the keys: what they contain is bounded too.
         if len(json.dumps(value)) > MAX_PARAMS_CHARS:
             raise ValueError("paramètres trop volumineux")
         return value
@@ -139,7 +139,7 @@ class StrategyRef(BaseModel):
     version: int
     status: str
     code_hash: str
-    exits: dict[str, Any]  # politique de sortie de la version (F10)
+    exits: dict[str, Any]  # exit policy of the version (F10)
 
 
 class AccountRef(BaseModel):
@@ -160,15 +160,15 @@ class DriftItem(BaseModel):
 
 
 class InstanceDetail(InstanceOut):
-    strategy: StrategyRef | None  # None : instance sans version de registre (création simulée)
+    strategy: StrategyRef | None  # None: instance without a registry version (simulated creation)
     account: AccountRef | None
-    deployment_fingerprint: str | None  # calculé par la plateforme (I10)
+    deployment_fingerprint: str | None  # computed by the platform (I10)
     config_hash: str | None
-    # Version que le moteur déclare, relue (F9) : value None = jamais observée, donc « inconnue ».
+    # Version the engine declares, re-read (F9): value None = never observed, hence "unknown".
     engine_version: Observed[str | None]
-    # Relues dans le moteur : value None = jamais observé, donc « inconnu » (I1).
+    # Re-read from the engine: value None = never observed, hence "unknown" (I1).
     effective_config: Observed[dict[str, Any] | None]
-    drift: Observed[list[DriftItem] | None]  # liste vide : aucune dérive constatée
+    drift: Observed[list[DriftItem] | None]  # empty list: no drift observed
 
 
 class CommandAccepted(BaseModel):

@@ -1,4 +1,4 @@
-"""Journaux en lecture : événements, alertes, audit. Pagination par curseur, plus récent d'abord."""
+"""Read-only logs: events, alerts, audit. Cursor pagination, most recent first."""
 
 from uuid import UUID
 

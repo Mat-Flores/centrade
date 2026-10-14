@@ -1,4 +1,4 @@
-"""I8 : une commande n'est « faite » que lorsque son effet est observé (SPEC §1.2, F9)."""
+"""I8: a command is "done" only once its effect is observed (SPEC §1.2, F9)."""
 
 import asyncio
 from typing import get_args
@@ -38,7 +38,7 @@ async def test_i08_command_is_not_done_without_an_observed_effect(stack: Stack) 
     r = await act(c, iid, "pause-entries")
     cid = r.json()["command_id"]
 
-    for _ in range(3):  # le moteur accuse réception mais ne fait rien
+    for _ in range(3):  # the engine acknowledges but does nothing
         stack.world.clock.advance(2)
         await stack.world.worker.run_once()
         cmd = await get(c, f"/api/v1/commands/{cid}")
@@ -58,7 +58,7 @@ async def test_i08_command_without_response_becomes_timed_out(stack: Stack) -> N
     cid = r.json()["command_id"]
     await stack.world.worker.run_once()
     cmd = await get(c, f"/api/v1/commands/{cid}")
-    assert cmd["status"] == "dispatched" and cmd["acknowledged_at"] is None  # ni accusé, ni rejoué
+    assert cmd["status"] == "dispatched" and cmd["acknowledged_at"] is None  # unacked, not replayed
 
     stack.world.clock.advance(stack.settings.deadline_flatten_s + 1)
     await stack.world.worker.run_once()
@@ -69,19 +69,19 @@ async def test_i08_command_without_response_becomes_timed_out(stack: Stack) -> N
 
     stack.world.fake.set_failure(ref_of(iid), Failure.SILENT, on=False)
     stack.world.clock.advance(1)
-    await stack.world.worker.run_once()  # aucune relance automatique
+    await stack.world.worker.run_once()  # no automatic retry
     assert (await get(c, f"/api/v1/commands/{cid}"))["status"] == "timed_out"
 
 
 async def test_i08_no_verification_on_snapshot_older_than_the_ack(stack: Stack) -> None:
     c, iid = await _running(stack)
     w = stack.world
-    w.fake.set_failure(ref_of(iid), Failure.SLOW)  # le moteur obéit, mais ses relevés datent
+    w.fake.set_failure(ref_of(iid), Failure.SLOW)  # the engine obeys, but its snapshots are stale
     cid = (await act(c, iid, "pause-entries")).json()["command_id"]
     await w.worker.run_once()
-    assert (await w.fake.status(ref_of(iid))).state == "exits_only"  # l'effet est réel…
+    assert (await w.fake.status(ref_of(iid))).state == "exits_only"  # the effect is real...
     cmd = await get(c, f"/api/v1/commands/{cid}")
-    assert cmd["status"] == "acknowledged" and cmd["verified_at"] is None  # …mais pas observé
+    assert cmd["status"] == "acknowledged" and cmd["verified_at"] is None  # ...but not observed
 
     w.fake.set_failure(ref_of(iid), Failure.SLOW, on=False)
     w.clock.advance(1)
@@ -94,7 +94,7 @@ async def test_i08_pause_and_flatten_go_through_a_busy_instance(stack: Stack) ->
     w = stack.world
     w.fake.set_failure(ref_of(iid), Failure.SILENT)
     stop = (await act(c, iid, "stop")).json()["command_id"]
-    await w.worker.run_once()  # `stop` reste envoyé, sans réponse : l'instance est occupée
+    await w.worker.run_once()  # `stop` stays sent, unanswered: the instance is busy
     assert (await get(c, f"/api/v1/commands/{stop}"))["status"] == "dispatched"
     w.fake.set_failure(ref_of(iid), Failure.SILENT, on=False)
 
@@ -130,7 +130,7 @@ async def test_i08_expiry_audit_fingerprint_carries_the_previous_status(
 
 
 async def _lifecycle(pg_url: str, path: list[Status]) -> None:
-    """Tente chaque transition en base, puis compare à ce que le cycle de F9 autorise."""
+    """Tries each transition in the database, then compares with what the F9 cycle allows."""
     engine = make_engine(pg_url)
     try:
         sessions = make_session_factory(engine)
@@ -165,17 +165,17 @@ async def _lifecycle(pg_url: str, path: list[Status]) -> None:
             assert row is not None
             allowed = (state, target) in LEGAL
             assert done is allowed, (state, target)
-            assert row.status == (target if allowed else state)  # un refus ne change rien
+            assert row.status == (target if allowed else state)  # a refusal changes nothing
             if allowed:
                 assert getattr(row, f"{target}_at") == T0
                 state = target
-            if state == "verified":  # effet observé seulement après envoi puis accusé
+            if state == "verified":  # effect observed only after send then acknowledgement
                 assert row.dispatched_at is not None and row.acknowledged_at is not None
     finally:
         await engine.dispose()
 
 
-# Le cycle de F9, écrit ici indépendamment du code : toute autre transition est refusée.
+# The F9 cycle, written here independently of the code: any other transition is refused.
 LEGAL = {
     ("requested", "dispatched"),
     ("dispatched", "acknowledged"),
@@ -188,6 +188,6 @@ LEGAL = {
 @settings(max_examples=40, deadline=None, suppress_health_check=[HealthCheck.too_slow])
 @given(path=st.lists(st.sampled_from(STATUSES), max_size=8))
 def test_i08_command_lifecycle_is_ordered(migrated_url: str, path: list[Status]) -> None:
-    """Quelle que soit la suite de transitions tentées sur la vraie table : jamais en arrière,
-    jamais de saut d'étape, et un état terminal ne change plus."""
+    """Whatever sequence of transitions is attempted on the real table: never backwards,
+    never skipping a step, and a terminal state no longer changes."""
     asyncio.run(_lifecycle(migrated_url, path))

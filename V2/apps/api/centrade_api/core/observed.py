@@ -1,8 +1,8 @@
-"""Valeur observée et datée (I1).
+"""Observed, dated value (I1).
 
-Toute valeur issue d'un moteur sort en `Observed` : la valeur, la date de son observation et
-`stale`. L'état voulu et l'état observé restent des champs distincts ; rien ne copie l'un dans
-l'autre.
+Every value coming from an engine goes out as `Observed`: the value, the date of its observation
+and `stale`. Desired state and observed state remain distinct fields; nothing copies one into
+the other.
 """
 
 from __future__ import annotations
@@ -20,8 +20,8 @@ ObservedMode = Literal["paper", "live", "unknown"]
 
 class Observed[T](BaseModel):
     value: T
-    observed_at: AwareDatetime | None  # None : jamais observé
-    stale: bool  # plus ancien que le seuil de fraîcheur
+    observed_at: AwareDatetime | None  # None: never observed
+    stale: bool  # older than the freshness threshold
 
 
 def observe[T](

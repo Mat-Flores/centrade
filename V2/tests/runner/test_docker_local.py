@@ -1,5 +1,5 @@
-"""Runner contre le Docker local, derrière un vrai socket proxy configuré comme engines.yml."""
-# ruff: noqa: ASYNC210 (sondes HTTP brèves vers le proxy local)
+"""Runner against the local Docker, behind a real socket proxy configured like engines.yml."""
+# ruff: noqa: ASYNC210 (brief HTTP probes to the local proxy)
 
 from uuid import uuid4
 
@@ -39,7 +39,7 @@ async def test_full_lifecycle_through_the_container_template(docker_stack: Stack
     started = await runner.start(spec.instance_id)
     assert started.status == "running"
     again = await runner.start(spec.instance_id)
-    assert again.started_at == started.started_at  # démarrer un conteneur en marche : sans effet
+    assert again.started_at == started.started_at  # starting a running container: no effect
 
     await runner.stop(spec.instance_id, timeout_s=2)
     await runner.stop(spec.instance_id, timeout_s=2)
@@ -105,8 +105,8 @@ async def test_socket_proxy_rejects_everything_but_containers(docker_stack: Stac
         ("POST", "/exec/abc/start"),
         ("GET", "/events"),
     ]
-    # La création d'un exec relève de /containers (le proxy ne la distingue pas) ; son démarrage,
-    # seul moment où une commande s'exécute, est refusé.
+    # Creating an exec falls under /containers (the proxy does not tell it apart); its start,
+    # the only moment a command runs, is refused.
     made = requests.post(f"{base}/containers/{cid}/exec", json={"Cmd": ["id"]}, timeout=10)
     assert (
         requests.post(f"{base}/exec/{made.json()['Id']}/start", json={}, timeout=10).status_code

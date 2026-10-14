@@ -1,6 +1,6 @@
-"""Projections dérivées, jamais d'autorité : remplacées d'après le relevé du moteur (SPEC §7).
+"""Derived projections, never authoritative: replaced from the engine snapshot (SPEC §7).
 
-Chaque ligne garde l'heure de l'observation dont elle provient (`observed_at`, I1).
+Each row keeps the time of the observation it comes from (`observed_at`, I1).
 """
 
 from __future__ import annotations
@@ -20,14 +20,14 @@ UNREACHABLE_RULE = "engine_unreachable"
 
 
 def _currency(symbol: str) -> str:
-    return symbol.rsplit("/", 1)[-1]  # devise de cotation ; le relevé n'en porte pas d'autre
+    return symbol.rsplit("/", 1)[-1]  # quote currency; the snapshot carries no other
 
 
 async def apply_observation(
     s: AsyncSession, instance_id: UUID, status: InstanceStatus, snap: Snapshot
 ) -> list[tuple[str, UUID]]:
-    """Remplace les projections par le relevé. Rend ce qui est à annoncer au flux : alertes
-    résolues (déjà auditées), positions et ordres écrits."""
+    """Replace the projections with the snapshot. Returns what is to be announced on the stream:
+    resolved alerts (already audited), written positions and orders."""
     notes: list[tuple[str, UUID]] = []
     await s.execute(
         update(Instance)
@@ -64,8 +64,8 @@ async def apply_observation(
         )
         notes.extend(("position", i) for i in written)
     for c in snap.closed:
-        # Le trade clos vient du relevé (les événements ne font qu'indiquer de relire). Une ligne
-        # déjà écrite n'est pas annoncée de nouveau ; une cause hors de F10 devient `unknown`.
+        # The closed trade comes from the snapshot (events only say to re-read). An already
+        # written row is not announced again; a cause outside F10 becomes `unknown`.
         written = await s.scalars(
             insert(Trade)
             .values(
@@ -89,7 +89,7 @@ async def apply_observation(
         )
         notes.extend(("trade", i) for i in written)
     open_ids = [o.order_id for o in snap.orders]
-    # Un ordre local encore ouvert que le moteur ne connaît plus : issue inconnue, jamais inventée.
+    # A local order still open that the engine no longer knows: outcome unknown, never invented.
     lost = await s.scalars(
         update(Order)
         .where(
@@ -121,7 +121,7 @@ async def apply_observation(
             .returning(Order.id)
         )
         notes.extend(("order", i) for i in written)
-    resolved = (  # le moteur répond de nouveau : l'alerte se résout
+    resolved = (  # the engine answers again: the alert resolves
         await s.scalars(
             update(Alert)
             .where(
@@ -133,7 +133,7 @@ async def apply_observation(
             .returning(Alert.id)
         )
     ).all()
-    for alert_id in resolved:  # l'audit en dernier : même ordre de verrous que l'API
+    for alert_id in resolved:  # audit last: same lock order as the API
         await write_audit(
             s,
             actor=SYSTEM_WORKER,
@@ -147,13 +147,13 @@ async def apply_observation(
 
 @dataclass(frozen=True)
 class Unknown:
-    became_unknown: bool  # l'instance n'était pas déjà `unknown`
-    alert_id: UUID | None  # alerte créée à ce tour
+    became_unknown: bool  # the instance was not already `unknown`
+    alert_id: UUID | None  # alert created on this pass
 
 
 async def mark_unknown(s: AsyncSession, instance_id: UUID, now: datetime) -> Unknown:
-    """Moteur injoignable : état `unknown`. Positions et ordres gardent leur ancienne observation
-    (ils deviendront périmés) ; rien n'est remis à zéro."""
+    """Engine unreachable: `unknown` state. Positions and orders keep their old observation
+    (they will become stale); nothing is reset."""
     previous = await s.scalar(select(Instance.observed_state).where(Instance.id == instance_id))
     await s.execute(
         update(Instance)
@@ -180,7 +180,7 @@ async def mark_unknown(s: AsyncSession, instance_id: UUID, now: datetime) -> Unk
         s.add(alert)
         await s.flush()
     became = previous is not None and previous != "unknown"
-    if became:  # un automatisme change un état : il est audité (I14)
+    if became:  # an automation changes a state: it is audited (I14)
         await write_audit(
             s,
             actor=SYSTEM_WORKER,

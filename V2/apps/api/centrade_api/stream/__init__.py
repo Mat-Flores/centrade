@@ -1,4 +1,4 @@
-"""Flux temps réel (SSE)."""
+"""Real-time stream (SSE)."""
 
 from centrade_api.stream.routes import router
 

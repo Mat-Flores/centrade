@@ -32,7 +32,7 @@ def method(stmt: str) -> str:
 
 def test_real_strategies_are_accepted() -> None:
     assert check_strategy_source((SMA_DIR / "SmaCross.py").read_text(), "SmaCross") == []
-    assert check_strategy_source(STRATEGY, "EnterEveryCandle") == []  # celle de l'essai réel
+    assert check_strategy_source(STRATEGY, "EnterEveryCandle") == []  # the one from the real trial
 
 
 ORDINARY = (
@@ -73,7 +73,7 @@ def test_ordinary_indicator_strategy_is_accepted() -> None:
     assert check(ORDINARY) == []
 
 
-# --- héritage ---------------------------------------------------------------------------------
+# --- inheritance ---------------------------------------------------------------------------------
 @pytest.mark.parametrize(
     "src",
     [
@@ -101,21 +101,21 @@ def test_direct_indirect_and_aliased_inheritance_are_accepted(src: str) -> None:
         HEAD + "class S(object, ControlPlaneStrategy): pass",
         HEAD + "class ControlPlaneStrategy(object): pass\nclass S(ControlPlaneStrategy): pass",
         HEAD + "ControlPlaneStrategy = object\nclass S(ControlPlaneStrategy): pass",
-        HEAD + "A = ControlPlaneStrategy\nclass S(A): pass",  # alias par affectation : refusé
+        HEAD + "A = ControlPlaneStrategy\nclass S(A): pass",  # alias by assignment: refused
         HEAD + "class S(ControlPlaneStrategy, metaclass=type): pass",
         HEAD + "@dec\nclass S(ControlPlaneStrategy): pass",
         "from . import control_plane\nclass S(control_plane.ControlPlaneStrategy): pass",
         "def (",
         "\x00",
-        # A2 : second import qui remplace la base
+        # A2 : second import that replaces the base
         HEAD + "from freqtrade.strategy import IStrategy as ControlPlaneStrategy\n"
         "class S(ControlPlaneStrategy): pass",
         HEAD + "from pandas import DataFrame as ControlPlaneStrategy\n"
         "class S(ControlPlaneStrategy): pass",
         HEAD + "import numpy as ControlPlaneStrategy\nclass S(ControlPlaneStrategy): pass",
-        HEAD + "class S(ControlPlaneStrategy): pass\n" + HEAD,  # liée deux fois
+        HEAD + "class S(ControlPlaneStrategy): pass\n" + HEAD,  # bound twice
         "import control_plane as cp\nimport numpy as cp\nclass S(cp.ControlPlaneStrategy): pass",
-        # A3 : la base ou la classe redéfinie ailleurs qu'au niveau du module
+        # A3 : the base or the class redefined elsewhere than at module level
         HEAD
         + "if True:\n    class ControlPlaneStrategy: pass\nclass S(ControlPlaneStrategy): pass",
         HEAD + "class S(ControlPlaneStrategy): pass\nif True:\n    class S: pass",
@@ -146,10 +146,10 @@ def test_hook_overridden_in_an_intermediate_class_is_rejected() -> None:
     assert any("leverage" in e for e in check(src))
 
 
-# --- A1, A3 : toute forme de liaison ou d'écriture d'un nom protégé ----------------------------
+# --- A1, A3 : any form of binding or writing of a protected name ----------------------------
 PRELUDE = HEAD + "def ctx():\n    return None\nv = [1]\n"
 
-# Formes dont la cible est un nom nu.
+# Forms whose target is a bare name.
 NAME_FORMS = (
     "{T} = v",
     "{T}: object = v",
@@ -176,7 +176,7 @@ NAME_FORMS = (
     "match v:\n    case int() as {T}:\n        pass",
     "type {T} = int",
 )
-# Formes dont la cible est une expression (attribut ou indice).
+# Forms whose target is an expression (attribute or index).
 TARGET_FORMS = (
     "{T} = v",
     "{T}: object = v",
@@ -211,12 +211,12 @@ def program(wrapper: str, stmt: str) -> str:
         S=stmt, I=textwrap.indent(stmt, " " * 4), II=textwrap.indent(stmt, " " * 8)
     )
     src = PRELUDE + wrapped + "\nclass S(ControlPlaneStrategy):\n    pass\n"
-    ast.parse(src)  # un programme mal formé serait refusé pour une mauvaise raison
+    ast.parse(src)  # a malformed program would be refused for the wrong reason
     return src
 
 
 def test_template_is_accepted_with_a_harmless_name() -> None:
-    """Garde-fou de la propriété : seul le nom visé fait refuser le programme."""
+    """Guard of the property: only the targeted name makes the program refused."""
     for wrapper in WRAPPERS:
         for form in NAME_FORMS:
             assert check(program(wrapper, form.format(T="inoffensif"))) == [], (wrapper, form)
@@ -237,12 +237,12 @@ def test_every_binding_form_of_a_protected_name_is_rejected(form: str, name: str
         "S.confirm_trade_entry",
         "ctx().leverage",
         "v[0]._entry_allowed",
-        "ControlPlaneStrategy.nouveau",  # écriture d'attribut hors de self
+        "ControlPlaneStrategy.nouveau",  # attribute write outside self
         "v[0].config",
         "v[0].config['dry_run']",
         "v[0].config['exchange']['name']",
         "v[0].config.get('exchange')['name']",
-        "v[0].stoploss",  # valeur imposée par la configuration : pas de réécriture à chaud
+        "v[0].stoploss",  # value imposed by the configuration: no hot rewrite
     ],
 )
 def test_every_write_form_targeting_the_platform_is_rejected(form: str, target: str) -> None:
@@ -260,7 +260,7 @@ def offending_programs(draw: st.DrawFn) -> tuple[str, str]:
         stmt = draw(st.sampled_from(NAME_FORMS)).format(T=name)
     else:
         stmt = draw(st.sampled_from(TARGET_FORMS)).format(T=f"{draw(owners)}.{name}")
-    # Du code inoffensif autour ne doit rien y changer.
+    # Harmless surrounding code must not change anything.
     before = draw(
         st.sampled_from(["", "autre3 = v\n", "import math\n", "def k():\n    return 1\n"])
     )
@@ -309,7 +309,7 @@ def test_internal_base_names_are_rejected(member: str) -> None:
         "self.config.get('exchange')['name'] = 'x'",
         "self.config['exchange'].update(name='x')",
         "self.config.items()",
-        # alias (A4) : la configuration ne se lie à aucun nom, ne se passe ni ne se renvoie
+        # alias (A4): the configuration is bound to no name, neither passed nor returned
         "c = self.config\nc['dry_run'] = True",
         "c = self.config['exchange']",
         "c = self.config.get('exchange', {})",
@@ -368,7 +368,7 @@ def test_reading_the_config_remains_allowed(stmt: str) -> None:
     assert check(method(stmt)) == []
 
 
-# --- A5 : imports en liste blanche et attributs de module --------------------------------------
+# --- A5 : allowlisted imports and module attributes --------------------------------------
 @pytest.mark.parametrize(
     "module",
     ["socket", "ssl", "asyncio", "http.client", "urllib.request", "requests", "httpx", "aiohttp",
@@ -399,11 +399,11 @@ def test_every_import_is_rejected_by_default(module: str, form: str) -> None:
     try:
         ast.parse(src)
     except SyntaxError:
-        return  # mot-clé tiré au hasard
+        return  # randomly drawn keyword
     allowed = module in ALLOWED_IMPORTS and ("." not in module or " as " in form)
-    allowed = allowed and not module.startswith("__")  # un nom à double soulignement ne se lie pas
+    allowed = allowed and not module.startswith("__")  # a double-underscore name is not bound
     if form.startswith("from"):
-        allowed = False  # `y` n'est dans aucune liste
+        allowed = False  # `y` is in no list
     assert bool(check(src)) is not allowed, src
 
 
@@ -421,7 +421,7 @@ def test_every_import_is_rejected_by_default(module: str, form: str) -> None:
         "import pandas as pd\npd.eval('1')",
         "import talib.abstract as ta\nta.Function('SMA')",
         "import talib\ntalib.abstract.SMA",
-        "import math\nm = math",  # un module ne se lie pas à un autre nom
+        "import math\nm = math",  # a module is not bound to another name
         "import math\nprint(math)",
         "import math\n[math][0].os",
         "import math\ndef f(m=math): pass",
@@ -443,14 +443,14 @@ def test_module_access_through_an_allowed_module_is_rejected(line: str) -> None:
     assert check(HEAD + f"class S(ControlPlaneStrategy): pass\n{line}")
 
 
-# --- noms et attributs : liste blanche de builtins, soulignements ------------------------------
+# --- names and attributes: builtins allowlist, underscores ------------------------------
 @pytest.mark.parametrize(
     "line",
     ["__import__('socket')", "exec('1')", "eval('1')", "compile('1', 'f', 'exec')",
      "setattr(S, 'x', 1)", "x = __builtins__", "S.__subclasses__()", "globals()",
      "open('/etc/passwd')", "input()", "x = __loader__", "x = __spec__", "memoryview(b'')",
      "x = nom_jamais_defini", "staticmethod(print)", "classmethod(print)", "help()", "dir()",
-     # un nom de builtin ne se lie pas : sa liaison ailleurs légitimerait le vrai builtin ici
+     # a builtin name is not bound: binding it elsewhere would legitimize the real builtin here
      "def f(getattr): pass\ngetattr(v, 'x')", "open = 1", "def type(): pass", "max = 3",
      "import math as eval", "for vars in []: pass", "lambda open: 0",
      "global v", "def f():\n    nonlocal v"],
@@ -474,16 +474,16 @@ def test_builtins_allowlist_contains_no_dynamic_access() -> None:
      "S.__bases__", "S.__mro__", "object.__setattr__(self, 'a', 1)", "S.__base__",
      "self.__getattribute__('a')", "super().__init__(x)", "x.__globals__", "x.__anything__",
      "self.f.__func__", "x.__name__",
-     # A6 : attributs privés d'un objet qui n'est pas self
+     # A6 : private attributes of an object that is not self
      "self.dp._exchange", "self.dp._config", "self.wallets._exchange", "x._private",
      "self.dp._exchange.create_order('BTC/USDT', 'market', 'buy', 1)", "x()._y", "x[0]._y",
-     # cadres d'exécution : chemin vers les builtins
+     # execution frames: path to the builtins
      "(i for i in []).gi_frame.f_builtins", "x.gi_frame", "x.f_globals", "x.tb_frame",
      "x.cr_frame", "x.f_back", "x.co_consts",
-     # exécution de chaînes par la bibliothèque
+     # string execution by the library
      "'{0.dp._exchange}'.format(self)", "'{s.dp._exchange}'.format_map({'s': self})",
      "x.eval('1')", "x.query('@pd.io.common.os.system(\"x\")')",
-     # la classe ne se nomme que comme base : pas d'appel de méthode avec un autre `self`
+     # the class is named only as a base: no method call with another `self`
      "S.f(self.dp)", "ControlPlaneStrategy.confirm_trade_entry", "S", "f"],
 )  # fmt: skip
 def test_private_or_diverted_dynamic_access_is_rejected(expr: str) -> None:
@@ -502,7 +502,7 @@ def test_private_or_diverted_dynamic_access_is_rejected(expr: str) -> None:
         BODY + "    def f(this, self):\n        return self._exchange",
         BODY + "    def f(self): pass\ndef g(self):\n    return self._exchange",
         BODY + "    def f(self, *self2, **self):\n        pass",
-        # méthode sortie de la classe pour être appelée avec un autre `self`
+        # method taken out of the class to be called with another `self`
         BODY + "    def h(self):\n        return self._exchange\n    fs = [h]",
         BODY + "    def h(self):\n        return self._exchange\n    g = property(h)",
         HEAD + "def keep(f):\n    return f\nclass S(ControlPlaneStrategy):\n"
@@ -529,10 +529,10 @@ def test_private_self_attributes_and_usual_decorators_are_allowed() -> None:
 @pytest.mark.parametrize(
     "stmt",
     [
-        "x.columns = []",  # écriture d'attribut hors de self
+        "x.columns = []",  # attribute write outside self
         "self.dp.attr = 1",
         "del x.attr",
-        "self.stoploss = -0.99",  # valeurs imposées par la configuration générée (F10)
+        "self.stoploss = -0.99",  # values imposed by the generated configuration (F10)
         "self.minimal_roi = {'0': 10}",
         "self.trailing_stop = False",
         "self.order_types = {}",

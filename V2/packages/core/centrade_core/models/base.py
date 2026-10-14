@@ -19,7 +19,7 @@ class Base(DeclarativeBase):
             "pk": "pk_%(table_name)s",
         }
     )
-    # Dates en UTC, montants exacts : jamais de float (SPEC §6).
+    # Dates in UTC, exact amounts: never float (SPEC §6).
     type_annotation_map = {  # noqa: RUF012
         datetime: DateTime(timezone=True),
         Decimal: Numeric(38, 18),

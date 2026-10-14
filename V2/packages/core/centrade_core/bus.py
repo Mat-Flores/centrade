@@ -1,7 +1,7 @@
-"""Bus Redis Streams : groupe de consommateurs, acquittement explicite, reprise des non-acquittés.
+"""Redis Streams bus: consumer group, explicit acknowledgement, recovery of unacknowledged messages.
 
-Le client Redis doit être créé avec `decode_responses=True`. Les noms de stream sont des paramètres.
-Livraison au moins une fois : un message non acquitté est relivré (traitement idempotent).
+The Redis client must be created with `decode_responses=True`. Stream names are parameters.
+At-least-once delivery: an unacknowledged message is redelivered (idempotent processing).
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from redis.exceptions import ResponseError
 log = structlog.get_logger("bus")
 
 EVENTS_STREAM = "events"
-FIELD = "data"  # une seule clé : le JSON du message
+FIELD = "data"  # a single key: the message JSON
 
 
 @dataclass(frozen=True)
@@ -43,21 +43,21 @@ class Bus:
                 raise
 
     async def read(self, stream: str, count: int = 100) -> list[Message]:
-        """D'abord les messages en attente (redémarrage), puis les nouveaux. Sans attente."""
+        """Pending messages first (restart), then new ones. No waiting."""
         await self.ensure_group(stream)
-        # Délai d'inactivité nul : le seul consommateur du groupe (le worker) reprend tout ce
-        # qui est en attente. shortcut: à plusieurs consommateurs, un délai supérieur au temps
-        # de traitement devient nécessaire.
+        # Zero idle delay: the group's only consumer (the worker) takes back everything
+        # pending. shortcut: with several consumers, a delay greater than the processing
+        # time becomes necessary.
         claimed: Any = await self._r.xautoclaim(
             stream, self._group, self._consumer, 0, "0-0", count=count
         )
-        # [prochain id, [(id, champs)], ids supprimés] ; les entrées supprimées sont ignorées
+        # [next id, [(id, fields)], deleted ids]; deleted entries are ignored
         out = [Message(i, f[FIELD]) for i, f in claimed[1] if f]
         if len(out) < count:
             fresh: Any = await self._r.xreadgroup(
                 self._group, self._consumer, {stream: ">"}, count=count - len(out)
             )
-            for _name, entries in fresh or []:  # RESP2 : [[flux, [(id, champs)]]]
+            for _name, entries in fresh or []:  # RESP2: [[stream, [(id, fields)]]]
                 out.extend(Message(i, f[FIELD]) for i, f in entries)
         return out
 
@@ -67,16 +67,16 @@ class Bus:
 
 
 HEARTBEAT_KEY = (
-    "worker:heartbeat"  # valeur : horodatage ISO UTC ; la clé expire si le worker se tait
+    "worker:heartbeat"  # value: ISO UTC timestamp; the key expires if the worker goes quiet
 )
 
-NOTIFY_CHANNEL = "notify"  # Pub/Sub : quelque chose a changé, l'API relit la base (pas d'état ici)
+NOTIFY_CHANNEL = "notify"  # Pub/Sub: something changed, the API re-reads the database (no state)
 
 
 async def notify(redis: Redis, kind: str, ident: object) -> None:
-    """Prévient les flux SSE (`instance`, `command`, `alert`, `order`, `position`, `trade`).
-    Au mieux : la base fait foi."""
+    """Notifies the SSE streams (`instance`, `command`, `alert`, `order`, `position`, `trade`).
+    Best effort: the database is authoritative."""
     try:
         await redis.publish(NOTIFY_CHANNEL, json.dumps({"kind": kind, "id": str(ident)}))
     except Exception:
-        log.warning("notification_lost", kind=kind)  # le flux se resynchronise au prochain tour
+        log.warning("notification_lost", kind=kind)  # the stream resynchronises at the next round

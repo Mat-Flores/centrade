@@ -1,4 +1,4 @@
-"""Journal d'audit inaltérable (I14) : chaque ligne est chaînée à l'empreinte de la précédente."""
+"""Tamper-proof audit log (I14): each row is chained to the previous row's fingerprint."""
 
 import hashlib
 import ipaddress
@@ -13,12 +13,12 @@ from centrade_core.ids import uuid7
 from centrade_core.models import AuditLog
 
 GENESIS = "0" * 64
-SYSTEM_WORKER = "system:worker"  # auteur des actions du worker (I14)
-_LOCK_KEY = 0x43454E54  # arbitraire, propre au journal d'audit
+SYSTEM_WORKER = "system:worker"  # author of the worker's actions (I14)
+_LOCK_KEY = 0x43454E54  # arbitrary, specific to the audit log
 
 
 def fingerprint(value: Any) -> str:
-    """Empreinte SHA-256 d'un état (JSON canonique) : le journal ne garde jamais l'état lui-même."""
+    """SHA-256 fingerprint of a state (canonical JSON): the log never keeps the state itself."""
     return hashlib.sha256(_canonical(value)).hexdigest()
 
 
@@ -42,10 +42,10 @@ async def write_audit(
     after: Any = None,
     ip: str | None = None,
 ) -> AuditLog:
-    """Ajoute une ligne dans la transaction de l'appelant.
+    """Appends a row in the caller's transaction.
 
-    Le verrou consultatif est tenu jusqu'à la fin de cette transaction : les écritures sont
-    sérialisées, la chaîne ne se fourche pas. L'appelant commit juste après (ne pas la prolonger).
+    The advisory lock is held until the end of this transaction: writes are serialized,
+    the chain does not fork. The caller commits right after (do not prolong it).
     """
     await session.execute(text("SELECT pg_advisory_xact_lock(:k)"), {"k": _LOCK_KEY})
     last = (await session.execute(select(AuditLog).order_by(AuditLog.seq.desc()).limit(1))).scalar()
@@ -69,7 +69,7 @@ async def write_audit(
 
 
 async def verify_chain(session: AsyncSession) -> int | None:
-    """Renvoie le `seq` de la première ligne qui rompt la chaîne, ou None si elle est intacte."""
+    """Returns the `seq` of the first row that breaks the chain, or None if it is intact."""
     prev, expected_seq = GENESIS, 1
     rows = await session.stream_scalars(select(AuditLog).order_by(AuditLog.seq))
     async for e in rows:

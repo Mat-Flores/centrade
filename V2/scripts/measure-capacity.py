@@ -1,11 +1,11 @@
-"""Mesure la mémoire et le CPU de N instances Freqtrade en dry-run sur le Docker local.
+"""Measures the memory and CPU of N Freqtrade instances in dry-run on the local Docker.
 
     uv run python scripts/measure-capacity.py --count 3 --venue kraken
 
-Les statistiques sont lues sur l'hôte (Docker direct, hors socket proxy). Tout ce que le script
-crée (conteneurs, volumes, réseau, dossier) est supprimé à la fin, même en cas d'échec. Réseau
-d'essai ordinaire : le dry-run lit les données publiques de la venue (aucune clé). La venue est
-une valeur d'exemple, pas une recommandation.
+Statistics are read on the host (direct Docker, outside the socket proxy). Everything the script
+creates (containers, volumes, network, folder) is removed at the end, even on failure. Ordinary
+test network: the dry-run reads the venue's public data (no key). The venue is
+an example value, not a recommendation.
 """
 
 from __future__ import annotations

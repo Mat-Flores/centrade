@@ -1,4 +1,4 @@
-"""Runner Docker, unitaires : client Docker doublé (le gabarit, les refus, l'admission)."""
+"""Docker runner, unit tests: doubled Docker client (the template, the refusals, the admission)."""
 
 import io
 import tarfile
@@ -190,7 +190,7 @@ async def test_mount_outside_the_two_allowed_is_rejected(
 
 
 async def test_missing_subfolder_is_rejected(runner: DockerRunner, spec: ContainerSpec) -> None:
-    spec.files_dir.rmdir()  # Docker créerait un dossier root : on refuse
+    spec.files_dir.rmdir()  # Docker would create a root-owned folder: we refuse
     with pytest.raises(CommandRejected):
         await runner.create(spec)
 
@@ -214,7 +214,7 @@ async def test_malformed_image_is_rejected(
 async def test_different_digest_is_rejected_without_pulling(
     runner: DockerRunner, client: FakeClient, spec: ContainerSpec
 ) -> None:
-    client.missing_image = True  # le démon ne retrouve pas ce digest localement
+    client.missing_image = True  # the daemon cannot find this digest locally
     with pytest.raises(CommandRejected, match="aucun téléchargement"):
         await runner.create(spec)
 
@@ -240,10 +240,10 @@ async def test_admission_is_rejected_beyond_memory(
     runner: DockerRunner, client: FakeClient, spec: ContainerSpec, tmp_path: Path
 ) -> None:
     client.mem_total = 2 * GIB
-    await runner.create(spec)  # 1 Gio sur 2
+    await runner.create(spec)  # 1 GiB out of 2
     iid = uuid4()
     (tmp_path / str(iid)).mkdir()
-    await runner.create(replace(spec, instance_id=iid, files_dir=tmp_path / str(iid)))  # 2 sur 2
+    await runner.create(replace(spec, instance_id=iid, files_dir=tmp_path / str(iid)))  # 2 out of 2
     iid3 = uuid4()
     (tmp_path / str(iid3)).mkdir()
     with pytest.raises(CommandRejected, match="insuffisante"):
@@ -291,7 +291,7 @@ async def test_start_and_stop_are_idempotent(
     assert first.status == again.status == "running"
     await runner.stop(spec.instance_id)
     await runner.stop(spec.instance_id)
-    await runner.stop(uuid4())  # absent : pas d'erreur
+    await runner.stop(uuid4())  # absent: no error
 
 
 async def test_start_of_a_missing_container_is_rejected(runner: DockerRunner) -> None:
@@ -303,13 +303,13 @@ async def test_adopt_returns_running_containers_without_touching_them(
     runner: DockerRunner, client: FakeClient, spec: ContainerSpec
 ) -> None:
     await runner.create(spec)
-    assert await runner.adopt() == []  # créé, pas en marche
+    assert await runner.adopt() == []  # created, not running
     await runner.start(spec.instance_id)
     c = client.by_name[f"centrade-engine-{spec.instance_id}"]
     c.calls.clear()
     (found,) = await runner.adopt()
     assert found.instance_id == spec.instance_id and found.mode == "paper"
-    assert c.calls == []  # ni start, ni stop, ni remove
+    assert c.calls == []  # no start, no stop, no remove
 
 
 async def test_remove_happens_only_on_request(
@@ -322,7 +322,7 @@ async def test_remove_happens_only_on_request(
     assert "remove" not in c.calls
     await runner.remove(spec.instance_id)
     assert c.calls == ["remove"]
-    await runner.remove(uuid4())  # absent : pas d'erreur
+    await runner.remove(uuid4())  # absent: no error
 
 
 async def test_docker_errors_are_translated(
@@ -340,7 +340,7 @@ async def test_docker_errors_are_translated(
 
     def boom(code: int) -> Any:
         def f(*a: Any, **k: Any) -> None:
-            raise APIError("x", response=Resp(code))  # type: ignore[arg-type]  # doublure de réponse
+            raise APIError("x", response=Resp(code))  # type: ignore[arg-type]  # response double
 
         return f
 

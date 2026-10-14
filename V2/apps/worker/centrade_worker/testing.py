@@ -1,4 +1,4 @@
-"""Aide aux tests du worker (hors production) : FakeEngine, horloge pilotée à la main."""
+"""Worker test helpers (non-production): FakeEngine, manually driven clock."""
 
 from __future__ import annotations
 
@@ -38,7 +38,7 @@ class Projection:
     positions: frozenset[tuple[Any, ...]]
     open_orders: frozenset[tuple[Any, ...]]
     n_events: int
-    orders: frozenset[tuple[str, str]] = frozenset()  # (client_order_id, status), tous statuts
+    orders: frozenset[tuple[str, str]] = frozenset()  # (client_order_id, status), all statuses
     trades: frozenset[tuple[Any, ...]] = frozenset()  # (external_id, exit_cause, pnl)
 
 
@@ -53,8 +53,8 @@ class World:
         self.sessions: async_sessionmaker[AsyncSession] = make_session_factory(self.db)
         self.redis: Redis = Redis.from_url(self._redis_url, decode_responses=True)
         await self.redis.flushdb()
-        # La base est partagée par toute la session de tests : un worker relève toutes les
-        # commandes et toutes les instances. Chaque monde repart donc sans celles des autres.
+        # The database is shared by the whole test session: a worker picks up all
+        # commands and all instances. Each world therefore starts without the others'.
         async with self.sessions.begin() as s:
             await s.execute(text("TRUNCATE instances CASCADE"))
             await s.execute(text("TRUNCATE alerts"))
@@ -82,7 +82,7 @@ class World:
         )
 
     async def new_instance(self, seed: int | None = None) -> InstanceRef:
-        """Déploie une instance, la met en marche, crée ses lignes et l'enregistre au worker."""
+        """Deploys an instance, starts it, creates its rows and registers it with the worker."""
         if seed is not None:
             self.fake = FakeEngine(
                 clock=self.clock, seed=seed, new_id=uuid7, allow_failure_injection=True
@@ -104,7 +104,7 @@ class World:
                 ),
                 {"i": instance_id, "e": engine_id, "n": str(instance_id)},
             )
-        # Même chemin qu'une commande `deploy` : empreinte enregistrée, puis entrées ouvertes.
+        # Same path as a `deploy` command: fingerprint recorded, then entries opened.
         ref = await self.fake.deploy(await self.worker.guard.deployment(instance_id))
         await self.fake.resume_entries(ref)
         self.worker.register(ref)
@@ -122,7 +122,7 @@ class World:
             await self.bus.publish(EVENTS_STREAM, ev.model_dump_json())
 
     async def wipe(self, ref: InstanceRef) -> None:
-        """Remet les lignes dérivées de l'instance à zéro (entre deux passes d'une propriété)."""
+        """Resets the instance's derived rows to zero (between two runs of a property)."""
         from centrade_core.models.trading import Alert, Event, Order, Position, Trade
 
         async with self.sessions.begin() as s:
@@ -164,7 +164,7 @@ class World:
         )
 
     async def expected(self, ref: InstanceRef) -> Projection:
-        """L'instantané du moteur, mis sous la forme des projections."""
+        """The engine snapshot, put into the projections' form."""
         snap = await self.fake.snapshot(ref)
         return Projection(
             frozenset(

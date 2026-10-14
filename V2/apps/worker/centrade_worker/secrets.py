@@ -1,11 +1,11 @@
-"""Déchiffrement des secrets et fichier d'identifiants d'une instance (SPEC F6, I3, I12).
+"""Decryption of secrets and an instance's credentials file (SPEC F6, I3, I12).
 
-Seul endroit de la plateforme qui déchiffre une ligne de `secrets`. Réservé au worker : aucun
-module de `apps/api/` ne l'importe (tests/invariants/test_i12_frontiere_dechiffrement.py).
+The only place in the platform that decrypts a `secrets` row. Reserved to the worker: no
+`apps/api/` module imports it (tests/invariants/test_i12_frontiere_dechiffrement.py).
 
-Refus par défaut : un secret ne se déchiffre et ne s'écrit que pour une instance précise, relue
-en base. Une clé de trading exige une instance live dont le compte porte cette clé ; une clé de
-lecture ou de webhook ne va jamais à un moteur.
+Refuse by default: a secret is decrypted and written only for a specific instance, re-read
+from the database. A trading key requires a live instance whose account holds that key; a
+read or webhook key never goes to an engine.
 """
 
 import json
@@ -26,7 +26,7 @@ CREDENTIALS_FILE = "credentials.json"
 
 
 class SecretRefusedError(Exception):
-    """Le secret n'est pas destiné à cette instance. Le message ne porte aucune valeur."""
+    """The secret is not intended for this instance. The message carries no value."""
 
 
 def open_secret(
@@ -39,8 +39,8 @@ def open_secret(
     nonce: bytes,
     ciphertext: bytes,
 ) -> SecretStr:
-    """Lève `InvalidTag` si la clé, le nonce, le chiffré, la ligne, l'usage ou le propriétaire ne
-    correspondent pas ; jamais de valeur partielle ni de repli."""
+    """Raises `InvalidTag` if the key, nonce, ciphertext, row, usage or owner do not
+    match; never a partial value or a fallback."""
     aes = cipher(master_key)
     if key_version != KEY_VERSION:
         raise ValueError("version de clé maître inconnue")
@@ -48,10 +48,10 @@ def open_secret(
 
 
 def delivery_refusal(instance: Instance, account: Account | None, secret: Secret) -> str | None:
-    """Motif de refus de remettre `secret` au moteur de `instance`, ou None. `account` est le
-    compte de l'instance."""
+    """Reason for refusing to hand `secret` to `instance`'s engine, or None. `account` is the
+    instance's account."""
     if secret.usage == "engine_api":
-        return None  # lié à l'instance par l'AAD : celui d'une autre ne se déchiffre pas
+        return None  # bound to the instance by the AAD: another instance's secret does not decrypt
     if secret.usage != "trade":
         return "ce secret n'est jamais remis à un moteur"
     if instance.mode != "live":
@@ -69,7 +69,7 @@ def delivery_refusal(instance: Instance, account: Account | None, secret: Secret
 async def _load(
     session: AsyncSession, instance_id: UUID, secret_ids: Sequence[UUID]
 ) -> tuple[Instance, Account | None, list[Secret]]:
-    """Relit tout en base et applique le refus : l'appelant ne fournit que des identifiants."""
+    """Re-reads everything from the database and applies the refusal: the caller passes only IDs."""
     instance = await session.get(Instance, instance_id)
     if instance is None:
         raise SecretRefusedError("instance inconnue")
@@ -90,8 +90,8 @@ async def _load(
 async def reveal(
     session: AsyncSession, master_key: bytes, *, secret_id: UUID, instance_id: UUID, now: datetime
 ) -> SecretStr:
-    """Valeur en clair d'un secret, pour le moteur de cette instance seulement. Note le dernier
-    usage (l'appelant commit)."""
+    """Plaintext value of a secret, for this instance's engine only. Records the last
+    use (the caller commits)."""
     instance, account, (secret,) = await _load(session, instance_id, [secret_id])
     owner = instance.id if secret.usage == "engine_api" or account is None else account.id
     value = open_secret(
@@ -117,10 +117,10 @@ async def write_instance_file(
     uid: int | None = None,
     gid: int | None = None,
 ) -> Path:
-    """Écrit `<runtime_dir>/<instance_id>/credentials.json` (JSON de `content`), lisible par son
-    seul propriétaire. `secret_ids` : tous les secrets dont `content` porte une valeur.
+    """Writes `<runtime_dir>/<instance_id>/credentials.json` (JSON of `content`), readable only
+    by its owner. `secret_ids`: all the secrets whose value `content` carries.
 
-    `uid`/`gid` : l'utilisateur du conteneur, s'il n'est pas celui du worker.
+    `uid`/`gid`: the container user, if it is not the worker's.
     """
     await _load(session, instance_id, secret_ids)
     directory = runtime_dir / str(instance_id)
@@ -129,8 +129,8 @@ async def write_instance_file(
         raise SecretRefusedError("le dossier de l'instance est un lien")
     data = json.dumps(dict(content)).encode()
     tmp = directory / f".{CREDENTIALS_FILE}.{stdlib_secrets.token_hex(8)}"
-    # Droits posés à la création, jamais après : le contenu n'est à aucun instant lisible
-    # d'un autre compte. Puis renommage atomique : pas de fichier à moitié écrit.
+    # Permissions are set at creation, never after: the content is never readable by
+    # another account. Then atomic rename: no half-written file.
     fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, 0o400)
     try:
         with os.fdopen(fd, "wb") as f:
@@ -145,5 +145,5 @@ async def write_instance_file(
 
 
 def remove_instance_file(runtime_dir: Path, instance_id: UUID) -> None:
-    """À l'arrêt de l'instance. Sans effet si le fichier n'existe pas."""
+    """On instance stop. No effect if the file does not exist."""
     (runtime_dir / str(instance_id) / CREDENTIALS_FILE).unlink(missing_ok=True)

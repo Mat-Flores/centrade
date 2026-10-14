@@ -1,6 +1,6 @@
-"""Propriétés de la vérification de F9 (SPEC F9, I3, I4, I5, I10) : quel que soit le relevé, un
-contrôle en échec ou une donnée manquante interdit d'ouvrir les entrées ; la vérification ne
-retient jamais une commande qui réduit le risque."""
+"""F9 verification properties (SPEC F9, I3, I4, I5, I10): whatever the snapshot, a
+failed check or missing data forbids opening entries; the verification never
+holds back a command that reduces risk."""
 
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -76,7 +76,7 @@ def _spec(mode: str, fingerprint: str | None, engine_version: str = "1") -> Inst
     )
 
 
-ages = st.integers(-120, 120)  # négatif : relevé daté du futur
+ages = st.integers(-120, 120)  # negative: snapshot dated in the future
 statuses = st.none() | st.builds(
     lambda state, mode, age: InstanceStatus(
         state=state, mode=mode, observed_at=T0 - timedelta(seconds=age)
@@ -130,7 +130,7 @@ def test_f9_entries_open_only_if_everything_matches(
         )
 
     refusals = verify()
-    assert refusals == verify()  # même entrée, même décision
+    assert refusals == verify()  # same input, same decision
 
     def fresh(at: datetime) -> bool:
         return abs((T0 - at).total_seconds()) <= STALE_S
@@ -149,7 +149,7 @@ def test_f9_entries_open_only_if_everything_matches(
         and effective.engine_version == "1"
     )
     assert (refusals == ()) == all_good
-    assert all(r.code and r.message for r in refusals)  # un refus porte toujours son motif
+    assert all(r.code and r.message for r in refusals)  # a refusal always carries its reason
 
 
 def _conforming() -> dict[str, object]:
@@ -165,7 +165,7 @@ def _conforming() -> dict[str, object]:
 
 
 OLD = T0 - timedelta(seconds=STALE_S + 1)
-# Chaque dégradation d'un relevé conforme, et le motif qu'elle doit produire.
+# Each degradation of a compliant snapshot, and the reason it must produce.
 DEGRADATIONS: dict[str, tuple[dict[str, object], str]] = {
     "live instance": ({"spec": _spec("live", "fp-a")}, LIVE),
     "unreadable state": ({"status": None}, UNKNOWN),
@@ -223,7 +223,7 @@ DEGRADATIONS: dict[str, tuple[dict[str, object], str]] = {
 
 
 def test_f9_conforming_snapshot_opens_entries() -> None:
-    # Sans ce témoin, la propriété suivante passerait avec une fonction qui refuse toujours.
+    # Without this control case, the next property would pass with a function that always refuses.
     assert entry_refusals(**_conforming(), now=T0, stale_after_s=STALE_S) == ()  # type: ignore[arg-type]
 
 
@@ -233,9 +233,9 @@ def test_f9_any_degradation_of_a_conforming_snapshot_is_rejected(names: list[str
     for name in names:
         case.update(DEGRADATIONS[name][0])
     codes = {r.code for r in entry_refusals(**case, now=T0, stale_after_s=STALE_S)}  # type: ignore[arg-type]
-    assert codes  # jamais d'ouverture
+    assert codes  # never opens
     if len(names) == 1:
-        assert DEGRADATIONS[names[0]][1] in codes  # et le bon motif
+        assert DEGRADATIONS[names[0]][1] in codes  # and the right reason
 
 
 @given(
@@ -256,7 +256,7 @@ def test_f9_never_holds_back_what_reduces_risk(
         type_, mode=mode, status=status, entries=entries, now=T0, stale_after_s=stale_after_s
     )
     if type_ not in GATED:
-        assert out == ()  # pause, flatten, stop, fermeture, annulation : jamais de motif (I4)
+        assert out == ()  # pause, flatten, stop, close, cancel: never a reason (I4)
     assert not (RISK_REDUCING & GATED)
 
 
@@ -273,9 +273,9 @@ def test_f9_risk_increasing_actions_go_out_only_without_any_doubt(
         type_, mode=mode, status=status, entries=entries, now=T0, stale_after_s=STALE_S
     )
     if mode != "paper":
-        assert out and out[0].code == LIVE  # aucun chemin de promotion avant M7
+        assert out and out[0].code == LIVE  # no promotion path before M7
     elif type_ == "resume_entries" and (entries is None or entries):
-        assert out  # vérification absente ou en échec : rien ne part
+        assert out  # verification absent or failed: nothing is sent
     elif type_ != "deploy" and out == ():
         assert status is not None and status.state != "unknown"
         assert abs((T0 - status.observed_at).total_seconds()) <= STALE_S
@@ -299,14 +299,14 @@ def test_f9_owned_key_missing_from_readback_is_drift_unless_declared(
     effective = EffectiveConfig(values=dict.fromkeys(read, "1"), observed_at=T0)
     by_adapter = tuple(Drift(key=k, expected="1", observed="9") for k in sorted(reported))
     out = owned_drifts(config, effective, by_adapter)
-    assert out[: len(by_adapter)] == by_adapter  # rien de ce que l'adaptateur rapporte ne se perd
+    assert out[: len(by_adapter)] == by_adapter  # nothing the adapter reports is lost
     added = {d.key for d in out[len(by_adapter) :]}
-    assert added == set(generated) - read - unreadable - reported  # jamais d'ignorance silencieuse
+    assert added == set(generated) - read - unreadable - reported  # never silent ignorance
     assert all(d.observed is None for d in out[len(by_adapter) :])
 
 
 def test_f9_resume_is_rejected_if_verification_did_not_happen() -> None:
-    """Le relevé a beau être parfait : sans résultat de vérification, rien ne part."""
+    """However perfect the snapshot: without a verification result, nothing is sent."""
     good = InstanceStatus(state="exits_only", mode="paper", observed_at=T0)
 
     def refusals(entries: tuple[Refusal, ...] | None) -> tuple[Refusal, ...]:
@@ -314,7 +314,7 @@ def test_f9_resume_is_rejected_if_verification_did_not_happen() -> None:
             "resume_entries", mode="paper", status=good, entries=entries, now=T0, stale_after_s=30
         )
 
-    assert refusals(()) == ()  # témoin : vérification passée, la reprise part
+    assert refusals(()) == ()  # control case: verification passed, the resume is sent
     assert [r.code for r in refusals(None)] == [UNKNOWN]
     drift = (Refusal(DRIFT, "drift"),)
     assert refusals(drift) == drift

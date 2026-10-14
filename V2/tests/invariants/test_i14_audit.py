@@ -1,4 +1,4 @@
-"""I14 : le journal d'audit est inaltérable et sa chaîne est vérifiable (SPEC §6, §1.2)."""
+"""I14: the audit log is tamper-proof and its chain is verifiable (SPEC §6, §1.2)."""
 
 import asyncio
 
@@ -34,7 +34,7 @@ async def test_i14_audit_log_is_tamper_proof(
     async with session_factory() as s:
         assert await verify_chain(s) is None
 
-    # UPDATE, DELETE et TRUNCATE sont refusés par le trigger.
+    # UPDATE, DELETE and TRUNCATE are refused by the trigger.
     for sql in (
         "UPDATE audit_log SET actor = 'pirate'",
         "DELETE FROM audit_log",
@@ -44,7 +44,7 @@ async def test_i14_audit_log_is_tamper_proof(
             with pytest.raises(DBAPIError, match="ajout seul"):
                 await s.execute(text(sql))
 
-    # Une ligne altérée hors trigger (accès direct aux fichiers, trigger désactivé) casse la chaîne.
+    # A row altered outside the trigger (direct file access, trigger disabled) breaks the chain.
     async with session_factory() as s, s.begin():
         victim, original = (
             await s.execute(text("SELECT seq, actor FROM audit_log ORDER BY seq OFFSET 1 LIMIT 1"))
@@ -55,7 +55,7 @@ async def test_i14_audit_log_is_tamper_proof(
     async with session_factory() as s:
         assert await verify_chain(s) == victim
 
-    # Remise en état pour les autres tests.
+    # Restore state for the other tests.
     async with session_factory() as s, s.begin():
         await s.execute(text("ALTER TABLE audit_log DISABLE TRIGGER audit_log_no_change"))
         await s.execute(
@@ -93,25 +93,25 @@ async def test_i14_every_action_writes_an_audit_row_with_its_author(stack: Stack
         if (p := ctx.path)
     }
     actions = ("start", "stop", "pause-entries", "resume-entries", "flatten")
-    # Une route qui change un état et qui n'est pas parcourue ici fait échouer ce test.
+    # A route that changes state and is not exercised here fails this test.
     registre = {
         ("POST", "/api/v1/strategies"),
         ("POST", "/api/v1/strategies/{strategy_id}/versions"),
         ("PATCH", "/api/v1/strategies/{strategy_id}/versions/{version}"),
     }
-    # Comptes et clés : auditées dans tests/scenarios/test_comptes_et_cles.py.
+    # Accounts and keys: audited in tests/scenarios/test_accounts_and_keys.py.
     comptes = {
         ("POST", "/api/v1/accounts"),
         ("PUT", "/api/v1/accounts/{account_id}/secret"),
         ("POST", "/api/v1/accounts/{account_id}/test"),
         ("POST", "/api/v1/accounts/{account_id}/rotate"),
     }
-    # Fermeture et annulation d'entrée : auditées dans tests/scenarios/test_instances_trading.py.
+    # Close and entry cancellation: audited in tests/scenarios/test_trading_instances.py.
     trading = {
         ("POST", "/api/v1/positions/{position_id}/close"),
         ("DELETE", "/api/v1/orders/{order_id}"),
     }
-    # Authentification : auditée dans apps/api/tests/auth/ (test_logs_audit, test_totp_confirm).
+    # Authentication: audited in apps/api/tests/auth/ (test_logs_audit, test_totp_confirm).
     auth = {("POST", f"/api/v1/auth/{p}") for p in ("login", "totp", "totp/confirm", "logout")}
     assert changing >= registre | comptes | trading | auth
     assert changing - registre - comptes - trading - auth == {("POST", "/api/v1/instances")} | {
@@ -127,11 +127,11 @@ async def test_i14_every_action_writes_an_audit_row_with_its_author(stack: Stack
         "command.deploy",
     }
     await stack.world.worker.run_once()
-    # `resume-entries` n'est refusé que sur état douteux ; ici l'état observé est frais.
-    # `start` n'a de sens que sur une instance arrêtée : il passe après l'effet de `stop`.
+    # `resume-entries` is refused only on a doubtful state; here the observed state is fresh.
+    # `start` only makes sense on a stopped instance: it goes through after the effect of `stop`.
     for a in ("pause-entries", "resume-entries", "flatten", "stop", "start"):
         if a == "start":
-            for _ in range(2):  # pause et flatten d'abord, puis stop
+            for _ in range(2):  # pause and flatten first, then stop
                 await stack.world.worker.run_once()
         before = len(await _audit_for(stack, target))
         r = await act(c, created["id"], a)
@@ -152,18 +152,18 @@ async def test_i14_automation_action_is_attributed_to_its_author(stack: Stack) -
     await w.worker.run_once()
     r = await act(c, iid, "resume-entries")
     cid = r.json()["command_id"]
-    await w.worker.run_once()  # verified par le worker
+    await w.worker.run_once()  # verified by the worker
 
     w.fake.set_failure(ref_of(iid), Failure.SILENT)
-    await w.worker.run_once()  # passage à unknown + alerte
+    await w.worker.run_once()  # switch to unknown + alert
     r2 = await act(c, iid, "flatten")
     cid2 = r2.json()["command_id"]
-    await w.worker.run_once()  # envoyée, sans réponse : l'échéance court depuis l'envoi
+    await w.worker.run_once()  # sent, unanswered: the deadline runs from the send
     w.clock.advance(stack.settings.deadline_flatten_s + 1)
     await w.worker.run_once()  # timed_out
     w.fake.set_failure(ref_of(iid), Failure.SILENT, on=False)
     w.clock.advance(1)
-    await w.worker.run_once()  # alerte résolue
+    await w.worker.run_once()  # alert resolved
 
     alerts = (await get(c, f"/api/v1/alerts?instance_id={iid}"))["items"]
     targets = [f"instance:{iid}", f"command:{cid}", f"command:{cid2}"]

@@ -1,12 +1,11 @@
-"""Comptes et clés (SPEC F6, §8, I12).
+"""Accounts and keys (SPEC F6, §8, I12).
 
-Une clé est en écriture seule : aucune route ne la renvoie, ni en entier ni en partie, et ce
-module ne sait pas la déchiffrer (le déchiffrement vit dans le worker). Le test de permissions
-passe par une sonde injectée qui reçoit une référence, jamais une valeur, et n'expose aucune
-fonction d'ordre (I11). Refus par défaut : une clé nouvelle ou dont le test n'aboutit pas n'est
-pas vérifiée, ce qui bloque le live (I5).
+A key is write-only: no route returns it, in full or in part, and this module cannot decrypt
+it (decryption lives in the worker). The permissions test goes through an injected probe that
+receives a reference, never a value, and exposes no order function (I11). Refuse by default: a
+new key, or one whose test does not complete, is not verified, which blocks live (I5).
 
-Source : https://fastapi.tiangolo.com/tutorial/dependencies/dependencies-in-path-operation-decorators/"""
+Source: https://fastapi.tiangolo.com/tutorial/dependencies/dependencies-in-path-operation-decorators/"""
 
 from __future__ import annotations
 
@@ -47,7 +46,7 @@ from centrade_api.core.pagination import Page, encode_cursor, page_args
 log = structlog.get_logger()
 router = APIRouter(prefix="/api/v1", tags=["accounts"])
 
-# Ajouter ou remplacer une clé est une action dangereuse (SPEC §9) : TOTP de moins de 5 min.
+# Adding or replacing a key is a dangerous action (SPEC §9): TOTP less than 5 min old.
 RecentTotp = Depends(require_recent_totp)
 _KIND = "venue_api_key"
 _REF = {"trade": "secret_ref", "read": "read_secret_ref"}
@@ -77,7 +76,7 @@ async def _locked(db: AsyncSession, account_id: UUID) -> Account:
 
 
 def _key_holder(account: Account) -> None:
-    if account.type != "live":  # I3 : paper et backtest ne reçoivent aucune clé
+    if account.type != "live":  # I3: paper and backtest receive no key
         raise HTTPException(409, "Un compte paper ne reçoit aucune clé.")
 
 
@@ -141,7 +140,7 @@ async def put_secret(
     _unverify(account, body.usage)
     account.updated_at = now
     await db.flush()
-    if old is not None:  # après la bascule : la ligne n'est plus référencée
+    if old is not None:  # after the switch: the row is no longer referenced
         await store.revoke(db, old)
     secret = await db.get_one(Secret, new)
     await write_audit(
@@ -180,7 +179,7 @@ async def check_permissions(
         after={"result": result, "ip_restricted": ip_restricted},
         ip=client_ip(request),
     )
-    await db.refresh(account)  # `updated_at` est recalculé en base : à relire avant de répondre
+    await db.refresh(account)  # `updated_at` is recomputed by the database: re-read it
     out = PermissionTestOut(result=result, account=(await _accounts_out(db, [account]))[0])
     await db.commit()
     return out
@@ -202,8 +201,8 @@ async def rotate_secret(
     Tout se fait dans une transaction : un test qui n'aboutit pas l'annule, l'ancienne clé et
     l'état du compte restent tels quels.
     """
-    # shortcut: la sonde est appelée dans la transaction, avant tout commit ; une sonde qui lit la
-    # nouvelle clé depuis un autre processus (M7) demandera un commit intermédiaire.
+    # shortcut: the probe is called inside the transaction, before any commit; a probe that
+    # reads the new key from another process (M7) will need an intermediate commit.
     account = await _locked(db, account_id)
     _key_holder(account)
     old: UUID | None = getattr(account, _REF[body.usage])

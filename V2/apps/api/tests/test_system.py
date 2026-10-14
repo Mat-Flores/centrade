@@ -23,7 +23,7 @@ def test_health_reports_liveness_with_utc_timestamp(client: TestClient) -> None:
 
 
 def test_health_reports_dependencies_observed_and_dated_never_assumed(client: TestClient) -> None:
-    # I1 : sans base ni Redis câblés (pas de lifespan), rien n'est présenté comme sain.
+    # I1: without database or Redis wired (no lifespan), nothing is presented as healthy.
     body = client.get("/api/v1/system/health").json()
 
     assert set(body) == {"status", "ts", "checks"}
@@ -44,7 +44,7 @@ def test_unknown_route_returns_problem_json_404(client: TestClient) -> None:
 
 
 def test_http_error_keeps_its_headers(client: TestClient) -> None:
-    # Un 405 sans `Allow`, ou un 401 sans `WWW-Authenticate`, n'est pas exploitable.
+    # A 405 without `Allow`, or a 401 without `WWW-Authenticate`, is not usable.
     response = client.post("/api/v1/system/health")
 
     assert response.status_code == 405
@@ -83,7 +83,7 @@ def test_non_standard_status_still_returns_problem_json() -> None:
 
 
 def test_openapi_is_served_under_the_api_prefix(client: TestClient) -> None:
-    # Caddy ne route que /api/* vers l'API ; l'interface Swagger charge des scripts tiers (CSP).
+    # Caddy routes only /api/* to the API; the Swagger UI loads third-party scripts (CSP).
     assert client.get("/api/v1/openapi.json").status_code == 200
     assert client.get("/openapi.json").status_code == 404
     assert client.get("/docs").status_code == 404

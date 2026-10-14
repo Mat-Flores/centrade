@@ -1,4 +1,4 @@
-"""Passage des lignes de la base aux schémas de sortie : ordres, positions, trades."""
+"""Mapping of database rows onto the output schemas: orders, positions, trades."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from centrade_api.core.observed import ObservedMode, observe
 from centrade_api.trading.schemas import OrderOut, PositionOut, TradeOut
 
-ENTRY_INTENTS = frozenset({"entry"})  # seul ordre annulable : les renforts sont désactivés en V1
+ENTRY_INTENTS = frozenset({"entry"})  # only cancellable order: reinforcements are disabled in V1
 
 
 def _dec(d: Decimal) -> str:
@@ -32,7 +32,7 @@ def _stale(at: datetime, now: datetime, cfg: Settings) -> bool:
     return (now - at).total_seconds() > cfg.observed_stale_after_s
 
 
-Owner = dict[str, Any]  # mode, account_id, account_label d'une ligne (voir `_owner`)
+Owner = dict[str, Any]  # mode, account_id, account_label of a row (see `_owner`)
 
 
 def owner_of(row: Any, now: datetime, cfg: Settings) -> Owner:
@@ -116,8 +116,8 @@ def trade_of(t: Trade, own: Owner, now: datetime, cfg: Settings) -> TradeOut:
     )
 
 
-# Modèle -> (constructeur, colonne de tri). Les identifiants sont des UUID v7 : leur ordre suit
-# la création, ce qui donne aux positions (sans date de création) un curseur stable.
+# Model -> (constructor, sort column). Identifiers are UUID v7: their order follows
+# creation, which gives positions (with no creation date) a stable cursor.
 KINDS: dict[str, tuple[Any, Any, Any]] = {
     "order": (Order, order_of, Order.created_at),
     "position": (Position, position_of, Position.id),

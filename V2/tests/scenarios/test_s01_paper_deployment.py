@@ -1,5 +1,5 @@
-"""S1 (SPEC §14) : dépôt, instance, démarrage en sorties seules, vérification, entrées ouvertes ;
-l'interface montre voulu et observé identiques."""
+"""S1 (SPEC §14): upload, instance, start in exits-only mode, verification, entries opened;
+the interface shows wanted and observed identical."""
 
 from uuid import uuid4
 
@@ -37,7 +37,7 @@ async def test_s01_paper_deployment_end_to_end(stack: Stack) -> None:
     assert r.status_code == 201, r.text
     account_id = r.json()["id"]
 
-    # Dépôt d'une version, puis instance paper sur cette version et ce compte.
+    # Upload of a version, then a paper instance on that version and that account.
     c = await stack.client("operator")
     r = await c.post("/api/v1/strategies", json={"name": f"s1-{uuid4().hex[:8]}"})
     assert r.status_code == 201, r.text
@@ -63,7 +63,7 @@ async def test_s01_paper_deployment_end_to_end(stack: Stack) -> None:
     assert r.json()["desired_state"] == "exits_only" and r.json()["state"]["value"] == "unknown"
     calls = spy(w.fake)
 
-    # Démarrage en sorties seules : déployée depuis le registre, empreinte enregistrée, vérifiée.
+    # Start in exits-only mode: deployed from the registry, fingerprint recorded, verified.
     await w.worker.run_once()
     assert calls == ["deploy"]
     detail = await get(c, f"/api/v1/instances/{iid}")
@@ -74,7 +74,7 @@ async def test_s01_paper_deployment_end_to_end(stack: Stack) -> None:
     assert detail["deployment_fingerprint"] == row.deployment_fingerprint is not None
     running = await w.fake.effective_config(ref_of(iid))
     assert running.fingerprint == row.deployment_fingerprint
-    # La configuration relue est celle du manifest déposé et du compte choisi, et elle est datée.
+    # The re-read configuration is the uploaded manifest's and the chosen account's, and is dated.
     assert detail["effective_config"]["value"]["stake_amount"] == "25"
     assert detail["effective_config"]["value"]["stoploss"] == "-0.03"
     assert detail["effective_config"]["value"]["account_id"] == account_id
@@ -82,7 +82,7 @@ async def test_s01_paper_deployment_end_to_end(stack: Stack) -> None:
     assert (await commands(w, iid, "deploy"))[0].status == "verified"
     assert w.fake._insts[row.id].spec.manifest.sizing.max_open_positions == 2
 
-    # Vérification de F9 passée : les entrées s'ouvrent, et l'effet est observé.
+    # F9 verification passed: entries open, and the effect is observed.
     r = await act(c, iid, "resume-entries")
     assert r.status_code == 202
     await w.worker.run_once()

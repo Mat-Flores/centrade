@@ -1,8 +1,8 @@
-"""Banc d'essai de bout en bout (hors production) : API + worker + FakeEngine, une seule horloge.
+"""End-to-end test bench (not production): API + worker + FakeEngine, a single clock.
 
-L'API et le worker partagent la base, Redis et l'horloge injectée de `World` : un test fait
-avancer le temps à la main, appelle l'API, lance un tour de worker, et lit le résultat.
-Valeurs sentinelles uniquement.
+The API and the worker share the database, Redis and the injected clock of `World`: a test
+advances time by hand, calls the API, runs a worker round, and reads the result.
+Sentinel values only.
 """
 
 from __future__ import annotations
@@ -29,8 +29,8 @@ from centrade_api.core.deps import get_db, get_redis, get_session_factory, utcno
 from centrade_api.main import create_app
 
 ORIGIN = "https://centrade.test"
-PASSWORD = "SENTINELLE-mot-de-passe-0xDEADBEEF"  # noqa: S105  # sentinelle de test
-_PASSWORD_HASH = security.hash_password(PASSWORD)  # argon2 est lent : une fois par processus
+PASSWORD = "SENTINELLE-mot-de-passe-0xDEADBEEF"  # noqa: S105  # test sentinel
+_PASSWORD_HASH = security.hash_password(PASSWORD)  # argon2 is slow: once per process
 
 
 @dataclass
@@ -69,14 +69,14 @@ class Stack:
         return Account(uid, email, totp)
 
     async def client(self, role: str = "operator", *, signed_in: bool = True) -> httpx.AsyncClient:
-        """Client HTTP (origine admise). Connecté par mot de passe puis TOTP si `signed_in`."""
+        """HTTP client (allowed origin). Signed in by password then TOTP if `signed_in`."""
         c = httpx.AsyncClient(
             transport=httpx.ASGITransport(app=self.app, client=("203.0.113.10", 4242)),
             base_url=ORIGIN,
             headers={"Origin": ORIGIN},
         )
         self._clients.append(c)
-        throttle.limiter.reset()  # compteur de connexions global au processus
+        throttle.limiter.reset()  # process-wide connection counter
         if signed_in:
             acc = self.last_account = await self.account(role)
             r = await c.post(
@@ -98,7 +98,7 @@ async def stack(migrated_url: str, redis_url: str, tmp_path: Path) -> AsyncItera
         postgres_password_file=tmp_path / "absent",
         master_key_file=key,
         public_origin=ORIGIN,
-        stream_heartbeat_s=0.05,  # flux : réveils rapides, aucun sommeil dans les tests
+        stream_heartbeat_s=0.05,  # stream: fast wake-ups, no sleeping in tests
         stream_session_check_s=0.0,
     )
     async with World(migrated_url, redis_url) as w:

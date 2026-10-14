@@ -1,10 +1,10 @@
-"""Rôle applicatif Postgres, créé et réajusté à chaque `migrate` (idempotent).
+"""Postgres application role, created and readjusted on every `migrate` (idempotent).
 
-Le propriétaire (`centrade`, superutilisateur de l'image) ne sert qu'aux migrations. Le rôle
-applicatif n'a aucun droit DDL et aucun UPDATE, DELETE ni TRUNCATE sur `audit_log` : ces droits
-manquent, en plus du trigger de la migration 0001 (I3, SPEC §13). Rejoué après les migrations,
-il couvre les tables des révisions futures sans qu'on y pense.
-Source : https://www.postgresql.org/docs/16/sql-grant.html
+The owner (`centrade`, the image's superuser) is only used for migrations. The application
+role has no DDL right and no UPDATE, DELETE or TRUNCATE on `audit_log`: these rights
+are missing, in addition to migration 0001's trigger (I3, SPEC §13). Replayed after the migrations,
+it covers the tables of future revisions without anyone having to think about it.
+Source: https://www.postgresql.org/docs/16/sql-grant.html
 """
 
 import asyncio
@@ -22,7 +22,7 @@ PASSWORD = Path(os.environ["CENTRADE_APP_DB_PASSWORD_FILE"]).read_text(encoding=
 if not PASSWORD:
     raise SystemExit("mot de passe du rôle applicatif vide")
 
-# ROLE est validé ci-dessus ; le mot de passe passe par format(%L), jamais par concaténation.
+# ROLE is validated above; the password goes through format(%L), never through concatenation.
 STATEMENTS = [
     f"""DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = '{ROLE}') THEN
@@ -35,7 +35,7 @@ STATEMENTS = [
     f"REVOKE ALL ON ALL TABLES IN SCHEMA public FROM {ROLE}",
     f"GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO {ROLE}",
     f"GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO {ROLE}",
-    # La table de version d'Alembic reste au propriétaire.
+    # Alembic's version table stays with the owner.
     f"REVOKE ALL ON alembic_version FROM {ROLE}",
     f"REVOKE UPDATE, DELETE, TRUNCATE ON audit_log FROM {ROLE}",
 ]

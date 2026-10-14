@@ -1,4 +1,4 @@
-"""Durées de session, rôles, ré-authentification TOTP, CSRF (SPEC §9, §13)."""
+"""Session durations, roles, TOTP re-authentication, CSRF (SPEC §9, §13)."""
 
 import httpx
 import pytest
@@ -22,7 +22,7 @@ async def test_session_expires_after_30_minutes_of_inactivity(
     await sign_in(client, await make_account())
 
     clock.advance(minutes=29)
-    assert (await client.get(ME)).status_code == 200  # l'activité repousse l'échéance
+    assert (await client.get(ME)).status_code == 200  # activity pushes back the deadline
     clock.advance(minutes=29)
     assert (await client.get(ME)).status_code == 200
     clock.advance(minutes=30)
@@ -34,7 +34,7 @@ async def test_session_expires_after_12_hours_despite_activity(
 ) -> None:
     await sign_in(client, await make_account())
 
-    for _ in range(28):  # 28 x 25 min = 11 h 40, toujours active
+    for _ in range(28):  # 28 x 25 min = 11 h 40, still active
         clock.advance(minutes=25)
         assert (await client.get(ME)).status_code == 200
     clock.advance(minutes=20)
@@ -88,7 +88,7 @@ async def test_dangerous_action_requires_totp_reauthentication(
     assert (await client.post(f"{PROBE}/dangerous")).status_code == 200
     clock.advance(seconds=2)
     _is_problem(await client.post(f"{PROBE}/dangerous"), 403)
-    assert (await client.get(ME)).status_code == 200  # la session, elle, reste valable
+    assert (await client.get(ME)).status_code == 200  # the session itself remains valid
 
 
 async def test_dangerous_action_without_session_returns_401(client: httpx.AsyncClient) -> None:
@@ -99,17 +99,17 @@ async def test_dangerous_action_without_session_returns_401(client: httpx.AsyncC
     "headers",
     [
         {"Origin": "https://pirate.example"},
-        {"Origin": "http://centrade.test"},  # même hôte, autre schéma
+        {"Origin": "http://centrade.test"},  # same host, other scheme
         {"Origin": "https://centrade.test.pirate.example"},
         {"Origin": "https://centrade.test:444"},
         {"Origin": "null"},
         {"Origin": ""},
-        {},  # ni Origin ni Referer : refus par défaut
+        {},  # neither Origin nor Referer: refuse by default
         {"Referer": "https://pirate.example/page"},
         {"Referer": "https://centrade.test.pirate.example/"},
         {"Referer": "https://centrade.test@pirate.example/"},
         {"Referer": "https://[illisible"},
-        {"Origin": "https://pirate.example", "Referer": f"{ORIGIN}/"},  # Origin prime
+        {"Origin": "https://pirate.example", "Referer": f"{ORIGIN}/"},  # Origin takes precedence
     ],
 )
 async def test_foreign_origin_is_rejected_on_state_changing_request(
@@ -121,7 +121,7 @@ async def test_foreign_origin_is_rejected_on_state_changing_request(
     account = await make_account()
     legit = make_client()
     await sign_in(legit, account)
-    # Le navigateur de la victime : ses cookies partent, l'origine est celle de l'attaquant.
+    # The victim's browser: its cookies are sent, the origin is the attacker's.
     forged = make_client(origin=None)
     forged.cookies.update(legit.cookies)
 
@@ -132,8 +132,8 @@ async def test_foreign_origin_is_rejected_on_state_changing_request(
         json={"username": account.email, "password": account.password},
         headers=headers,
     )
-    _is_problem(login, 403)  # CSRF de connexion
-    assert (await legit.get(ME)).status_code == 200  # la session n'a pas été fermée
+    _is_problem(login, 403)  # login CSRF
+    assert (await legit.get(ME)).status_code == 200  # the session was not closed
 
 
 async def test_expected_origin_is_accepted_via_origin_or_else_referer(
@@ -147,4 +147,4 @@ async def test_expected_origin_is_accepted_via_origin_or_else_referer(
     assert (await bare.post(f"{PROBE}/write", headers={"Origin": ORIGIN})).status_code == 200
     by_referer = await bare.post(f"{PROBE}/write", headers={"Referer": f"{ORIGIN}/cockpit?x=1"})
     assert by_referer.status_code == 200
-    assert (await bare.get(ME)).status_code == 200  # une lecture n'exige pas d'origine
+    assert (await bare.get(ME)).status_code == 200  # a read does not require an origin

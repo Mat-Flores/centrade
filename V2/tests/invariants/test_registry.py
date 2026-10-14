@@ -1,4 +1,4 @@
-"""docs/invariants.md recense I1-I14 et S1-S14, avec jalon et tests prévus (SPEC §0.13, §14)."""
+"""docs/invariants.md covers I1-I14 and S1-S14, with milestones and tests (SPEC §0.13, §14)."""
 
 import re
 from pathlib import Path
@@ -22,7 +22,7 @@ JALON_SCENARIOS = {
 
 
 def _section(n: int) -> str:
-    """Texte de la section `### In` jusqu'au titre suivant ; vide si absente."""
+    """Text of the `### In` section up to the next heading; empty if absent."""
     m = re.search(rf"^### I{n}\b.*?(?=^#{{2,3}} |\Z)", DOC, re.M | re.S)
     return m.group(0) if m else ""
 

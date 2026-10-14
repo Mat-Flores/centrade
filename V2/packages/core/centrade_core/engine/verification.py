@@ -1,6 +1,6 @@
-"""Vérification de F9 avant d'ouvrir les entrées (SPEC F9, I3, I5, I10). Pure : ni horloge, ni
-réseau, ni base. Tout ce qui manque, date ou diverge est un motif de refus ; une liste vide est la
-seule façon d'ouvrir les entrées. Ce qui réduit le risque ne passe jamais par ici (I4).
+"""F9 verification before opening entries (SPEC F9, I3, I5, I10). Pure: no clock, no
+network, no database. Anything missing, stale or diverging is a reason to refuse; an empty
+list is the only way to open entries. What reduces risk never goes through here (I4).
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from typing import Final
 from centrade_core.commands import RISK_INCREASING, risk_increase_refusal
 from centrade_core.engine.types import Drift, EffectiveConfig, InstanceSpec, InstanceStatus
 
-# Motifs : `mode`, `drift` et `fingerprint` sont des écarts constatés ; les autres, un doute.
+# Reasons: `mode`, `drift` and `fingerprint` are observed mismatches; the others, a doubt.
 MODE: Final = "mode"
 DRIFT: Final = "drift"
 FINGERPRINT: Final = "fingerprint"
@@ -21,10 +21,10 @@ STALE: Final = "stale"
 STATE: Final = "state"
 LIVE: Final = "live"
 ERROR: Final = "error"
-# Écart constaté : alerte, et pause des entrées si le moteur est observé `running`.
+# Observed mismatch: alert, and pause entries if the engine is observed `running`.
 FOUND: Final = frozenset({MODE, DRIFT, FINGERPRINT})
-CRITICAL: Final = frozenset({MODE, DRIFT})  # F9 : écart de mode, dérive de configuration
-# Seules commandes soumises à un contrôle avant l'envoi ; toutes les autres partent sans lui.
+CRITICAL: Final = frozenset({MODE, DRIFT})  # F9: mode mismatch, configuration drift
+# Only commands subject to a check before sending; all the others leave without it.
 GATED: Final = RISK_INCREASING | {"deploy"}
 
 
@@ -35,7 +35,7 @@ class Refusal:
 
 
 def _fresh(at: datetime, now: datetime, stale_after_s: float) -> bool:
-    # Trop vieux ou daté du futur (dérive d'horloge) : dans les deux cas, on ne sait pas.
+    # Too old or dated in the future (clock drift): either way, we do not know.
     return abs(now - at) <= timedelta(seconds=stale_after_s)
 
 
@@ -49,14 +49,14 @@ def entry_refusals(
     now: datetime,
     stale_after_s: float,
 ) -> tuple[Refusal, ...]:
-    """Motifs de refus d'ouvrir les entrées. `spec` vient du registre à l'instant du contrôle,
-    `recorded_fingerprint` de l'enregistrement fait au déploiement, le reste du moteur.
-    `drifts` : résultat de `owned_drifts` ; None si la comparaison n'a pas pu se faire."""
+    """Reasons for refusing to open entries. `spec` comes from the registry at check time,
+    `recorded_fingerprint` from the record made at deployment, the rest from the engine.
+    `drifts`: result of `owned_drifts`; None if the comparison could not be made."""
     out: list[Refusal] = []
     if spec.mode != "paper":
-        # F9 point 5 (permissions, IP, solde, politique de sortie) : avec la promotion, M7.
+        # F9 point 5 (permissions, IP, balance, exit policy): with promotion, M7.
         out.append(Refusal(LIVE, "Aucune promotion en live n'existe encore : entrées refusées."))
-    # F9 point 4 (kill switch inactif, état de risque à jour) : avec le Risk service, M3.
+    # F9 point 4 (kill switch inactive, risk state up to date): with the Risk service, M3.
     if status is None or status.state == "unknown":
         out.append(Refusal(UNKNOWN, "L'état observé est inconnu."))
     else:
@@ -109,9 +109,9 @@ def command_refusals(
     now: datetime,
     stale_after_s: float,
 ) -> tuple[Refusal, ...]:
-    """Motifs de refus d'envoyer une commande. Vide pour tout ce qui n'augmente pas le risque,
-    quelles que soient les autres entrées (I4). `entries` : `entry_refusals`, exigé pour
-    `resume_entries` (None : vérification non faite, donc refus)."""
+    """Reasons for refusing to send a command. Empty for everything that does not increase risk,
+    whatever the other inputs (I4). `entries`: `entry_refusals`, required for
+    `resume_entries` (None: verification not done, hence refusal)."""
     if command_type not in GATED:
         return ()
     if mode != "paper":

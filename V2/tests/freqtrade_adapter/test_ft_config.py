@@ -105,7 +105,7 @@ def test_invalid_pairs_are_rejected(pairs: list[str]) -> None:
 
 @given(st.decimals(allow_nan=True, allow_infinity=True))
 def test_a_decimal_is_written_without_loss_or_rejected(d: Decimal) -> None:
-    """Le seul `float()` du paquet : le texte écrit redonne exactement le décimal, sinon refus."""
+    """The only `float()` of the package: the text written round-trips to the exact decimal."""
     try:
         text = ftconfig._to_json({"v": d})
     except ValueError:
@@ -135,7 +135,7 @@ def owner(cfg_keys: Any, leaf: str) -> str | None:
 
 @given(specs())
 def test_every_key_written_to_the_file_is_owned(spec) -> None:  # type: ignore[no-untyped-def]
-    """I10 : rien n'est écrit dans la configuration du moteur hors de l'empreinte."""
+    """I10 : nothing is written to the engine configuration outside the fingerprint."""
     cfg = render_config(spec)
     for leaf in leaves(json.loads(config_file(spec))):
         assert owner(cfg.values, leaf), f"clé écrite mais non possédée : {leaf}"
@@ -173,7 +173,7 @@ def test_changing_a_written_key_changes_the_hash(  # type: ignore[no-untyped-def
     same_hash = config_hash(before.values, exclude=before.mode_keys) == config_hash(
         after.values, exclude=after.mode_keys
     )
-    assert same_hash is (key in before.mode_keys), leaf  # seules les clés de mode y échappent
+    assert same_hash is (key in before.mode_keys), leaf  # only the mode keys escape it
 
 
 def test_platform_execution_setting_is_visible_and_in_the_fingerprint() -> None:

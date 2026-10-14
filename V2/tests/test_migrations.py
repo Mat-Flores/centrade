@@ -1,4 +1,4 @@
-"""Migration initiale : base vide -> head -> base, et propriétés du schéma."""
+"""Initial migration: empty database -> head -> base, and schema properties."""
 
 import asyncio
 from collections.abc import Callable
@@ -45,7 +45,7 @@ def test_migration_head_hypertable_and_downgrade(
 
     command.downgrade(cfg, "base")
     assert {r[0] for r in asyncio.run(_rows(url, tables))} == {"alembic_version"}
-    command.upgrade(cfg, "head")  # re-montable après un downgrade
+    command.upgrade(cfg, "head")  # can be upgraded again after a downgrade
 
 
 async def _instance(s: AsyncSession) -> Any:
@@ -103,7 +103,7 @@ def test_downgrade_0003_with_two_positions_on_the_same_instrument(
     ):
         asyncio.run(_rows(url, sql))
 
-    command.downgrade(cfg, "0002")  # les projections sont dérivées : vidées, puis reconstruites
+    command.downgrade(cfg, "0002")  # projections are derived: emptied, then rebuilt
 
     assert asyncio.run(_rows(url, "SELECT count(*) FROM positions")) == [(0,)]
     constraints = {
@@ -127,7 +127,7 @@ def test_migration_0005_upgrade_downgrade_and_m1_data(
                            "SELECT gen_random_uuid(), id, 'i-m1', 'paper', 'stopped' "
                            "FROM engines LIMIT 1"))  # fmt: skip
 
-    command.upgrade(cfg, "0005")  # les données de M1 survivent
+    command.upgrade(cfg, "0005")  # M1 data survives
     assert asyncio.run(_rows(url, "SELECT name FROM instances")) == [("i-m1",)]
     tables = "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
     assert {"accounts", "secrets", "strategies", "strategy_versions", "trades",
@@ -169,7 +169,7 @@ async def test_strategy_versions_are_immutable_except_status(
         async with session_factory() as s:
             with pytest.raises(DBAPIError, match="immuables"):
                 await s.execute(text(sql), {"i": vid})
-    async with session_factory() as s, s.begin():  # le statut reste modifiable
+    async with session_factory() as s, s.begin():  # the status remains modifiable
         await s.execute(
             text("UPDATE strategy_versions SET status = 'approved' WHERE id = :i"), {"i": vid}
         )

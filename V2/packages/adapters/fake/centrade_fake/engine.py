@@ -1,8 +1,8 @@
-"""FakeEngine : implémente tout le contrat de `centrade_core.engine`, en mémoire.
+"""FakeEngine: implements the whole `centrade_core.engine` contract, in memory.
 
-Aucune stratégie : des événements arbitraires, pilotés par `step()` (horloge et graine injectées).
-Moteur injoignable (modes `silent` et `crash`) : `status()` et toute commande lèvent
-`EngineUnreachable` ; l'appelant utilise `observe_status()`, qui rend `unknown`, jamais `running`.
+No strategy: arbitrary events, driven by `step()` (clock and seed injected).
+Unreachable engine (`silent` and `crash` modes): `status()` and every command raise
+`EngineUnreachable`; the caller uses `observe_status()`, which returns `unknown`, never `running`.
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ from centrade_core.events import (
 
 ENGINE = "fake"
 SYMBOL = "crypto:fake:BTC/USDT"
-# Causes d'événement -> énumération de F10 (la liquidation d'urgence est une sortie manuelle ici).
+# Event causes -> F10 enumeration (emergency liquidation is a manual exit here).
 _F10_CAUSE = {
     "manual": "manual",
     "flatten": "manual",
@@ -60,7 +60,7 @@ _F10_CAUSE = {
     "take_profit": "take_profit",
     "signal": "signal",
 }
-SLOW_LAG = timedelta(seconds=60)  # `slow` : les relevés arrivent vieillis, donc périmés (I1)
+SLOW_LAG = timedelta(seconds=60)  # `slow`: snapshots arrive aged, hence stale (I1)
 
 
 class Failure(StrEnum):
@@ -80,12 +80,12 @@ class Failure(StrEnum):
 class _Inst:
     spec: InstanceSpec
     config: dict[str, str]
-    state: ObservedState = "exits_only"  # démarre toujours en sorties seules
+    state: ObservedState = "exits_only"  # always starts in exits-only
     seq: int = 0
     realized: Decimal = Decimal(0)
     outbox: list[CanonicalEvent] = field(default_factory=list)
     positions: dict[str, Position] = field(default_factory=dict)
-    orders: dict[str, Order] = field(default_factory=dict)  # ordres ouverts seulement
+    orders: dict[str, Order] = field(default_factory=dict)  # open orders only
     decisions: dict[str, UUID | None] = field(default_factory=dict)
     stops: dict[str, Stop] = field(default_factory=dict)
     closed: list[ClosedTrade] = field(default_factory=list)
@@ -100,14 +100,14 @@ class FakeEngine:
         new_id: Callable[[], UUID],
         allow_failure_injection: bool = False,
     ) -> None:
-        # Faux par défaut : hors test, les paramètres d'une instance ne simulent aucune panne.
+        # False by default: outside tests, an instance's parameters simulate no failure.
         self._allow_failure_injection = allow_failure_injection
         self._clock = clock
-        self._rng = random.Random(seed)  # noqa: S311 - simulation, pas de cryptographie
+        self._rng = random.Random(seed)  # noqa: S311 - simulation, no cryptography
         self._new_id = new_id
         self._insts: dict[UUID, _Inst] = {}
 
-    # --- pilotage de test -------------------------------------------------------------
+    # --- test driving -----------------------------------------------------------------
     def set_failure(self, ref: InstanceRef, mode: Failure, on: bool = True) -> None:
         inst = self._get(ref)
         if on:
@@ -115,10 +115,10 @@ class FakeEngine:
             if mode is Failure.CRASH:
                 inst.state = "error"
         else:
-            inst.failures.discard(mode)  # après un plantage : `start()` relance en sorties seules
+            inst.failures.discard(mode)  # after a crash: `start()` restarts in exits-only
 
     def step(self, ref: InstanceRef) -> None:
-        """Avance d'un pas déterministe : au plus quelques événements. Sans effet si injoignable."""
+        """Advances by one deterministic step: a few events at most. No effect if unreachable."""
         inst = self._get(ref)
         if inst.failures & {Failure.SILENT, Failure.CRASH} or inst.state in ("stopped", "error"):
             return
@@ -143,7 +143,7 @@ class FakeEngine:
                 PnlSnapshot(currency="USDT", realized=inst.realized, unrealized=Decimal(0)),
             )
 
-    # --- contrat ----------------------------------------------------------------------
+    # --- contract ---------------------------------------------------------------------
     def capabilities(self) -> Capabilities:
         return Capabilities(
             asset_classes=("crypto",),
@@ -169,7 +169,7 @@ class FakeEngine:
         return ValidationResult(ok=not errors, errors=errors)
 
     def check_source(self, manifest: Manifest, source: str) -> ValidationResult:
-        return ValidationResult(ok=True)  # le faux moteur n'exécute aucun code
+        return ValidationResult(ok=True)  # the fake engine runs no code
 
     def render_config(self, spec: InstanceSpec) -> EngineConfig:
         m = spec.manifest
@@ -189,7 +189,7 @@ class FakeEngine:
     async def deploy(self, spec: InstanceSpec) -> InstanceRef:
         ref = InstanceRef(engine=ENGINE, instance_id=spec.instance_id)
         if spec.instance_id not in self._insts:  # idempotent
-            # `params["failures"]` : modes de panne dès le déploiement (simulation sans route).
+            # `params["failures"]`: failure modes from deployment (simulation without a route).
             names = spec.params.get("failures", ())
             if names and not self._allow_failure_injection:
                 raise CommandRejected("injection de pannes non autorisée sur ce déploiement")
@@ -251,7 +251,7 @@ class FakeEngine:
         values = dict(inst.config)
         if Failure.DRIFT in inst.failures:
             values["max_open_positions"] = "999"
-        dep = inst.spec.deployment  # le simulateur « tourne » ce qu'on lui a déployé
+        dep = inst.spec.deployment  # the simulator "runs" what was deployed to it
         return EffectiveConfig(
             values=values,
             observed_at=self._observed_at(inst),
@@ -281,7 +281,7 @@ class FakeEngine:
         )
 
     async def events(self, ref: InstanceRef) -> AsyncIterator[CanonicalEvent]:
-        """Vide la boîte d'envoi de l'instance (flux fini) ; rappeler après `step()`."""
+        """Empties the instance's outbox (finite stream); call again after `step()`."""
         inst = self._live(ref)
         batch, inst.outbox = inst.outbox, []
         for ev in batch:
@@ -290,7 +290,7 @@ class FakeEngine:
     async def backtest(self, spec: BacktestSpec) -> BacktestResult:
         return BacktestResult(ok=True, trades=0)
 
-    # --- interne ----------------------------------------------------------------------
+    # --- internal ---------------------------------------------------------------------
     def _get(self, ref: InstanceRef) -> _Inst:
         try:
             return self._insts[ref.instance_id]
@@ -308,7 +308,7 @@ class FakeEngine:
         return now - SLOW_LAG if Failure.SLOW in inst.failures else now
 
     def _emit(self, inst: _Inst, type_: EventType, payload: Payload) -> None:
-        inst.seq += 1  # la séquence est consommée même si l'événement est perdu (trou)
+        inst.seq += 1  # the sequence is consumed even if the event is lost (gap)
         m = inst.spec.manifest
         ev = CanonicalEvent(
             id=self._new_id(),
@@ -433,7 +433,7 @@ class FakeEngine:
     def _close(self, inst: _Inst, pos: Position, cause: ExitCause) -> None:
         del inst.positions[pos.position_id]
         stop = inst.stops.pop(pos.position_id, None)
-        # Sortie au prix du stop, sinon un cran au-dessus de l'entrée : pnl et frais jamais nuls.
+        # Exit at the stop price, otherwise one tick above the entry: pnl and fees never zero.
         exit_price = pos.entry_price * Decimal("1.01")
         if cause == "stop" and stop and stop.price is not None:
             exit_price = stop.price

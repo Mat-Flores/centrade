@@ -1,6 +1,6 @@
-"""Pagination par curseur opaque, du plus récent au plus ancien.
+"""Opaque-cursor pagination, from most recent to oldest.
 
-Le client repasse `next_cursor` tel quel. Un curseur illisible vaut 422, jamais une liste vide.
+The client passes `next_cursor` back as is. An unreadable cursor is a 422, never an empty list.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ from pydantic import AwareDatetime, BaseModel
 
 class Page[T](BaseModel):
     items: list[T]
-    next_cursor: str | None  # à repasser tel quel ; None : fin de la liste
+    next_cursor: str | None  # pass back as is; None: end of the list
     server_time: AwareDatetime
 
 
@@ -35,7 +35,7 @@ def decode_cursor(cursor: str) -> tuple[str, str]:
 
 
 def page_args(cursor: str | None) -> tuple[datetime, UUID] | None:
-    """Curseur d'une liste triée par (date, identifiant) ; None : première page."""
+    """Cursor of a list sorted by (date, identifier); None: first page."""
     if cursor is None:
         return None
     head, ident = decode_cursor(cursor)

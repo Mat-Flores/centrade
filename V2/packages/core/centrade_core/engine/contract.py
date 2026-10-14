@@ -1,4 +1,4 @@
-"""Protocol EngineAdapter (SPEC §7), asynchrone ; les commandes sont idempotentes."""
+"""EngineAdapter Protocol (SPEC §7), asynchronous; commands are idempotent."""
 
 from __future__ import annotations
 
@@ -26,20 +26,20 @@ from centrade_core.engine.types import (
     ValidationResult,
 )
 
-if TYPE_CHECKING:  # events importe engine.types : évite le cycle
+if TYPE_CHECKING:  # events imports engine.types: avoids the cycle
     from centrade_core.events import CanonicalEvent
 
 
 class EngineUnreachable(Exception):
-    """Le moteur ne répond pas (silence, plantage, délai). L'appelant en déduit `unknown`."""
+    """The engine does not answer (silence, crash, timeout). The caller infers `unknown`."""
 
 
 class CommandRejected(Exception):
-    """Commande impossible dans l'état actuel (ex. reprendre les entrées d'une instance arrêtée)."""
+    """Command impossible in the current state (e.g. resume the entries of a stopped instance)."""
 
 
 class StaticChecks(Protocol):
-    """Contrôles purs (ni réseau ni Docker) : le registre les exécute à l'écriture d'une version."""
+    """Pure checks (no network, no Docker): the registry runs them when a version is written."""
 
     def validate(self, manifest: Manifest, params: dict[str, Any]) -> ValidationResult: ...
     def check_source(self, manifest: Manifest, source: str) -> ValidationResult: ...
@@ -48,8 +48,8 @@ class StaticChecks(Protocol):
 class EngineAdapter(StaticChecks, Protocol):
     def capabilities(self) -> Capabilities: ...
     def render_config(self, spec: InstanceSpec) -> EngineConfig: ...  # pure
-    async def deploy(self, spec: InstanceSpec) -> InstanceRef: ...  # sorties seules
-    async def start(self, ref: InstanceRef) -> None: ...  # relance, sorties seules
+    async def deploy(self, spec: InstanceSpec) -> InstanceRef: ...  # exits-only
+    async def start(self, ref: InstanceRef) -> None: ...  # restart, exits-only
     async def stop(self, ref: InstanceRef) -> None: ...
     async def pause_entries(self, ref: InstanceRef) -> None: ...
     async def resume_entries(self, ref: InstanceRef) -> None: ...
@@ -57,14 +57,14 @@ class EngineAdapter(StaticChecks, Protocol):
     async def close_position(self, ref: InstanceRef, position_id: str) -> None: ...
     async def cancel_entry_order(self, ref: InstanceRef, order_id: str) -> None: ...
     async def status(self, ref: InstanceRef) -> InstanceStatus: ...
-    # Mode effectif (I3) : `status().mode`, relu dans le moteur, jamais recopié de la demande.
+    # Effective mode (I3): `status().mode`, re-read from the engine, never copied from the request.
     async def effective_config(self, ref: InstanceRef) -> EffectiveConfig: ...
 
     def config_drift(  # pure
         self, generated: EngineConfig, effective: EffectiveConfig
     ) -> tuple[Drift, ...]:
-        """Écarts entre la relecture et la configuration générée, sur les clés relues. Le worker
-        ne compare rien lui-même : il ajoute seulement les clés manquantes (`owned_drifts`)."""
+        """Differences between the re-read and the generated configuration, on the re-read keys.
+        The worker compares nothing itself: it only adds the missing keys (`owned_drifts`)."""
         ...
 
     async def snapshot(self, ref: InstanceRef) -> Snapshot: ...
@@ -73,41 +73,41 @@ class EngineAdapter(StaticChecks, Protocol):
 
 
 class InstanceRuntime(Protocol):
-    """Ce qu'un adaptateur à conteneurs demande au worker : fichiers et identifiants de l'API
-    native d'une instance. Les identifiants sont des jetons aléatoires propres à l'instance,
-    stockés par le SecretStore (usage `engine_api`) ; aucune clé de venue ne passe par ici."""
+    """What a container-based adapter asks of the worker: files and native API credentials
+    of an instance. The credentials are random tokens specific to the instance,
+    stored by the SecretStore (usage `engine_api`); no venue key goes through here."""
 
     def container_user(self) -> str:
-        """`uid:gid` sous lequel lancer le conteneur pour qu'il lise ses fichiers (0400)."""
+        """`uid:gid` to run the container under so that it reads its files (0400)."""
         ...
 
     async def issue_credentials(
         self, instance_id: UUID, names: tuple[str, ...]
     ) -> dict[str, SecretStr]:
-        """À chaque déploiement : un jeton neuf par nom ; les précédents sont détruits."""
+        """At every deployment: a new token per name; the previous ones are destroyed."""
         ...
 
     async def credentials(self, instance_id: UUID) -> dict[str, SecretStr]:
-        """Ceux du dernier déploiement (après un redémarrage du worker). `LookupError` sinon."""
+        """Those of the last deployment (after a worker restart). `LookupError` otherwise."""
         ...
 
     async def write_files(
         self, instance_id: UUID, files: Mapping[str, str], credentials: Mapping[str, Any]
     ) -> Path:
-        """Écrit `files` (nom simple -> texte) et le fichier d'identifiants (JSON de
-        `credentials`, forme choisie par l'adaptateur) dans le sous-dossier de l'instance.
-        Rend ce dossier, à monter en lecture seule."""
+        """Writes `files` (plain name -> text) and the credentials file (JSON of
+        `credentials`, shape chosen by the adapter) into the instance's subfolder.
+        Returns that folder, to be mounted read-only."""
         ...
 
     async def cleanup(self, instance_id: UUID) -> None:
-        """À l'arrêt : retire le fichier d'identifiants. Sans effet s'il n'existe pas."""
+        """On stop: removes the credentials file. No effect if it does not exist."""
         ...
 
 
 def owned_drifts(
     generated: EngineConfig, effective: EffectiveConfig, reported: tuple[Drift, ...]
 ) -> tuple[Drift, ...]:
-    """Écarts de l'adaptateur, plus toute clé possédée ni relue ni déclarée non relisible."""
+    """Adapter drifts, plus any owned key neither re-read nor declared non-re-readable."""
     seen = {d.key for d in reported}
     missing = tuple(
         Drift(key=k, expected=v, observed=None)
@@ -123,8 +123,8 @@ async def observe_status(
     clock: Callable[[], datetime] = lambda: datetime.now(UTC),
     timeout_s: float | None = None,
 ) -> InstanceStatus:
-    """Moteur injoignable -> `unknown`, jamais `running` (I1, I5). Un moteur muet lève
-    EngineUnreachable, ou ne répond pas dans le délai ; les deux donnent un statut inconnu."""
+    """Engine unreachable -> `unknown`, never `running` (I1, I5). A silent engine raises
+    EngineUnreachable, or does not answer within the delay; both give an unknown status."""
     try:
         async with asyncio.timeout(timeout_s):
             return await adapter.status(ref)

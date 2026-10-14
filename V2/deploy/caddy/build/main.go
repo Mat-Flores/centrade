@@ -1,5 +1,5 @@
-// Caddy standard, recompilé avec une chaîne Go et des dépendances que nous épinglons
-// (go.mod, go.sum) : même assemblage que celui de l'image officielle.
+// Standard Caddy, recompiled with a Go toolchain and dependencies that we pin
+// (go.mod, go.sum): same assembly as the official image's.
 package main
 
 import (

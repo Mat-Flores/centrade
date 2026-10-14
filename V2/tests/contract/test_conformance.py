@@ -1,4 +1,4 @@
-"""Suite de conformité du contrat moteur (SPEC §7), exécutée contre chaque adaptateur."""
+"""Engine contract conformance suite (SPEC §7), run against each adapter."""
 
 from __future__ import annotations
 
@@ -23,7 +23,7 @@ async def test_deploy_boots_exits_only_with_matching_config(harness: Harness) ->
     assert (await harness.adapter.status(ref)).state == "exits_only"
     eff = await harness.adapter.effective_config(ref)
     gen = harness.adapter.render_config(spec)
-    # Une clé que le moteur ne sait pas faire relire est déclarée, pas comparée (F9).
+    # A key the engine cannot have re-read is declared, not compared (F9).
     assert eff.values == {k: v for k, v in gen.values.items() if k not in gen.unreadable}
 
 
@@ -78,7 +78,7 @@ async def test_flatten_leaves_no_position(harness: Harness) -> None:
         if (await harness.adapter.snapshot(ref)).positions:
             break
     assert (await harness.adapter.snapshot(ref)).positions, "scénario sans position"
-    await harness.adapter.pause_entries(ref)  # flatten reste possible en sorties seules
+    await harness.adapter.pause_entries(ref)  # flatten remains possible in exits-only
     await harness.adapter.flatten(ref)
     snap = await harness.adapter.snapshot(ref)
     assert snap.positions == () and snap.orders == () and snap.stops == ()
@@ -117,7 +117,7 @@ async def test_config_drift_is_empty_after_deploy_and_names_the_changed_key(
     ref = await harness.adapter.deploy(spec)
     eff = await harness.adapter.effective_config(ref)
     assert harness.adapter.config_drift(generated, eff) == ()
-    assert owned_drifts(generated, eff, ()) == ()  # chaque clé possédée est relue ou déclarée
+    assert owned_drifts(generated, eff, ()) == ()  # each owned key is re-read or declared
     harness.make_drift(ref)
     eff = await harness.adapter.effective_config(ref)
     drifts = owned_drifts(generated, eff, harness.adapter.config_drift(generated, eff))
@@ -129,7 +129,7 @@ async def test_declared_keys_are_owned_keys(harness: Harness) -> None:
     generated = harness.adapter.render_config(harness.spec())
     assert generated.unreadable <= set(generated.values)
     assert generated.mode_keys <= set(generated.values)
-    # Le mode effectif se relit dans le statut, jamais dans la demande.
+    # The effective mode is re-read from the status, never from the request.
     ref = await harness.adapter.deploy(harness.spec())
     assert (await harness.adapter.status(ref)).mode == "paper"
 

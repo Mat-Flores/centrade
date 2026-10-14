@@ -1,4 +1,4 @@
-"""Primitives : argon2id, AES-256-GCM lié à l'utilisateur, TOTP, codes de récupération, débit."""
+"""Primitives: argon2id, user-bound AES-256-GCM, TOTP, recovery codes, rate."""
 
 from datetime import UTC, datetime, timedelta
 
@@ -9,9 +9,9 @@ from centrade_core.ids import uuid7
 from cryptography.exceptions import InvalidTag
 
 KEY = bytes(range(32))
-SECRET = "JBSWY3DPEHPK3PXP"  # noqa: S105  # exemple public de la RFC, pas un secret
+SECRET = "JBSWY3DPEHPK3PXP"  # noqa: S105  # public example from the RFC, not a secret
 NOW = datetime(2026, 10, 10, 12, 0, 15, tzinfo=UTC)
-FULLWIDTH = "".join(chr(0xFF10 + d) for d in range(1, 7))  # chiffres pleine chasse
+FULLWIDTH = "".join(chr(0xFF10 + d) for d in range(1, 7))  # full-width digits
 
 
 def test_password_is_hashed_with_argon2id_and_verified() -> None:
@@ -51,7 +51,7 @@ def test_totp_secret_is_encrypted_with_unique_nonce_and_bound_to_user() -> None:
         )
         == SECRET
     )
-    # Un chiffré recopié sur un autre compte, une autre clé ou un octet altéré : refus.
+    # A ciphertext copied to another account, another key or with an altered byte: refused.
     for kwargs in (
         {"master_key": KEY, "user_id": other, "nonce": nonce, "ciphertext": ciphertext},
         {"master_key": bytes(32), "user_id": user, "nonce": nonce, "ciphertext": ciphertext},
@@ -91,7 +91,7 @@ def test_recovery_codes_are_random_and_hashed() -> None:
     codes = security.new_recovery_codes()
 
     assert len(codes) == len(set(codes)) == 10
-    assert all(len(c.replace("-", "")) == 16 for c in codes)  # 80 bits : hors de portée hors ligne
+    assert all(len(c.replace("-", "")) == 16 for c in codes)  # 80 bits: out of reach offline
     assert codes != security.new_recovery_codes()
     hashed = security.recovery_code_hash(codes[0])
     assert codes[0] not in hashed and len(hashed) == 64
@@ -110,9 +110,9 @@ def test_session_tokens_are_random_and_hashed() -> None:
 def test_lockout_duration_is_progressive_and_capped() -> None:
     minutes = [throttle.lock_duration(n) for n in range(4, 11)]
 
-    assert minutes[0] is None  # pas avant le 5e échec
+    assert minutes[0] is None  # not before the 5th failure
     assert minutes[1:] == [timedelta(minutes=m) for m in (1, 2, 4, 8, 15, 15)]
-    assert throttle.lock_duration(10**9) == timedelta(minutes=15)  # ni débordement ni verrou infini
+    assert throttle.lock_duration(10**9) == timedelta(minutes=15)  # no overflow, no endless lock
 
 
 def test_rate_limiter_uses_a_fixed_window_per_key() -> None:
@@ -121,8 +121,8 @@ def test_rate_limiter_uses_a_fixed_window_per_key() -> None:
     assert limiter.retry_after("a", NOW) is None
     assert limiter.retry_after("a", NOW + timedelta(seconds=10)) is None
     assert limiter.retry_after("a", NOW + timedelta(seconds=20)) == 40
-    assert limiter.retry_after("b", NOW + timedelta(seconds=20)) is None  # clés indépendantes
-    assert limiter.retry_after("a", NOW + timedelta(seconds=60)) is None  # nouvelle fenêtre
+    assert limiter.retry_after("b", NOW + timedelta(seconds=20)) is None  # independent keys
+    assert limiter.retry_after("a", NOW + timedelta(seconds=60)) is None  # new window
 
 
 def test_rate_limiter_does_not_grow_without_bound() -> None:

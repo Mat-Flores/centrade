@@ -1,19 +1,19 @@
-"""Worker : porte les adaptateurs, publie leurs événements, les ingère, tient les projections.
+"""Worker: carries the adapters, publishes their events, ingests them, maintains the projections.
 
-Un tour (`run_once`) : relève les commandes, puis lance UNE tâche par instance, en parallèle :
-envoi de ses commandes (ce qui réduit le risque d'abord) -> ses événements (bus, ingestion) ->
-son relevé (état + instantané) -> vérification de F9 -> envoi de sa pause d'office. Puis :
-vérification des commandes, expiration, battement. Une instance lente, muette ou en erreur ne
-retarde aucune autre (I4, X14) : le tour n'attend ses tâches que `tick_wait_s`, la tâche
-inachevée continue et son instance n'en reçoit pas d'autre tant qu'elle dure (une commande à la
-fois par instance, F9). Le battement ne dépend d'aucun moteur. Aucun sommeil ici : `run` dort
-entre deux tours, les tests appellent `run_once` avec une horloge injectée.
+One round (`run_once`): claims the commands, then launches ONE task per instance, in parallel:
+sending its commands (what reduces risk first) -> its events (bus, ingestion) ->
+its snapshot (state + snapshot) -> F9 verification -> sending its automatic pause. Then:
+command verification, expiry, heartbeat. A slow, silent or failing instance delays no
+other (I4, X14): the round waits for its tasks only `tick_wait_s`, the unfinished task
+continues and its instance gets no other while it lasts (one command at a time per
+instance, F9). The heartbeat depends on no engine. No sleep here: `run` sleeps between
+rounds, tests call `run_once` with an injected clock.
 
-Base : chaque écriture ouvre sa propre session, jamais partagée entre tâches ni tenue pendant
-un appel à un moteur ; le pool (5 + 10 connexions) fait donc lui-même la file au-delà.
+Database: each write opens its own session, never shared between tasks nor held during
+an engine call; the pool (5 + 10 connections) therefore queues beyond that itself.
 
-Indépendance (I9) : au démarrage, les conteneurs en marche sont rattachés sans être redémarrés
-et sans qu'aucune commande parte vers un moteur ; à l'arrêt, le worker ne touche à rien.
+Independence (I9): at startup, running containers are attached without being restarted
+and without any command going to an engine; at shutdown, the worker touches nothing.
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ _Log = structlog.stdlib.BoundLogger
 
 
 class Containers(Protocol):
-    """Ce que le worker demande au runner : lire ce qui tourne. Rien d'autre (I9)."""
+    """What the worker asks of the runner: read what runs. Nothing else (I9)."""
 
     async def adopt(self) -> list[RunnerContainer]: ...
     async def inspect(self, instance_id: UUID) -> RunnerContainer | None: ...
@@ -61,24 +61,24 @@ class Containers(Protocol):
 @dataclass(frozen=True)
 class WorkerConfig:
     interval_s: float = 1.0
-    # Un moteur qui ne répond pas dans ce délai est muet : état `unknown`.
+    # An engine that does not answer within this delay is silent: `unknown` state.
     engine_silent_after_s: float = 30.0
     heartbeat_ttl_s: int = 15
     batch: int = 100
-    # Une instance inchangée est quand même notifiée à cette cadence : sa date d'observation avance.
+    # An unchanged instance is still notified at this cadence: its observation date advances.
     refresh_notify_s: float = 10.0
-    # Fraîcheur exigée du relevé fait juste avant d'envoyer ce qui augmente le risque (I5).
+    # Freshness required of the snapshot taken just before sending what increases risk (I5).
     stale_after_s: float = 30.0
-    # Cadence de la vérification de F9 hors démarrage (§13 : dérive et écart de mode détectés
-    # en 60 s ; la moitié laisse la marge d'un tour et d'une relecture).
+    # Cadence of the F9 verification outside startup (§13: drift and mode mismatch detected
+    # within 60 s; half leaves the margin of one round and one re-read).
     verify_every_s: float = 30.0
-    # Échéance de la pause envoyée d'office après un écart (réglage `deadline_pause_entries_s`).
+    # Deadline of the pause sent automatically after a drift (setting `deadline_pause_entries_s`).
     pause_deadline_s: float = 10.0
-    # Attente des tâches d'instance par tour. Au-delà, le tour se termine sans elles : battement
-    # (TTL ci-dessus) et pause d'une autre instance (10 s, §13) n'attendent pas un moteur lent.
+    # Wait for instance tasks per round. Beyond it, the round ends without them: heartbeat
+    # (TTL above) and another instance's pause (10 s, §13) do not wait for a slow engine.
     tick_wait_s: float = 2.0
-    # Moteur `running` dont la configuration n'a pas pu être relue depuis ce délai : alerte
-    # critique et pause (§13 : dérive détectée en 60 s).
+    # `running` engine whose configuration could not be re-read since this delay: critical
+    # alert and pause (§13: drift detected within 60 s).
     unreadable_after_s: float = 60.0
 
 
@@ -91,7 +91,7 @@ class Worker:
         redis: Redis,
         bus: Bus,
         clock: Callable[[], datetime] = lambda: datetime.now(UTC),
-        config: WorkerConfig = WorkerConfig(),  # noqa: B008 - dataclass figée
+        config: WorkerConfig = WorkerConfig(),  # noqa: B008 - frozen dataclass
         runner: Containers | None = None,
         simulated: frozenset[str] = frozenset(),
         pinned_digests: Mapping[str, str] | None = None,
@@ -104,17 +104,17 @@ class Worker:
         self._clock = clock
         self._cfg = config
         self._runner = runner
-        # Moteurs tenus en mémoire par ce processus : seuls redéployés au démarrage.
+        # Engines held in memory by this process: only these are redeployed at startup.
         self._simulated = simulated
         self._refs: dict[UUID, InstanceRef] = {}
         self._anomalies: dict[UUID, str] = {}
-        self._notes: list[tuple[str, UUID]] = []  # changements validés, notifiés en fin de tour
+        self._notes: list[tuple[str, UUID]] = []  # validated changes, notified at round end
         self._last_sig: dict[UUID, tuple[tuple[object, ...], datetime]] = {}
-        # Retire le fichier d'identifiants d'une instance (`InstanceRuntime.cleanup`).
+        # Removes an instance's credentials file (`InstanceRuntime.cleanup`).
         self._cleanup = cleanup
-        self._cleaned: set[UUID] = set()  # arrêts observés déjà nettoyés
+        self._cleaned: set[UUID] = set()  # observed stops already cleaned up
         self._tasks: dict[UUID, asyncio.Task[tuple[Observation | None, list[Exception]]]] = {}
-        # Un seul lecteur du bus à la fois : `read` reprend tout message non acquitté.
+        # Only one bus reader at a time: `read` resumes any unacknowledged message.
         self._ingest_lock = asyncio.Lock()
         self._ingest_error: Exception | None = None
 
@@ -144,15 +144,15 @@ class Worker:
         )
 
     def register(self, ref: InstanceRef) -> None:
-        """L'instance (déjà présente dans `instances`) est suivie à partir du prochain tour."""
+        """The instance (already present in `instances`) is followed from the next round."""
         if ref.engine not in self._adapters:
             raise KeyError(f"aucun adaptateur pour le moteur {ref.engine!r}")
         self._refs[ref.instance_id] = ref
 
     async def load_instances(self) -> None:
-        """Au démarrage : suit les instances de la base et rattache les conteneurs en marche.
-        Aucun appel à un moteur, sauf pour les moteurs simulés, qui ne survivent pas au
-        processus et sont redéployés en sorties seules."""
+        """At startup: follows the database's instances and attaches the running containers.
+        No engine call, except for simulated engines, which do not survive the
+        process and are redeployed in exits-only."""
         async with self._sessions() as s:
             rows = (
                 await s.execute(
@@ -163,7 +163,7 @@ class Worker:
             try:
                 ref = InstanceRef(engine=kind, instance_id=inst.id)
                 if kind in self._simulated:
-                    # Même chemin qu'une commande `deploy` : l'empreinte est enregistrée (I10).
+                    # Same path as a `deploy` command: the fingerprint is recorded (I10).
                     ref = await self._adapters[kind].deploy(await self.guard.deployment(inst.id))
                 self.register(ref)
             except Exception:
@@ -172,18 +172,18 @@ class Worker:
             await self._adopt([inst for inst, _ in rows])
 
     async def _adopt(self, instances: list[Instance]) -> None:
-        """Étiquettes Docker contre la base (F9, §10 point 7). Lecture seule côté Docker : un
-        conteneur n'est ni démarré, ni arrêté, ni supprimé ici, orphelin compris."""
+        """Docker labels against the database (F9, §10 point 7). Read-only on the Docker side: a
+        container is neither started, nor stopped, nor removed here, orphans included."""
         assert self._runner is not None  # noqa: S101
         try:
             running = {c.instance_id: c for c in await self._runner.adopt()}
         except EngineUnreachable:
-            log.warning("adoption_failed")  # Docker injoignable : rien n'est conclu
+            log.warning("adoption_failed")  # Docker unreachable: nothing is concluded
             return
         known = {i.id: i for i in instances}
         alerts: list[UUID | None] = []
         async with self._sessions.begin() as s:
-            for iid, c in running.items():  # la ligne d'instance d'abord, l'audit ensuite
+            for iid, c in running.items():  # the instance row first, the audit after
                 if iid in known and known[iid].container_ref != c.container_id:
                     await s.execute(
                         update(Instance)
@@ -242,23 +242,23 @@ class Worker:
 
     async def run_once(self) -> None:
         tick_log = log.bind(correlation_id=str(uuid7()))
-        errors: list[Exception] = []  # étapes de la plateforme : sans elles, pas de battement
+        errors: list[Exception] = []  # platform steps: without them, no heartbeat
         self._ingest_error = None
 
         async def step(name: str, do: Callable[[], Awaitable[_T]]) -> _T | None:
             try:
                 return await do()
-            except Exception as exc:  # l'étape suivante a lieu quand même
+            except Exception as exc:  # the next step happens anyway
                 tick_log.exception("step_failed", step=name)
                 errors.append(exc)
                 return None
 
         try:
-            # Les commandes d'abord : ni le bus ni un lot d'événements ne retardent une pause.
-            # Seul ce qui augmente le risque peut périmer avant de partir.
+            # Commands first: neither the bus nor an event batch delays a pause.
+            # Only what increases risk can go stale before leaving.
             await step("expire_before_dispatch", lambda: self._commands.expire(("requested",)))
             claimed = await step("claim_commands", self._claim) or {}
-            # Bus en panne : aucune boîte d'envoi de moteur n'est vidée à ce tour.
+            # Bus down: no engine outbox is drained this round.
             before = len(errors)
             await step("bus", lambda: self._bus.ensure_group(EVENTS_STREAM))
             bus_ok = len(errors) == before
@@ -270,7 +270,7 @@ class Worker:
             if self._tasks:
                 await asyncio.wait(self._tasks.values(), timeout=self._cfg.tick_wait_s)
             observed: dict[UUID, Observation] = {}
-            failed: list[Exception] = []  # propres à une instance : visibles, sans effet ailleurs
+            failed: list[Exception] = []  # specific to one instance: visible, no effect elsewhere
             for iid, task in list(self._tasks.items()):
                 if not task.done():
                     tick_log.warning("instance_slow", instance_id=str(iid))
@@ -286,60 +286,60 @@ class Worker:
             await step("verification", lambda: self._commands.verify(observed))
             await step("expiration", self._commands.expire_all)
             if errors:
-                raise errors[0]  # tour incomplet : pas de battement, l'API voit un worker figé
+                raise errors[0]  # incomplete round: no heartbeat, the API sees a frozen worker
             await self._redis.set(
                 HEARTBEAT_KEY, self._clock().isoformat(), ex=self._cfg.heartbeat_ttl_s
             )
             if failed:
                 raise failed[0]
-        finally:  # ce qui est déjà validé en base est annoncé, même si la fin du tour échoue
+        finally:  # what is already committed is announced, even if the round end fails
             notes, self._notes = list(dict.fromkeys(self._notes)), []
             for kind, ident in notes:
                 await notify(self._redis, kind, ident)
 
     async def _claim(self) -> dict[UUID, list[_Claimed]]:
-        # Une instance dont la tâche dure encore garde ses commandes `requested` : une seule
-        # tâche envoie pour une instance, et aucune échéance ne court avant l'envoi (I4).
+        # An instance whose task is still running keeps its commands `requested`: a single
+        # task sends for an instance, and no deadline runs before sending (I4).
         return await self._commands.claim(skip=tuple(self._tasks))
 
     async def _instance(
         self, tick_log: _Log, iid: UUID, claimed: Sequence[_Claimed], bus_ok: bool
     ) -> tuple[Observation | None, list[Exception]]:
-        """Le tour d'UNE instance. Ne lève jamais : rend son relevé et ses erreurs."""
+        """ONE instance's round. Never raises: returns its snapshot and its errors."""
         instance_log = tick_log.bind(instance_id=str(iid))
         errors: list[Exception] = []
 
         async def step(name: str, do: Callable[[], Awaitable[_T]]) -> _T | None:
             try:
                 return await do()
-            except Exception as exc:  # l'étape suivante a lieu quand même
+            except Exception as exc:  # the next step happens anyway
                 instance_log.exception("step_failed", step=name)
                 errors.append(exc)
                 return None
 
-        if claimed:  # avant toute lecture : rien ne retarde une pause (I4)
+        if claimed:  # before any read: nothing delays a pause (I4)
             await step("dispatch", lambda: self._commands.send(claimed))
         obs: Observation | None = None
-        ref = self._refs.get(iid)  # un `deploy` vient peut-être de l'enregistrer
+        ref = self._refs.get(iid)  # a `deploy` may have just registered it
         if ref is not None:
-            # Un seul délai pour les événements et le relevé : muet => `unknown` en 30 s (§13).
+            # A single delay for events and snapshot: silent => `unknown` in 30 s (§13).
             deadline = asyncio.get_running_loop().time() + self._cfg.engine_silent_after_s
             if bus_ok:
                 await step("publication", lambda: self._publish_events(instance_log, ref, deadline))
-                await self._ingest(instance_log)  # avant le relevé, qui a le dernier mot
+                await self._ingest(instance_log)  # before the snapshot, which has the last word
             obs = await step("snapshot", lambda: self._resync(instance_log, ref, deadline))
             if obs is not None:
                 status = obs.status
                 if await step("f9_verification", lambda: self.guard.check(ref, status)) == ():
                     obs = replace(obs, conform=True)
                 await step("cleanup", lambda: self._clean_stopped(instance_log, iid, status.state))
-        if iid in self.guard.pause_requested:  # la pause d'office part dans le même tour
+        if iid in self.guard.pause_requested:  # the automatic pause leaves in the same round
             self.guard.pause_requested.discard(iid)
             await step("dispatch_pauses", lambda: self._commands.dispatch(only=iid))
         return obs, errors
 
     async def aclose(self) -> None:
-        """Abandonne les tâches d'instance en cours. Aucun moteur n'est touché (I9)."""
+        """Abandons in-progress instance tasks. No engine is touched (I9)."""
         tasks, self._tasks = list(self._tasks.values()), {}
         for t in tasks:
             t.cancel()
@@ -350,25 +350,25 @@ class Worker:
             try:
                 await self.run_once()
             except Exception:
-                log.exception("tick_failed")  # pas de battement : l'API voit un worker figé
+                log.exception("tick_failed")  # no heartbeat: the API sees a frozen worker
             with contextlib.suppress(TimeoutError):
                 await asyncio.wait_for(stop.wait(), self._cfg.interval_s)
         await self.aclose()
         log.info("clean_shutdown")
 
-    # --- étapes ---------------------------------------------------------------------------
+    # --- steps ----------------------------------------------------------------------------
     async def _publish_events(self, tick_log: _Log, ref: InstanceRef, deadline: float) -> None:
         try:
             async with asyncio.timeout_at(deadline):
                 async for ev in self._adapters[ref.engine].events(ref):
                     await self._bus.publish(EVENTS_STREAM, ev.model_dump_json())
         except (EngineUnreachable, CommandRejected, TimeoutError):
-            # Rien n'est inventé ; le relevé du tour dira `unknown`.
+            # Nothing is invented; the round's snapshot will say `unknown`.
             tick_log.warning("events_unavailable")
 
     async def _ingest(self, tick_log: _Log) -> None:
-        """Ingestion, par une tâche à la fois. Un échec arrête l'ingestion jusqu'au tour
-        suivant (le message non acquitté sera relivré) et prive ce tour de battement."""
+        """Ingestion, one task at a time. A failure stops ingestion until the next round
+        (the unacknowledged message will be redelivered) and deprives this round of a heartbeat."""
         async with self._ingest_lock:
             if self._ingest_error is not None:
                 return
@@ -385,7 +385,7 @@ class Worker:
                     ev = CanonicalEvent.model_validate_json(m.data)
                     res = await ingest(self._sessions, ev, self._clock())
                 except (ValidationError, IntegrityError):
-                    # Message inexploitable ou instance inconnue : le relivrer ne le réparerait pas.
+                    # Unusable message or unknown instance: redelivering it would not fix it.
                     tick_log.error("message_rejected", message_id=m.id)
                     await self._bus.ack(EVENTS_STREAM, m.id)
                     continue
@@ -400,7 +400,7 @@ class Worker:
                     new=res.new,
                     anomaly=res.anomaly,
                 )
-                await self._bus.ack(EVENTS_STREAM, m.id)  # après traitement réussi seulement
+                await self._bus.ack(EVENTS_STREAM, m.id)  # only after successful processing
 
     async def _resync(
         self, tick_log: _Log, ref: InstanceRef, deadline: float
@@ -412,8 +412,8 @@ class Worker:
                 status = await adapter.status(ref)
                 snap = await adapter.snapshot(ref)
         except Exception as exc:
-            # Aucun relevé : l'état est inconnu, quelle que soit la cause (I1). Un moteur qui ne
-            # connaît pas l'instance, ou dont l'adaptateur refuse le relevé, ne dit rien non plus.
+            # No snapshot: the state is unknown, whatever the cause (I1). An engine that does
+            # not know the instance, or whose adapter refuses the snapshot, says nothing either.
             async with self._sessions.begin() as s:
                 unknown = await mark_unknown(s, ref.instance_id, self._clock())
             if unknown.alert_id is not None:
@@ -427,12 +427,12 @@ class Worker:
             )
             if isinstance(exc, EngineUnreachable | CommandRejected | TimeoutError):
                 return None
-            raise  # erreur imprévue de l'adaptateur : elle reste visible
+            raise  # unexpected adapter error: it stays visible
         async with self._sessions.begin() as s:
             written = await apply_observation(s, ref.instance_id, status, snap)
         self._notes.extend(n for n in written if n[0] == "alert")
-        # Positions et ordres : annoncés quand le relevé change, puis à la cadence de l'instance
-        # (leur date d'observation avance) ; jamais à chaque tour.
+        # Positions and orders: announced when the snapshot changes, then at the instance's
+        # cadence (their observation date advances); never every round.
         sig = (status.state, status.mode, snap.positions, snap.orders, snap.stops, snap.closed)
         if self._note_instance(ref.instance_id, sig):
             self._notes.extend(n for n in written if n[0] != "alert")
@@ -440,9 +440,9 @@ class Worker:
         return Observation(status, snap)
 
     async def _clean_stopped(self, tick_log: _Log, iid: UUID, state: str) -> None:
-        """Arrêt observé sans `stop` commandé (plantage) : le fichier d'identifiants ne reste pas
-        sur le disque, il sera réécrit au prochain démarrage. Seulement si Docker confirme
-        qu'aucun conteneur ne tourne ni ne va être relancé ; au moindre doute, rien n'est retiré."""
+        """Observed stop without a commanded `stop` (crash): the credentials file does not stay
+        on disk, it will be rewritten at the next start. Only if Docker confirms that no
+        container is running or about to restart; at the slightest doubt, nothing is removed."""
         if state not in ("stopped", "error"):
             self._cleaned.discard(iid)
             return

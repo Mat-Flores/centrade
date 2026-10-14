@@ -1,10 +1,10 @@
-"""Trading : ordres, positions et trades en lecture ; fermeture et annulation d'entrée en commande.
+"""Trading: read-only orders, positions and trades; close and entry cancellation as commands.
 
-Aucune route ne crée d'ordre ni n'annule une sortie ou un stop (SPEC §8) : annuler une sortie
-augmente le risque, la plateforme ne le propose pas. Fermer et annuler une entrée réduisent le
-risque : commandes sans 2FA, jamais refusées pour un état observé inconnu ou périmé (I4).
-Argent et quantités en chaînes décimales, avec la devise ; chaque ligne porte le mode voulu et le
-mode observé (daté) de son instance pour que l'interface ne mélange jamais paper et live (§9).
+No route creates an order or cancels an exit or a stop (SPEC §8): cancelling an exit
+increases risk, the platform does not offer it. Closing and cancelling an entry reduce
+risk: commands without 2FA, never refused for an unknown or stale observed state (I4).
+Money and quantities as decimal strings, with the currency; each row carries the desired mode
+and the observed (dated) mode of its instance so that the interface never mixes paper and live (§9).
 """
 
 from __future__ import annotations

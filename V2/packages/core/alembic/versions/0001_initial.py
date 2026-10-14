@@ -1,4 +1,4 @@
-"""Tables de M1 : utilisateurs, sessions, moteurs, instances, commandes, événements, audit.
+"""M1 tables: users, sessions, engines, instances, commands, events, audit.
 
 Revision ID: 0001
 Revises:
@@ -105,8 +105,8 @@ def upgrade() -> None:
         _in("observed_mode", ("paper", "live"), "observed_mode"),
     )
     op.create_index("ix_instances_engine_id", "instances", ["engine_id"])
-    # Le mode d'une instance ne change jamais (I3) : on en crée une autre.
-    # asyncpg n'accepte qu'une commande par appel : un op.execute par instruction.
+    # An instance's mode never changes (I3): another one is created.
+    # asyncpg accepts only one command per call: one op.execute per statement.
     op.execute("""
         CREATE FUNCTION instances_mode_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
         BEGIN
@@ -174,7 +174,7 @@ def upgrade() -> None:
         sa.ForeignKeyConstraint(
             ["instance_id"], ["instances.id"], name="fk_events_instance_id_instances"
         ),
-        # Une hypertable n'accepte que des unicités qui contiennent la colonne de partition.
+        # A hypertable only accepts uniqueness constraints that contain the partition column.
         sa.UniqueConstraint("instance_id", "seq", "ts", name="uq_events_instance_id_seq_ts"),
     )
     op.execute("SELECT create_hypertable('events', by_range('ts'))")
@@ -258,7 +258,7 @@ def upgrade() -> None:
         sa.Column("prev_hash", sa.Text, nullable=False),
         sa.Column("row_hash", sa.Text, nullable=False),
         sa.UniqueConstraint("seq", name="uq_audit_log_seq"),
-        # Pas de fourche : deux lignes ne suivent pas la même, même si le verrou applicatif échoue.
+        # No fork: two rows do not follow the same one, even if the application lock fails.
         sa.UniqueConstraint("prev_hash", name="uq_audit_log_prev_hash"),
     )
     op.execute("""
@@ -274,7 +274,7 @@ def upgrade() -> None:
         "CREATE TRIGGER audit_log_no_truncate BEFORE TRUNCATE ON audit_log "
         "FOR EACH STATEMENT EXECUTE FUNCTION audit_log_append_only()"
     )
-    # Sans effet sur le propriétaire de la table ; utile dès qu'un rôle applicatif distinct existe.
+    # No effect on the table owner; useful as soon as a distinct application role exists.
     op.execute("REVOKE UPDATE, DELETE, TRUNCATE ON audit_log FROM PUBLIC")
 
 

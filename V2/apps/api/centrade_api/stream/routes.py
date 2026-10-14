@@ -1,11 +1,11 @@
-"""Flux temps réel (SSE) : battement, puis `instance`, `command`, `alert`, `order`, `position`
-et `trade` relayés depuis Redis.
+"""Real-time stream (SSE): heartbeat, then `instance`, `command`, `alert`, `order`, `position`
+and `trade` relayed from Redis.
 
-Le worker et l'API publient sur `notify` seulement l'identité de ce qui a changé ; ce flux relit
-la base et envoie l'objet complet. La session est revérifiée en lecture seule (le flux ne repousse
-pas l'inactivité) : session expirée ou fermée => le flux se ferme.
+The worker and the API publish on `notify` only the identity of what changed; this stream
+re-reads the database and sends the full object. The session is re-checked read-only (the stream
+does not push back inactivity): expired or closed session => the stream closes.
 
-Source : https://fastapi.tiangolo.com/tutorial/server-sent-events
+Source: https://fastapi.tiangolo.com/tutorial/server-sent-events
 """
 
 import json

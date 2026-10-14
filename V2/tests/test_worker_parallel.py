@@ -1,8 +1,8 @@
-"""Tour du worker : une tâche par instance, en parallèle (SPEC F9, I4, §13 ; menace X14).
+"""Worker round: one task per instance, in parallel (SPEC F9, I4, §13 ; menace X14).
 
-Un moteur lent, muet ou en erreur ne retarde ni la pause d'une autre instance, ni le battement du
-worker. Horloge injectée et moteur doublé : le moteur « lent » attend un signal du test, jamais un
-vrai délai."""
+A slow, silent or failing engine delays neither another instance's pause nor the worker's
+heartbeat. Injected clock and doubled engine: the "slow" engine waits for a test signal, never a
+real delay."""
 
 import asyncio
 from dataclasses import replace
@@ -26,7 +26,7 @@ from worker_support import alerts, commands, container, instance, spy
 
 
 async def request(w: World, ref: InstanceRef, type_: str, **args: str) -> UUID:
-    """Commande `requested`, comme l'API l'écrit."""
+    """`requested` command, as the API writes it."""
     now = w.clock.now
     cmd = Command(
         id=uuid7(),
@@ -52,7 +52,7 @@ async def status_of(w: World, command_id: UUID) -> str:
 
 
 def hang(w: World, ref: InstanceRef, method: str) -> asyncio.Event:
-    """`method` du moteur ne répond plus pour cette instance, jusqu'au signal rendu."""
+    """The engine's `method` no longer responds for this instance, until the signal is released."""
     release = asyncio.Event()
     real = getattr(w.fake, method)
 
@@ -66,7 +66,7 @@ def hang(w: World, ref: InstanceRef, method: str) -> asyncio.Event:
 
 
 def quick(w: World, **kw: Any) -> Worker:
-    """Même worker, qui n'attend qu'un court instant les instances lentes."""
+    """Same worker, which waits only a short moment for slow instances."""
     old = w.worker
     w.worker = Worker(
         adapters={"fake": w.fake},
@@ -90,29 +90,29 @@ async def test_slow_engine_delays_neither_another_instances_pause_nor_the_heartb
         slow, healthy = await w.new_instance(), await w.new_instance()
         worker = quick(w)
         await worker.run_once()
-        release = hang(w, slow, "status")  # « dort 30 s » : ne répond pas avant le signal
+        release = hang(w, slow, "status")  # "sleeps 30 s": does not respond before the signal
         pause = await request(w, healthy, "pause_entries")
         started = w.clock.now
 
-        for _ in range(20):  # la tâche lente ne finit pas ; celle de l'autre instance, si
+        for _ in range(20):  # the slow task does not finish; the other instance's does
             await worker.run_once()
             if await status_of(w, pause) == "verified":
                 break
 
-        # Sans que l'horloge ait avancé ni que le moteur lent ait répondu : envoyée, effet observé.
+        # Without the clock advancing or the slow engine answering: sent, effect observed.
         assert await status_of(w, pause) == "verified" and not release.is_set()
         assert (await instance(w, healthy.instance_id)).observed_state == "exits_only"
         assert w.clock.now == started
-        assert await w.redis.get(HEARTBEAT_KEY) == started.isoformat()  # le worker bat
+        assert await w.redis.get(HEARTBEAT_KEY) == started.isoformat()  # the worker beats
 
-        # L'instance lente garde sa tâche : une seule à la fois, ses commandes attendent leur
-        # tour sans être marquées envoyées (leur échéance ne court pas, I4).
+        # The slow instance keeps its task: only one at a time, its commands wait their
+        # turn without being marked sent (their deadline does not run, I4).
         late = await request(w, slow, "pause_entries")
         await worker.run_once()
         assert await status_of(w, late) == "requested"
 
         release.set()
-        await worker.run_once()  # la tâche lente se termine
+        await worker.run_once()  # the slow task finishes
         await worker.run_once()
         assert await status_of(w, late) == "verified"
         assert (await w.fake.status(slow)).state == "exits_only"
@@ -136,12 +136,12 @@ async def test_exception_in_one_instances_task_does_not_stop_the_others(
         pause = await request(w, healthy, "pause_entries")
         w.clock.advance(1)
 
-        with pytest.raises(RuntimeError, match="adaptateur en erreur"):  # l'erreur reste visible
+        with pytest.raises(RuntimeError, match="adaptateur en erreur"):  # the error remains visible
             await w.worker.run_once()
 
         assert await status_of(w, pause) == "verified"
         assert (await instance(w, healthy.instance_id)).observed_at == w.clock.now
-        # Le relevé a échoué : l'état affiché n'est pas laissé à son ancienne valeur (I1).
+        # The snapshot failed: the displayed state is not left at its old value (I1).
         assert (await instance(w, broken.instance_id)).observed_state == "unknown"
         assert [a.severity for a in await alerts(w, broken.instance_id, "engine_unreachable")] == [
             "critical"
@@ -152,7 +152,7 @@ async def test_exception_in_one_instances_task_does_not_stop_the_others(
 async def test_contract_error_on_snapshot_leaves_the_instance_unknown_without_breaking_the_tick(
     migrated_url: str, redis_url: str
 ) -> None:
-    """Constat 11 : historique des trades clos au-delà du plafond de relecture de l'adaptateur."""
+    """Finding 11: closed-trade history beyond the adapter's re-read ceiling."""
     async with World(migrated_url, redis_url) as w:
         over, healthy = await w.new_instance(), await w.new_instance()
         real = w.fake.snapshot
@@ -164,7 +164,7 @@ async def test_contract_error_on_snapshot_leaves_the_instance_unknown_without_br
 
         w.fake.snapshot = snapshot  # type: ignore[method-assign]
 
-        await w.worker.run_once()  # ne lève pas
+        await w.worker.run_once()  # does not raise
 
         assert (await instance(w, over.instance_id)).observed_state == "unknown"
         assert len(await alerts(w, over.instance_id, "engine_unreachable")) == 1
@@ -190,9 +190,9 @@ async def test_events_of_a_failing_instance_do_not_interrupt_those_of_the_others
         with pytest.raises(RuntimeError, match="flux d'événements en erreur"):
             await w.worker.run_once()
 
-        assert (await w.projection(healthy)).n_events > 0  # publiés et ingérés quand même
-        assert (await instance(w, broken.instance_id)).observed_state == "running"  # relevée
-        assert await w.redis.get(HEARTBEAT_KEY) is not None  # le battement ne dépend d'aucun moteur
+        assert (await w.projection(healthy)).n_events > 0  # published and ingested anyway
+        assert (await instance(w, broken.instance_id)).observed_state == "running"  # snapshotted
+        assert await w.redis.get(HEARTBEAT_KEY) is not None  # the heartbeat depends on no engine
 
 
 async def test_risk_reducing_actions_go_out_before_risk_increasing_ones(
@@ -203,17 +203,17 @@ async def test_risk_reducing_actions_go_out_before_risk_increasing_ones(
         w.step(ref, 60)
         await w.fake.pause_entries(ref)
         snap = await w.fake.snapshot(ref)
-        assert snap.positions  # sinon le test ne prouve rien
+        assert snap.positions  # otherwise the test proves nothing
         await w.worker.run_once()
         calls = spy(w.fake)
 
-        resume = await request(w, ref, "resume_entries")  # demandée la première
+        resume = await request(w, ref, "resume_entries")  # requested first
         w.clock.advance(1)
         close = await request(w, ref, "close_position", position_id=snap.positions[0].position_id)
 
         await w.worker.run_once()
 
-        # La fermeture part seule ; la reprise attend son tour (une commande à la fois, F9).
+        # The close goes out alone; the resume waits its turn (one command at a time, F9).
         assert calls == ["close_position"]
         assert await status_of(w, close) == "verified"
         assert await status_of(w, resume) == "requested"
@@ -227,13 +227,13 @@ async def test_m1_instance_without_fingerprint_is_reloaded_through_the_deploy_pa
 ) -> None:
     async with World(migrated_url, redis_url) as w:
         ref = await w.new_instance()
-        async with w.sessions.begin() as s:  # telle que M1 l'a laissée
+        async with w.sessions.begin() as s:  # as M1 left it
             await s.execute(
                 update(Instance)
                 .where(Instance.id == ref.instance_id)
                 .values(deployment_fingerprint=None, config_hash=None)
             )
-        w.worker = w.make_worker("apres")  # le moteur simulé repart avec le processus
+        w.worker = w.make_worker("apres")  # the simulated engine restarts with the process
         w.fake._insts.clear()
 
         await w.worker.load_instances()
@@ -254,7 +254,7 @@ async def test_stored_digest_differing_from_the_adapters_rejects_the_deploy(
         ref = await w.new_instance()
         worker = quick(w, pinned_digests={"fake": pinned})
         calls = spy(w.fake)
-        async with w.sessions.begin() as s:  # ligne `engines` modifiée en base
+        async with w.sessions.begin() as s:  # `engines` row modified in the database
             await s.execute(
                 text(
                     "UPDATE engines SET digest = :d WHERE id = "
@@ -277,7 +277,7 @@ async def test_stored_digest_differing_from_the_adapters_rejects_the_deploy(
                 ),
                 {"d": pinned, "i": ref.instance_id},
             )
-        await worker.run_once()  # l'écart d'empreinte a mis l'instance en pause : confirmée ici
+        await worker.run_once()  # the fingerprint drift paused the instance: confirmed here
         accepted = await request(w, ref, "deploy")
         await worker.run_once()
         assert await status_of(w, accepted) != "failed" and "deploy" in calls
@@ -320,20 +320,20 @@ async def test_credentials_are_removed_when_the_instance_is_observed_stopped_wit
 
         worker = quick(w, runner=runner, cleanup=cleanup)
         await worker.run_once()
-        assert creds.exists()  # en marche : rien n'est retiré
+        assert creds.exists()  # running: nothing is removed
 
-        await w.fake.stop(ref)  # arrêt hors plateforme (plantage) : aucun `stop` commandé
+        await w.fake.stop(ref)  # stop outside the platform (crash): no `stop` commanded
         await worker.run_once()
         await worker.run_once()
 
         assert creds.exists() is not removed
-        assert cleaned == ([ref.instance_id] if removed else [])  # une fois par arrêt observé
+        assert cleaned == ([ref.instance_id] if removed else [])  # once per observed stop
 
 
 async def test_crashed_silent_engine_keeps_its_credentials(
     migrated_url: str, redis_url: str
 ) -> None:
-    """État inconnu : aucun nettoyage, le doute ne détruit rien."""
+    """Unknown state: no cleanup, doubt destroys nothing."""
     async with World(migrated_url, redis_url) as w:
         ref = await w.new_instance()
         cleaned: list[UUID] = []

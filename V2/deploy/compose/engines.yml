@@ -1,7 +1,7 @@
-# Profil engines (SPEC §5, §13) : socket proxy et réseaux des moteurs. À composer avec core.yml
-# (voir COMPOSE_ENGINES du Makefile). Les conteneurs de moteurs n'y figurent pas : le runner les
-# crée avec le SDK Docker, ils n'appartiennent pas au projet Compose et survivent à `down` (I9).
-# Sources : https://github.com/Tecnativa/docker-socket-proxy
+# Engines profile (SPEC §5, §13): socket proxy and engine networks. To compose with core.yml
+# (see COMPOSE_ENGINES in the Makefile). The engine containers are not in it: the runner
+# creates them with the Docker SDK, they do not belong to the Compose project and survive `down` (I9).
+# Sources: https://github.com/Tecnativa/docker-socket-proxy
 name: centrade
 
 services:
@@ -14,14 +14,14 @@ services:
     read_only: true
     tmpfs: [/run, /tmp]
     environment:
-      # Opérations de conteneurs seulement : lister, inspecter, journaux (GET), puis créer,
-      # démarrer, arrêter, supprimer (POST, DELETE). `info` donne la mémoire de l'hôte (admission).
+      # Container operations only: list, inspect, logs (GET), then create,
+      # start, stop, remove (POST, DELETE). `info` gives the host's memory (admission).
       CONTAINERS: 1
       POST: 1
       INFO: 1
-      # Refusés explicitement (valeurs par défaut, écrites pour qu'une relecture les voie) :
-      # exec, construction, images (donc aucun téléchargement à l'exécution : `make engines-pull`),
-      # volumes, secrets, configs, swarm, services, tâches, nœuds, réseaux, plugins, système.
+      # Explicitly refused (default values, written so that a review sees them):
+      # exec, build, images (hence no download at runtime: `make engines-pull`),
+      # volumes, secrets, configs, swarm, services, tasks, nodes, networks, plugins, system.
       EXEC: 0
       BUILD: 0
       COMMIT: 0
@@ -45,13 +45,13 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     networks: [docker]
 
-  # Le worker pilote Docker (réseau `docker`) et joint les moteurs (réseau `engines`). Les réseaux
-  # app, data et edge de core.yml sont inchangés ; le répertoire d'exécution (tenu en mémoire sur
-  # l'hôte) est monté au même chemin, car Docker résout les montages sur l'hôte. À préparer :
-  # `sudo install -d -m 700 -o 10001 /run/centrade` (recréé à chaque redémarrage de l'hôte).
-  # Clé maître : par Docker secret (fichier, jamais variable), et dans ce profil seulement. Le
-  # worker en a besoin pour les identifiants de l'API native des moteurs (SecretStore, usage
-  # `engine_api`) ; sans moteur à conteneurs, core.yml ne la lui donne pas.
+  # The worker drives Docker (`docker` network) and reaches the engines (`engines` network). The
+  # app, data and edge networks of core.yml are unchanged; the runtime directory (held in memory on
+  # the host) is mounted at the same path, since Docker resolves mounts on the host. To prepare:
+  # `sudo install -d -m 700 -o 10001 /run/centrade` (recreated at every host restart).
+  # Master key: by Docker secret (file, never a variable), and in this profile only. The
+  # worker needs it for the engines' native API credentials (SecretStore, usage
+  # `engine_api`); without a container-based engine, core.yml does not give it to it.
   worker:
     environment:
       DOCKER_HOST: tcp://docker-socket-proxy:2375
@@ -65,11 +65,11 @@ services:
       docker-socket-proxy: {condition: service_started}
 
 networks:
-  # Worker et socket proxy seulement ; sans route vers l'extérieur.
+  # Worker and socket proxy only; no route to the outside.
   docker:
     internal: true
-  # Moteurs, worker (et le Risk service à M3). Interne : aucune sortie vers Internet. Les sorties
-  # des moteurs vers les venues (liste blanche de domaines) sont un sujet de M7 ; d'ici là, les
-  # moteurs ne tournent qu'en paper sur des données locales ou une doublure.
+  # Engines, worker (and the Risk service in M3). Internal: no exit to the Internet. The engines'
+  # exits to venues (domain allowlist) are an M7 topic; until then, the
+  # engines only run in paper on local data or a stand-in.
   engines:
     internal: true

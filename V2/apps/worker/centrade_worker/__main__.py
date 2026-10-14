@@ -39,7 +39,7 @@ log = structlog.get_logger()
 
 
 async def register_engine(sessions: async_sessionmaker[AsyncSession]) -> None:
-    """Ligne `engines` de Freqtrade : image, digest et réservations de `image.py` (ADR 0008)."""
+    """Freqtrade `engines` row: image, digest and reservations from `image.py` (ADR 0008)."""
     async with sessions.begin() as s:
         row = await s.scalar(select(Engine).where(Engine.kind == FREQTRADE))
         row = row or Engine(kind=FREQTRADE)
@@ -57,7 +57,7 @@ async def main() -> None:
     cfg = get_settings()
     db = make_engine(cfg.database_url())
     redis = Redis.from_url(cfg.redis_url, decode_responses=True)
-    # Registre moteur -> adaptateur : un nouveau moteur s'ajoute ici et nulle part ailleurs.
+    # Engine -> adapter registry: a new engine is added here and nowhere else.
     adapters: dict[str, EngineAdapter] = {
         FAKE: FakeEngine(
             clock=lambda: datetime.now(UTC),
@@ -66,7 +66,7 @@ async def main() -> None:
             allow_failure_injection=cfg.engine_failure_injection,
         )
     }
-    # Profil engines seulement : sans socket proxy, aucun conteneur à rattacher.
+    # Engines profile only: without the socket proxy there is no container to attach to.
     sessions = make_session_factory(db)
     runner = DockerRunner() if os.environ.get("DOCKER_HOST") else None
     runtime: WorkerRuntime | None = None
@@ -85,7 +85,7 @@ async def main() -> None:
         adapters=adapters,
         runner=runner,
         simulated=frozenset({FAKE}),
-        # Digest épinglé par l'adaptateur : une ligne `engines` modifiée en base est refusée.
+        # Digest pinned by the adapter: an `engines` row modified in the database is refused.
         pinned_digests={FREQTRADE: FREQTRADE_DIGEST},
         cleanup=None if runtime is None else runtime.cleanup,
         sessions=sessions,

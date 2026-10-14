@@ -1,7 +1,7 @@
-"""Refus par défaut : toute route de l'application exige une session, sauf liste blanche explicite.
+"""Refuse by default: every route of the application requires a session, bar an explicit allowlist.
 
-Ce test parcourt les routes réelles : une route ajoutée par un autre lot sans dépendance
-d'authentification le fait échouer. L'ouvrir au public se décide ici, en l'ajoutant à `PUBLIC`.
+This test walks the real routes: a route added by another batch without an authentication
+dependency makes it fail. Opening it to the public is decided here, by adding it to `PUBLIC`.
 """
 
 import re
@@ -18,7 +18,7 @@ from .conftest import MakeAccount
 PUBLIC = {
     ("POST", "/api/v1/auth/login"),
     ("GET", "/api/v1/system/health"),
-    # Hors brief, public depuis M0 : description des routes d'un dépôt lui-même public.
+    # Outside the brief, public since M0: description of the routes of a repo that is itself public.
     ("GET", "/api/v1/openapi.json"),
 }
 PRE_SESSION_ONLY = {("POST", "/api/v1/auth/totp")}
@@ -26,11 +26,11 @@ DUMMY_ID = "00000000-0000-7000-8000-000000000000"
 
 
 def _routes(app: FastAPI) -> Iterator[tuple[str, str]]:
-    # FastAPI 0.143 garde un routeur inclus sous forme paresseuse dans `app.routes` :
-    # `iter_route_contexts` (celui du générateur OpenAPI) donne les routes effectives, préfixe
-    # compris, y compris celles que `include_in_schema=False` cache du document.
+    # FastAPI 0.143 keeps an included router in lazy form in `app.routes`:
+    # `iter_route_contexts` (that of the OpenAPI generator) gives the effective routes, prefix
+    # included, including those that `include_in_schema=False` hides from the document.
     for context in iter_route_contexts(app.routes):
-        # Tout ce qui n'est pas une route simple (montage, WebSocket) doit être examiné à la main.
+        # Anything that is not a simple route (mount, WebSocket) must be examined by hand.
         assert isinstance(context.original_route, Route), f"type inattendu : {context!r}"
         assert context.path, f"route sans chemin : {context!r}"
         for method in sorted((context.methods or set()) - {"HEAD", "OPTIONS"}):
@@ -55,7 +55,7 @@ async def test_every_route_outside_the_allowlist_requires_a_session(
         response = await client.request(method, _url(path))
         assert response.status_code == 401, f"{method} {path} répond sans session"
         checked += 1
-    assert checked >= 3  # logout, me, totp au moins : le parcours n'est pas vide
+    assert checked >= 3  # logout, me, totp at least: the walk is not empty
 
 
 async def test_pre_session_opens_no_protected_route(

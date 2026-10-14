@@ -1,5 +1,5 @@
-"""Le hook d'entrée de ControlPlaneStrategy. Freqtrade n'est pas installé ici : une doublure
-minimale d'IStrategy est injectée dans sys.modules."""
+"""The entry hook of ControlPlaneStrategy. Freqtrade is not installed here: a minimal
+IStrategy double is injected into sys.modules."""
 
 import importlib
 import sys
@@ -12,7 +12,7 @@ from typing import Any
 import pytest
 
 
-class FakeIStrategy(ABC):  # noqa: B024  # ABC comme le vrai IStrategy : ajoute `_abc_impl` aux sous-classes
+class FakeIStrategy(ABC):  # noqa: B024  # ABC like the real IStrategy: adds `_abc_impl` to subclasses
     def __init__(self, config: dict[str, Any]) -> None:
         self.config = config
 
@@ -53,7 +53,7 @@ def test_internal_exception_is_rejected_without_raising(strategy_cls: Any) -> No
     def boom(self: Any, **_: Any) -> bool:
         raise RuntimeError("panne")
 
-    type.__setattr__(strategy_cls, "_entry_allowed", boom)  # la base elle-même, pour l'essai
+    type.__setattr__(strategy_cls, "_entry_allowed", boom)  # the base itself, for the trial
     assert enter(strategy_cls({"dry_run": True})) is False
 
 
@@ -83,7 +83,7 @@ def test_exit_is_never_blocked_and_entry_paths_are_closed(strategy_cls: Any) -> 
 def test_mode_is_captured_at_construction(strategy_cls: Any) -> None:
     cfg = {"dry_run": False}
     s = strategy_cls(cfg)
-    cfg["dry_run"] = True  # modifié après coup : sans effet
+    cfg["dry_run"] = True  # modified afterwards: no effect
     assert enter(s) is False
     cfg2 = {"dry_run": True}
     s2 = strategy_cls(cfg2)
@@ -112,7 +112,7 @@ def test_protected_name_cannot_be_reassigned_on_the_class_or_the_instance(
             setattr(target, name, lambda *a, **k: True)
         with pytest.raises(TypeError, match=name):
             delattr(target, name)
-    assert enter(s) is True  # rien n'a changé
+    assert enter(s) is True  # nothing has changed
 
 
 def test_mode_cannot_be_reassigned_after_construction(strategy_cls: Any) -> None:
@@ -134,15 +134,15 @@ def test_class_placed_before_the_base_does_not_shadow_any_protected_name(strateg
 def test_hook_rejects_when_a_protected_name_is_shadowed_anyway(
     strategy_cls: Any, name: str
 ) -> None:
-    """Écritures qui évitent `__setattr__` (inaccessibles à une stratégie contrôlée) : le hook
-    constate à l'appel que le type ne résout plus les noms de la base, et refuse."""
+    """Writes that avoid `__setattr__` (unreachable by a controlled strategy): the hook
+    notices at call time that the type no longer resolves the base's names, and refuses."""
     sub = type("S", (strategy_cls,), {})
     s = sub({"dry_run": True})
     type.__setattr__(sub, name, lambda *a, **k: True)
     assert enter(s) is False
     sub2 = type("S2", (strategy_cls,), {})
     s2 = sub2({"dry_run": True})
-    if name != "_boot_dry_run":  # celui-ci vit sur l'instance : c'est la valeur lue à l'amorçage
+    if name != "_boot_dry_run":  # this one lives on the instance: it is the value read at boot
         object.__setattr__(s2, name, lambda *a, **k: True)
         assert enter(s2) is False
 

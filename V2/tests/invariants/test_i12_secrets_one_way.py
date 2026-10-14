@@ -1,4 +1,4 @@
-"""I12 / K2 : les secrets n'atteignent jamais les logs (SPEC §13, journalisation)."""
+"""I12 / K2: secrets never reach the logs (SPEC §13, logging)."""
 
 import io
 import logging
@@ -29,7 +29,7 @@ def test_i12_logs_mask_sentinel_values(output: io.StringIO) -> None:
     s = iter(sentinels)
     log = structlog.get_logger()
 
-    # Par nom de clé, à plat, dans des structures imbriquées et sous différentes casses.
+    # By key name, flat, in nested structures and in different cases.
     log.info(
         "connexion",
         password=next(s),
@@ -49,27 +49,27 @@ def test_i12_logs_mask_sentinel_values(output: io.StringIO) -> None:
         raw=next(s).encode(),
         instance_id="visible-001",
     )
-    # Dans du texte libre : message, URL, trace.
+    # In free text: message, URL, trace.
     log.warning(f"échec token={next(s)} sur /x?password={next(s)}&k=v")
     log.info("entete", valeur=f"Authorization: Bearer {next(s)}")
     try:
         raise RuntimeError(f"api_key={next(s)}")
     except RuntimeError:
         log.exception("plantage")
-    # Journaux de la stdlib (uvicorn) : message, arguments, `extra`.
+    # Stdlib logs (uvicorn): message, arguments, `extra`.
     logging.getLogger("uvicorn.error").error("rejeté: secret=%s", next(s))
     logging.getLogger("uvicorn.access").info(
         '%s "GET /cb?token=%s HTTP/1.1" 401', "127.0.0.1", next(s)
     )
     logging.getLogger("uvicorn.error").error("x", extra={"password": next(s)})
-    # Identifiants dans une URL, avec ou sans nom d'utilisateur.
+    # Credentials in a URL, with or without a username.
     log.error("connexion refusée", url=f"redis://:{next(s)}@redis:6379/0")
     log.error(f"échec sur postgresql+asyncpg://centrade:{next(s)}@postgres:5432/centrade")
-    # Valeur à espaces : masquée en entier, pas seulement son premier mot.
+    # Value with spaces: masked entirely, not just its first word.
     a, b, c, d = next(s), next(s), next(s), next(s)
     log.warning(f'refus password="{a} {b}" puis suite')
     log.warning(f"refus passphrase={c} {d}")
-    # Clé `code` (TOTP, code de récupération), à plat, imbriquée et dans du texte.
+    # `code` key (TOTP, recovery code), flat, nested and in text.
     log.info("totp", code=next(s), corps={"code": next(s), "status_code": 401})
     log.info(f"essai code={next(s)}")
 
@@ -77,7 +77,7 @@ def test_i12_logs_mask_sentinel_values(output: io.StringIO) -> None:
         n: int
 
     for valeur in (next(s), {"jeton": next(s), "x": [next(s) + " " + next(s)]}):
-        try:  # Pydantic recopie la valeur refusée dans son message : `input_value=…`
+        try:  # Pydantic copies the rejected value into its message: `input_value=...`
             _Corps.model_validate({"n": valeur})
         except ValidationError as exc:
             log.error("validation", error=str(exc))
@@ -87,14 +87,14 @@ def test_i12_logs_mask_sentinel_values(output: io.StringIO) -> None:
                 log.exception("trace")
 
     leftover = len(list(s))
-    assert leftover < 5  # presque toutes les sentinelles ont servi
+    assert leftover < 5  # almost all sentinels were used
     output_text = output.getvalue()
     for sentinel in sentinels[: len(sentinels) - leftover]:
         assert sentinel not in output_text, sentinel
-    assert "401" in output_text and "status_code" in output_text  # `status_code` reste lisible
+    assert "401" in output_text and "status_code" in output_text  # `status_code` stays readable
     assert "@redis:6379/0" in output_text and "@postgres:5432/centrade" in output_text
     assert MASK in output_text
-    assert "visible-001" in output_text  # on masque les secrets, pas tout le reste
+    assert "visible-001" in output_text  # secrets are masked, not everything else
 
 
 async def test_i12_sql_error_omits_parameters(migrated_url: str) -> None:
@@ -105,4 +105,4 @@ async def test_i12_sql_error_omits_parameters(migrated_url: str) -> None:
                 await c.execute(text("SELECT 1 / 0 WHERE :v <> ''"), {"v": S.format("sql")})
     finally:
         await engine.dispose()
-    assert "SENTINELLE" not in str(err.value)  # `hide_parameters` : aucune valeur liée
+    assert "SENTINELLE" not in str(err.value)  # `hide_parameters`: no bound value

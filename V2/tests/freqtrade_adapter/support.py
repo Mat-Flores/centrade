@@ -1,4 +1,4 @@
-"""Fabriques partagées."""
+"""Shared factories."""
 
 from __future__ import annotations
 

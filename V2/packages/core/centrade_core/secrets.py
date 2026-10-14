@@ -1,14 +1,14 @@
-"""SecretStore (SPEC §5, F6, I12) : interface et implémentation V1, AES-256-GCM.
+"""SecretStore (SPEC §5, F6, I12): interface and V1 implementation, AES-256-GCM.
 
-Ce module chiffre ; il ne déchiffre aucune ligne de `secrets`. Le déchiffrement des secrets
-d'usage `trade`, `read`, `engine_api` et `webhook` vit dans `centrade_worker.secrets`, que l'API
-n'importe pas (tests/invariants/test_i12_frontiere_dechiffrement.py). Seul le secret TOTP, dont
-l'API a besoin pour vérifier un code, se déchiffre ici, et son AAD n'ouvre rien d'autre.
+This module encrypts; it decrypts no `secrets` row. Decryption of secrets with usage
+`trade`, `read`, `engine_api` and `webhook` lives in `centrade_worker.secrets`, which the API
+does not import (tests/invariants/test_i12_frontiere_dechiffrement.py). Only the TOTP secret,
+which the API needs to verify a code, is decrypted here, and its AAD opens nothing else.
 
-Une valeur en clair circule en `pydantic.SecretStr` : `repr`, `str` et la sérialisation la
-masquent.
+A plaintext value travels as `pydantic.SecretStr`: `repr`, `str` and serialization
+mask it.
 
-Source (cryptography 50, uv.lock) :
+Source (cryptography 50, uv.lock):
 https://cryptography.io/en/latest/hazmat/primitives/aead/#cryptography.hazmat.primitives.ciphers.aead.AESGCM
 """
 
@@ -26,27 +26,27 @@ from centrade_core.ids import uuid7
 from centrade_core.models.trading import Secret
 
 Usage = Literal["trade", "read", "engine_api", "webhook"]
-# Version de la clé maître, écrite sur chaque ligne. Une version inconnue ne se déchiffre pas.
+# Master key version, written on every row. An unknown version does not decrypt.
 KEY_VERSION = 1
-# Plus long que l'AAD du TOTP (16 octets) : les deux domaines ne se recouvrent jamais.
+# Longer than the TOTP AAD (16 bytes): the two domains never overlap.
 _AAD_PREFIX = b"centrade.secret.v1"
 
 
 def cipher(master_key: bytes) -> AESGCM:
-    if len(master_key) != 32:  # AESGCM accepterait 16 ou 24 octets : on exige AES-256
+    if len(master_key) != 32:  # AESGCM would accept 16 or 24 bytes: we require AES-256
         raise ValueError("la clé maître doit faire 32 octets")
     return AESGCM(master_key)
 
 
 def secret_aad(secret_id: UUID, usage: str, owner: UUID) -> bytes:
-    """Lie le chiffré à sa ligne, à son usage et à son propriétaire (compte ou instance)."""
+    """Binds the ciphertext to its row, its usage and its owner (account or instance)."""
     if usage not in get_args(Usage):
         raise ValueError("usage de secret inconnu")
     return _AAD_PREFIX + secret_id.bytes + owner.bytes + usage.encode()
 
 
 def _seal(aes: AESGCM, aad: bytes, data: bytes) -> tuple[bytes, bytes]:
-    nonce = os.urandom(12)  # neuf à chaque chiffrement, jamais fourni par l'appelant
+    nonce = os.urandom(12)  # new for every encryption, never supplied by the caller
     return nonce, aes.encrypt(nonce, data, aad)
 
 
@@ -62,26 +62,26 @@ def _encrypt(
 def encrypt_secret(
     master_key: bytes, *, secret_id: UUID, usage: Usage, owner: UUID, value: SecretStr
 ) -> tuple[bytes, bytes]:
-    """Renvoie (nonce, chiffré)."""
+    """Returns (nonce, ciphertext)."""
     return _encrypt(cipher(master_key), secret_id, usage, owner, value)
 
 
 def encrypt_totp_secret(*, master_key: bytes, user_id: UUID, secret: str) -> tuple[bytes, bytes]:
-    """Renvoie (nonce, chiffré). AAD de M1 conservé (l'utilisateur) : les lignes existantes
-    restent lisibles."""
+    """Returns (nonce, ciphertext). M1 AAD kept (the user): existing rows
+    stay readable."""
     return _seal(cipher(master_key), user_id.bytes, secret.encode())
 
 
 def decrypt_totp_secret(
     *, master_key: bytes, user_id: UUID, nonce: bytes, ciphertext: bytes
 ) -> str:
-    """Lève `InvalidTag` si la clé, le nonce, le chiffré ou l'utilisateur ne correspondent pas."""
+    """Raises `InvalidTag` if the key, nonce, ciphertext or user do not match."""
     return cipher(master_key).decrypt(nonce, ciphertext, user_id.bytes).decode()
 
 
 class SecretStore(Protocol):
-    """Écriture seule. `owner` : le compte d'une clé de venue, l'instance d'un identifiant de
-    moteur. Les écritures se font dans la transaction de l'appelant, qui commit."""
+    """Write-only. `owner`: the account of a venue key, the instance of an engine
+    credential. Writes happen in the caller's transaction, which commits."""
 
     async def put(
         self,
@@ -93,7 +93,7 @@ class SecretStore(Protocol):
         value: SecretStr,
         now: datetime,
     ) -> UUID:
-        """Chiffre et stocke. Renvoie la référence du secret."""
+        """Encrypts and stores. Returns the secret's reference."""
 
     async def rotate(
         self,
@@ -104,16 +104,16 @@ class SecretStore(Protocol):
         value: SecretStr,
         now: datetime,
     ) -> UUID:
-        """Stocke le successeur de `secret_id` (même usage, même genre) et renvoie sa référence.
-        L'ancien reste en place : l'appelant bascule, puis le révoque."""
+        """Stores the successor of `secret_id` (same usage, same kind) and returns its reference.
+        The old one stays in place: the caller switches over, then revokes it."""
 
     async def revoke(self, session: AsyncSession, secret_id: UUID) -> None:
-        """Détruit le chiffré. La révocation sur la venue se fait avant, par l'opérateur."""
+        """Destroys the ciphertext. Revocation on the venue happens beforehand, by the operator."""
 
 
 class AesGcmSecretStore:
     def __init__(self, master_key: bytes) -> None:
-        self._aes = cipher(master_key)  # la clé elle-même n'est pas gardée en attribut
+        self._aes = cipher(master_key)  # the key itself is not kept as an attribute
 
     async def _store(
         self,

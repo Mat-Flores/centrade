@@ -1,4 +1,4 @@
-"""Schémas du registre de stratégies (SPEC F1, §8)."""
+"""Schemas of the strategy registry (SPEC F1, §8)."""
 
 from __future__ import annotations
 
@@ -38,12 +38,12 @@ class VersionOut(BaseModel):
     strategy_id: UUID
     version: int
     status: Status
-    engine: str  # type de moteur, lu dans le manifest
+    engine: str  # engine type, read from the manifest
     manifest: dict[str, Any]
     code_hash: str
     author: str
     static_checks: dict[str, Any]
-    exits: dict[str, Any]  # politique de sortie (F10) : stoploss et ratios en chaînes décimales
+    exits: dict[str, Any]  # exit policy (F10): stoploss and ratios as decimal strings
     created_at: AwareDatetime
 
     @classmethod

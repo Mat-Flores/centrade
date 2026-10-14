@@ -1,6 +1,6 @@
 # ruff: noqa: E501
-"""Doublure de l'API REST de Freqtrade (formes relevées sur le tag 2026.9, ADR 0008), de son runner
-et du runtime du worker. Rien ne sort du processus : un transport `requests` en mémoire."""
+"""Double of Freqtrade's REST API (shapes recorded on tag 2026.9, ADR 0008), of its runner
+and of the worker's runtime. Nothing leaves the process: an in-memory `requests` transport."""
 
 from __future__ import annotations
 
@@ -31,7 +31,7 @@ STRATEGY_CODE = "from control_plane import ControlPlaneStrategy\n"
 
 
 def _dump(body: Any) -> str:
-    # Les Decimal sortent en nombres JSON exacts, comme le texte que le moteur écrit.
+    # Decimals come out as exact JSON numbers, like the text the engine writes.
     text = json.dumps(body, default=lambda d: f"__D:{d}__")
     return re.sub(r'"__D:([^"]+)__"', r"\1", text)
 
@@ -45,7 +45,7 @@ class Clock:
 
 
 class FakeRuntime:
-    """InstanceRuntime en mémoire : garde ce que l'adaptateur a écrit."""
+    """In-memory InstanceRuntime: keeps what the adapter wrote."""
 
     def __init__(self) -> None:
         self.issued: dict[UUID, dict[str, str]] = {}
@@ -94,7 +94,7 @@ class FakeRunner:
     async def start(self, instance_id: UUID) -> None:
         self.log.append("start")
         if self.status[instance_id] != "running":
-            self.server.boot()  # nouveau processus : relit `initial_state`
+            self.server.boot()  # new process: re-reads `initial_state`
         self.status[instance_id] = "running"
 
     async def stop(self, instance_id: UUID, timeout_s: int = 30) -> None:
@@ -127,7 +127,7 @@ def _order(
 
 
 class FakeFreqtrade(HTTPAdapter):
-    """Serveur en mémoire. `step()` fait avancer un moteur qui enchaîne entrée, remplissage, sortie."""
+    """In-memory server. `step()` advances an engine that chains entry, fill, exit."""
 
     def __init__(self, clock: Clock) -> None:
         super().__init__()
@@ -144,10 +144,10 @@ class FakeFreqtrade(HTTPAdapter):
         self._ids = 0
         self._tick = 0
         self.exit_reason = "roi"
-        # Pannes ciblées : (méthode, chemin) -> (code, corps), ou None pour une connexion coupée.
+        # Targeted failures: (method, path) -> (code, body), or None for a dropped connection.
         self.fail: dict[tuple[str, str], tuple[int, Any] | None] = {}
-        self.override: dict[str, Any] = {}  # chemin GET -> corps renvoyé tel quel (malformé)
-        self.raw_body: bytes | None = None  # corps brut pour toute réponse
+        self.override: dict[str, Any] = {}  # GET path -> body returned as is (malformed)
+        self.raw_body: bytes | None = None  # raw body for any response
         self.delay_s = 0.0
 
     def load(self, spec: InstanceSpec) -> None:
@@ -175,7 +175,7 @@ class FakeFreqtrade(HTTPAdapter):
     def boot(self) -> None:
         self.state = self.initial_state
 
-    # --- pilotage de test ---------------------------------------------------------------
+    # --- test driving ---------------------------------------------------------------
     def step(self) -> None:
         self._tick += 1
         if self.state == "stopped":
@@ -257,7 +257,7 @@ class FakeFreqtrade(HTTPAdapter):
             code, body = self._route(str(request.method), path, parse_qs(url.query), request)
         resp = requests.Response()
         resp.status_code = code
-        # Corps en flux, comme une vraie réponse : le client le lit par morceaux, borné.
+        # Streamed body, like a real response: the client reads it in chunks, bounded.
         resp.raw = io.BytesIO(_dump(body).encode() if self.raw_body is None else self.raw_body)
         resp.url = request.url or ""
         resp.request = request
@@ -319,7 +319,7 @@ class FakeFreqtrade(HTTPAdapter):
             done = [t for t in self.trades if not t["is_open"]]
             limit = int(query.get("limit", ["500"])[0])
             offset = int(query.get("offset", ["0"])[0])
-            assert query.get("order_by_id") == ["false"]  # tri par date de clôture décroissante
+            assert query.get("order_by_id") == ["false"]  # sorted by descending close date
             done.sort(key=lambda t: (-t["close_timestamp"], -t["trade_id"]))
             page = done[offset : offset + limit]
             return {
@@ -341,7 +341,7 @@ def deployment(**over: Any) -> Deployment:
 
 
 class Rig:
-    """Adaptateur + doublures, assemblés comme dans le worker."""
+    """Adapter + doubles, assembled as in the worker."""
 
     def __init__(self) -> None:
         self.clock = Clock()

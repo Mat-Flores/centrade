@@ -1,4 +1,4 @@
-"""Aides des tests du worker : lectures en base et doublures qui notent ce qu'elles reçoivent."""
+"""Worker test helpers: database reads and doubles that record what they receive."""
 
 from typing import Any
 from uuid import UUID
@@ -8,7 +8,7 @@ from centrade_worker.runner import RunnerContainer
 from centrade_worker.testing import World
 from sqlalchemy import select
 
-# Tout ce qui agit sur un moteur. Les lectures (statut, instantané, configuration) n'y sont pas.
+# Everything that acts on an engine. Reads (status, snapshot, configuration) are not in it.
 ACTIONS = (
     "deploy",
     "start",
@@ -22,7 +22,7 @@ ACTIONS = (
 
 
 def spy(engine: Any) -> list[str]:
-    """Note chaque action reçue par le moteur, puis la laisse s'exécuter."""
+    """Records each action received by the engine, then lets it run."""
     calls: list[str] = []
 
     def wrap(name: str) -> None:
@@ -40,7 +40,7 @@ def spy(engine: Any) -> list[str]:
 
 
 class RunnerDouble:
-    """Runner doublé : rend les conteneurs qu'on lui donne et note chaque appel."""
+    """Doubled runner: returns the containers it is given and records each call."""
 
     def __init__(self, containers: list[RunnerContainer] | None = None) -> None:
         self.containers = containers or []
@@ -53,7 +53,7 @@ class RunnerDouble:
             raise self.error
         return list(self.containers)
 
-    def __getattr__(self, name: str) -> Any:  # create, start, stop, remove… : jamais attendus
+    def __getattr__(self, name: str) -> Any:  # create, start, stop, remove...: never expected
         async def unexpected(*_: Any, **__: Any) -> None:
             self.calls.append(name)
 

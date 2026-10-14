@@ -1,4 +1,4 @@
-"""`make bootstrap-admin` : premier administrateur, sans identifiant par défaut (SPEC §13)."""
+"""`make bootstrap-admin`: first administrator, no default credentials (SPEC §13)."""
 
 from urllib.parse import parse_qs, urlparse
 
@@ -55,7 +55,7 @@ async def test_creates_the_first_admin_who_can_log_in(
     for secret_value in (PASSWORD, secret, *created.recovery_codes):
         assert secret_value not in dump
 
-    # Ce que la commande affiche suffit à ouvrir une session, et rien d'autre.
+    # What the command prints is enough to open a session, and nothing else.
     account = Account(user.id, EMAIL, PASSWORD, secret, created.recovery_codes)
     await sign_in(client, account)
     me = await client.get("/api/v1/auth/me")

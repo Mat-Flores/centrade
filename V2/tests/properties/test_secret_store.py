@@ -1,4 +1,4 @@
-"""SecretStore V1 (AES-256-GCM) : propriétés du chiffrement. Valeurs sentinelles uniquement."""
+"""SecretStore V1 (AES-256-GCM): encryption properties. Sentinel values only."""
 
 import json
 from uuid import UUID
@@ -65,7 +65,7 @@ def test_tampered_ciphertext_or_nonce_is_rejected(value: str, data: st.DataObjec
     raw[data.draw(st.integers(0, len(raw) - 1))] ^= data.draw(st.integers(1, 255))
     with pytest.raises(InvalidTag):
         _open(bytes(raw), ct) if target == "nonce" else _open(nonce, bytes(raw))
-    with pytest.raises(InvalidTag):  # chiffré tronqué : jamais de valeur partielle
+    with pytest.raises(InvalidTag):  # truncated ciphertext: never a partial value
         _open(nonce, ct[: data.draw(st.integers(0, len(ct) - 1))])
 
 
@@ -73,7 +73,7 @@ def test_tampered_ciphertext_or_nonce_is_rejected(value: str, data: st.DataObjec
 def test_ciphertext_replayed_elsewhere_is_rejected(
     value: str, other: UUID, usage: core.Usage
 ) -> None:
-    """Autre identifiant, autre usage ou autre propriétaire : l'AAD ne correspond plus."""
+    """Different identifier, different use or different owner: the AAD no longer matches."""
     nonce, ct = core.encrypt_secret(
         KEY, secret_id=UUID(int=1), usage="trade", owner=UUID(int=2), value=SecretStr(value)
     )
@@ -83,7 +83,7 @@ def test_ciphertext_replayed_elsewhere_is_rejected(
     for over in replays:
         with pytest.raises(InvalidTag):
             _open(nonce, ct, **over)
-    with pytest.raises(InvalidTag):  # autre clé maître
+    with pytest.raises(InvalidTag):  # another master key
         worker.open_secret(
             bytes(32),
             secret_id=UUID(int=1),
@@ -138,7 +138,7 @@ def test_empty_value_or_unknown_usage_is_rejected() -> None:
 
 @given(user=st.uuids(), secret=values)
 def test_totp_and_secrets_cannot_decrypt_each_other(user: UUID, secret: str) -> None:
-    """Le déchiffrement du TOTP, seul accessible à l'API, n'ouvre aucune ligne de `secrets`."""
+    """TOTP decryption, the only one accessible to the API, opens no row of `secrets`."""
     for usage in USAGES:
         nonce, ct = core.encrypt_secret(
             KEY, secret_id=user, usage=usage, owner=user, value=SecretStr(secret)

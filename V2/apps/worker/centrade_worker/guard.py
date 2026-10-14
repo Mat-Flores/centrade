@@ -1,10 +1,10 @@
-"""Vérification de F9 côté worker (SPEC F9, I3, I5, I10) : relit ce qui tourne, décide avec la
-fonction pure de `centrade_core.engine.verification`, enregistre, alerte, met en pause.
+"""Worker-side F9 verification (SPEC F9, I3, I5, I10): re-reads what runs, decides with the
+pure function of `centrade_core.engine.verification`, records, alerts, pauses.
 
-Deux usages : juste avant d'envoyer ce qui augmente le risque (`gate`), et à chaque démarrage
-observé puis à cadence fixe (`check`). Le worker ne connaît aucun moteur : la comparaison de
-configuration vient de l'adaptateur (`config_drift`), complétée par `owned_drifts`.
-Aucune commande qui réduit le risque n'attend quoi que ce soit d'ici (I4).
+Two uses: just before sending what increases risk (`gate`), and at every observed start
+then at a fixed cadence (`check`). The worker knows no engine: the configuration comparison
+comes from the adapter (`config_drift`), completed by `owned_drifts`.
+No command that reduces risk waits for anything from here (I4).
 """
 
 from __future__ import annotations
@@ -60,31 +60,31 @@ log = structlog.get_logger("guard")
 
 Note = Callable[[str, UUID], None]
 
-# Règle d'alerte et invariant de chaque écart constaté.
+# Alert rule and invariant of each observed drift.
 _RULE: dict[str, tuple[str, str | None]] = {
     MODE: ("mode_mismatch", "I3"),
     DRIFT: ("config_drift", None),
     FINGERPRINT: ("fingerprint_mismatch", "I10"),
 }
 REFUSED_RULE = "entries_refused"
-UNREADABLE_RULE = "config_unreadable"  # relecture impossible sur un moteur en marche (§13)
-HALTED_RULE = "engine_halted"  # état jamais demandé par la plateforme (F9)
-_VERIFIABLE = ("exits_only", "running")  # états où un moteur tourne et peut être relu
+UNREADABLE_RULE = "config_unreadable"  # re-read impossible on a running engine (§13)
+HALTED_RULE = "engine_halted"  # state never requested by the platform (F9)
+_VERIFIABLE = ("exits_only", "running")  # states where an engine runs and can be re-read
 
 
 @dataclass(frozen=True)
 class Target:
     spec: InstanceSpec
     generated: EngineConfig
-    recorded: str | None  # empreinte enregistrée au déploiement
+    recorded: str | None  # fingerprint recorded at deployment
 
 
 def spec_for(
     inst: Instance, engine: Engine, version: StrategyVersion | None, adapter: EngineAdapter
 ) -> tuple[InstanceSpec, EngineConfig]:
-    """Spécification et configuration générée, depuis le registre. Pure pour des lignes données.
-    Sans version de stratégie (instances simulées de M1) : manifest par défaut, aucun code ;
-    `check_source` de l'adaptateur décide au déploiement si un moteur l'accepte."""
+    """Specification and generated configuration, from the registry. Pure for given rows.
+    Without a strategy version (simulated M1 instances): default manifest, no code;
+    the adapter's `check_source` decides at deployment whether an engine accepts it."""
     if version is None:
         manifest = Manifest(
             name=inst.name,
@@ -108,7 +108,7 @@ def spec_for(
     spec = InstanceSpec(
         instance_id=inst.id,
         engine=engine.kind,
-        mode=inst.mode,  # validé par Pydantic : une valeur inconnue est refusée
+        mode=inst.mode,  # validated by Pydantic: an unknown value is refused
         account_id="paper-sim" if inst.account_id is None else str(inst.account_id),
         manifest=manifest,
         params=inst.params,
@@ -146,7 +146,7 @@ async def raise_alert(
     invariant: str | None = None,
     correlation_id: UUID | None = None,
 ) -> UUID | None:
-    """Une seule alerte ouverte par règle et par cible. Rend son identifiant si elle est créée."""
+    """One open alert per rule and per target. Returns its identifier if it is created."""
     open_id = await s.scalar(
         select(Alert.id)
         .where(Alert.rule == rule, Alert.target_id == target_id, Alert.status != "resolved")
@@ -198,16 +198,16 @@ class Guard:
         self._every_s = every_s
         self._pause_deadline_s = pause_deadline_s
         self._note = note
-        # Dernière vérification par instance : (état, mode) observés, heure, motifs.
+        # Last verification per instance: (state, mode) observed, time, reasons.
         self._last: dict[UUID, tuple[tuple[str, str | None], datetime, tuple[Refusal, ...]]] = {}
         self._unreadable_after_s = unreadable_after_s
-        # Digest annoncé par l'adaptateur enregistré, par moteur : la table `engines` se modifie
-        # en base, pas ces constantes.
+        # Digest announced by the registered adapter, per engine: the `engines` table is modified
+        # in the database, not these constants.
         self._pinned = dict(pinned_digests or {})
-        # Dernière relecture réussie d'un moteur qui tourne (à défaut, première tentative).
+        # Last successful re-read of a running engine (failing that, first attempt).
         self._read_at: dict[UUID, datetime] = {}
-        self._halted: set[UUID] = set()  # épisodes `halted` déjà signalés
-        # Instances dont une pause automatique attend son envoi (par la tâche de l'instance).
+        self._halted: set[UUID] = set()  # `halted` episodes already reported
+        # Instances whose automatic pause awaits sending (by the instance's task).
         self.pause_requested: set[UUID] = set()
 
     async def target(self, instance_id: UUID) -> Target:
@@ -223,11 +223,11 @@ class Guard:
             return Target(spec, generated, inst.deployment_fingerprint)
 
     async def deployment(self, instance_id: UUID) -> InstanceSpec:
-        """Au déploiement : enregistre le hash de la configuration générée et l'empreinte (I10),
-        puis rend la spécification à remettre à l'adaptateur."""
+        """At deployment: records the generated configuration hash and the fingerprint (I10),
+        then returns the specification to hand to the adapter."""
         t = await self.target(instance_id)
         dep = t.spec.deployment
-        assert dep is not None  # noqa: S101  # posé par spec_for
+        assert dep is not None  # noqa: S101  # set by spec_for
         checked = self._adapters[t.spec.engine].check_source(t.spec.manifest, dep.code)
         if not checked.ok:
             raise CommandRejected("code de stratégie refusé : " + " ; ".join(checked.errors))
@@ -257,7 +257,7 @@ class Guard:
                 before={"deployment_fingerprint": t.recorded},
                 after={"deployment_fingerprint": dep.fingerprint, "config_hash": dep.config_hash},
             )
-        self._last.pop(instance_id, None)  # nouveau déploiement : nouvelle vérification
+        self._last.pop(instance_id, None)  # new deployment: new verification
         return t.spec
 
     async def _read(
@@ -276,7 +276,7 @@ class Guard:
     async def _verify(
         self, ref: InstanceRef, status: InstanceStatus, correlation_id: UUID | None
     ) -> tuple[tuple[Refusal, ...], bool]:
-        """Relit, décide, enregistre. Rend (motifs, relecture complète)."""
+        """Re-reads, decides, records. Returns (reasons, full re-read)."""
         t = await self.target(ref.instance_id)
         effective, drifts = await self._read(ref, t.generated)
         refusals = entry_refusals(
@@ -298,7 +298,7 @@ class Guard:
         mode: str,
         correlation_id: UUID | None = None,
     ) -> tuple[Refusal, ...]:
-        """Motifs de refus d'envoyer la commande. Rien n'est lu pour ce qui réduit le risque."""
+        """Reasons for refusing to send the command. Nothing is read for what reduces risk."""
         if command_type not in GATED:
             return ()
         try:
@@ -317,7 +317,7 @@ class Guard:
                 now=self._clock(),
                 stale_after_s=self._stale_after_s,
             )
-        except Exception as exc:  # tout doute vaut refus (I5) ; rien n'est envoyé
+        except Exception as exc:  # any doubt is a refusal (I5); nothing is sent
             log.exception("verification_unavailable", instance_id=str(ref.instance_id))
             out = (Refusal(ERROR, f"Vérification impossible ({type(exc).__name__}) : refus."),)
         if out:
@@ -337,8 +337,8 @@ class Guard:
         return out
 
     async def check(self, ref: InstanceRef, status: InstanceStatus) -> tuple[Refusal, ...] | None:
-        """À chaque démarrage observé (premier relevé, changement d'état ou de mode), puis toutes
-        les `every_s` secondes. Rend les derniers motifs connus ; None si rien ne tourne."""
+        """At every observed start (first snapshot, state or mode change), then every
+        `every_s` seconds. Returns the last known reasons; None if nothing runs."""
         iid = ref.instance_id
         now = self._clock()
         if status.state == "halted":
@@ -346,7 +346,7 @@ class Guard:
         else:
             self._halted.discard(iid)
         if status.state not in _VERIFIABLE:
-            self._last.pop(iid, None)  # le prochain démarrage observé sera revérifié
+            self._last.pop(iid, None)  # the next observed start will be re-verified
             self._read_at.pop(iid, None)
             return None
         sig = (status.state, status.mode)
@@ -362,13 +362,13 @@ class Guard:
         if complete:
             self._last[iid] = (sig, now, refusals)
             self._read_at[iid] = now
-        else:  # nouvelle tentative au tour suivant ; au-delà du délai, alerte et pause
+        else:  # new attempt next round; past the delay, alert and pause
             await self._on_unreadable(iid, status, now)
         return refusals
 
     async def _on_unreadable(self, iid: UUID, status: InstanceStatus, now: datetime) -> None:
-        """Entrées ouvertes sur une configuration qu'on ne peut plus relire depuis
-        `unreadable_after_s` : on ne sait plus ce qui tourne (§13, I5). Alerte critique et pause."""
+        """Entries open on a configuration that can no longer be re-read since
+        `unreadable_after_s`: we no longer know what runs (§13, I5). Critical alert and pause."""
         since = self._read_at.get(iid, now)
         if status.state != "running" or (now - since).total_seconds() < self._unreadable_after_s:
             return
@@ -387,10 +387,10 @@ class Guard:
             self._note("alert", alert_id)
 
     async def _on_halted(self, iid: UUID, now: datetime) -> None:
-        """F9 : `halted` observé => alerte et retour en sorties seules. Une fois par épisode : si
-        le moteur n'en sort pas, la commande expire et son alerte le dit, sans relance en boucle.
-        `pause_entries` est l'appel du contrat qui remet un moteur en sorties seules sans rien
-        vérifier ni attendre (I4) ; `start`, lui, augmente le risque et serait retenu au doute."""
+        """F9: `halted` observed => alert and return to exits-only. Once per episode: if
+        the engine does not leave it, the command expires and its alert says so, with no retry loop.
+        `pause_entries` is the contract call that puts an engine back in exits-only without
+        verifying or waiting for anything (I4); `start` increases risk, held on doubt."""
         if iid in self._halted:
             return
         async with self._sessions.begin() as s:
@@ -418,7 +418,7 @@ class Guard:
     ) -> None:
         codes = {r.code for r in refusals}
         found = [r for r in refusals if r.code in FOUND]
-        # Une alerte ne se résout que si le contrôle correspondant a réellement eu lieu.
+        # An alert resolves only if the matching check actually took place.
         cleared = [c for c in (DRIFT, FINGERPRINT) if effective is not None and c not in codes]
         if status.mode is not None and MODE not in codes:
             cleared.append(MODE)
@@ -427,18 +427,18 @@ class Guard:
             rules.append(UNREADABLE_RULE)
         if status.state in _VERIFIABLE:
             rules.append(HALTED_RULE)
-        if not refusals:  # la vérification passe de nouveau : le refus précédent est levé
+        if not refusals:  # verification passes again: the previous refusal is lifted
             rules.append(REFUSED_RULE)
         now = self._clock()
         async with self._sessions.begin() as s:
-            if effective is not None:  # la ligne d'instance d'abord, l'audit ensuite
+            if effective is not None:  # the instance row first, the audit after
                 await s.execute(
                     update(Instance)
                     .where(Instance.id == instance_id)
                     .values(
                         effective_config={
                             **effective.values,
-                            # lue par l'API pour « Ce qui tourne réellement »
+                            # read by the API for "What is actually running"
                             **(
                                 {"engine_version": effective.engine_version}
                                 if effective.engine_version
@@ -504,8 +504,8 @@ class Guard:
         correlation_id: UUID | None,
         now: datetime,
     ) -> None:
-        """Entrées ouvertes alors que la vérification échoue : `pause_entries`, par le cycle
-        normal des commandes (tracée, vérifiée, expirée). Une seule en attente à la fois."""
+        """Entries open while verification fails: `pause_entries`, through the normal command
+        cycle (traced, verified, expired). Only one pending at a time."""
         pending = await s.scalar(
             select(Command.id)
             .where(

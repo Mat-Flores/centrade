@@ -1,8 +1,8 @@
-"""Cycle de vie d'une commande (SPEC F9, I8) : transitions ordonnées, états terminaux figés.
+"""Command lifecycle (SPEC F9, I8): ordered transitions, frozen terminal states.
 
-`requested -> dispatched -> acknowledged -> verified`, ou `failed`, `timed_out`, `superseded`.
-La transition est une seule instruction conditionnelle : deux écrivains concurrents (API et
-worker) ne peuvent ni sauter une étape ni modifier un état terminal.
+`requested -> dispatched -> acknowledged -> verified`, or `failed`, `timed_out`, `superseded`.
+The transition is a single conditional statement: two concurrent writers (API and
+worker) can neither skip a step nor modify a terminal state.
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ CommandType = Literal[
     "cancel_entry_order",
 ]
 
-# Seules transitions permises. Un état absent des clés est terminal.
+# Only permitted transitions. A state absent from the keys is terminal.
 NEXT: Final[dict[str, frozenset[str]]] = {
     "requested": frozenset({"dispatched", "timed_out", "superseded"}),
     "dispatched": frozenset({"acknowledged", "failed", "timed_out", "superseded"}),
@@ -46,17 +46,17 @@ STEP_COLUMN: Final[dict[str, str]] = {
     "timed_out": "timed_out_at",
     "superseded": "superseded_at",
 }
-# Ce qui réduit le risque passe devant (F9) ; ce qui l'augmente peut être remplacé.
+# What reduces risk goes first (F9); what increases it can be superseded.
 PRIORITY: Final = frozenset({"pause_entries", "flatten"})
-# Réduit le risque : jamais expirée avant l'envoi, l'échéance court à compter de l'envoi (I4).
+# Reduces risk: never expired before sending, the deadline runs from sending (I4).
 RISK_REDUCING: Final = PRIORITY | {"stop", "close_position", "cancel_entry_order"}
 RISK_INCREASING: Final = frozenset({"resume_entries", "start"})
-# États observés depuis lesquels une commande qui augmente le risque a un sens, et son libellé.
+# Observed states from which a command that increases risk makes sense, and its label.
 _READY: Final[dict[str, tuple[tuple[str, ...], str]]] = {
     "resume_entries": (("exits_only", "running"), "reprise des entrées"),
     "start": (("stopped", "error"), "démarrage"),
 }
-DESIRED_AFTER: Final[dict[str, str | None]] = {  # None : l'état voulu ne change pas
+DESIRED_AFTER: Final[dict[str, str | None]] = {  # None: the desired state does not change
     "deploy": "exits_only",
     "start": "exits_only",
     "stop": "stopped",
@@ -78,14 +78,14 @@ def risk_increase_refusal(
     now: datetime,
     stale_after_s: float,
 ) -> str | None:
-    """Raison du refus d'une commande qui augmente le risque, ou None (I5 : refus au moindre
-    doute). Pure : la même règle sert à la demande (API) et juste avant l'envoi (worker)."""
+    """Reason for refusing a command that increases risk, or None (I5: refuse at the slightest
+    doubt). Pure: the same rule serves the request (API) and just before sending (worker)."""
     if command_type not in RISK_INCREASING:
         return None
     ready, label = _READY[command_type]
     if observed_at is None or observed_state == "unknown":
         return f"L'état observé est inconnu : {label} refusé."
-    # Trop vieux, ou daté du futur (dérive d'horloge) : dans les deux cas, on ne sait pas.
+    # Too old, or dated in the future (clock drift): either way, we do not know.
     if abs(now - observed_at) > timedelta(seconds=stale_after_s):
         return f"L'état observé est périmé : {label} refusé."
     if observed_state not in ready:
@@ -104,9 +104,9 @@ async def transition(
     result: dict[str, Any] | None = None,
     deadline_at: datetime | None = None,
 ) -> bool:
-    """Passe la commande à `dst` si, et seulement si, son état actuel le permet. Vrai si fait."""
+    """Moves the command to `dst` if, and only if, its current state allows it. True if done."""
     sources = [src for src, targets in NEXT.items() if dst in targets]
-    if not sources:  # `requested` : état initial, on n'y revient jamais
+    if not sources:  # `requested`: initial state, never returned to
         return False
     values: dict[str, Any] = {"status": dst, STEP_COLUMN[dst]: now, "updated_at": now}
     if result is not None:

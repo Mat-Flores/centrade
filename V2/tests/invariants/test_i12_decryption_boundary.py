@@ -1,5 +1,5 @@
-"""I12 : une clé saisie n'est jamais relue, affichée ni journalisée, et n'est remise qu'au moteur
-de l'instance live à laquelle elle est affectée. Valeurs sentinelles uniquement."""
+"""I12: an entered key is never read back, displayed or logged, and is handed only to the engine
+of the live instance it is assigned to. Sentinel values only."""
 
 import ast
 import io
@@ -32,8 +32,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 API = Path(__file__).resolve().parents[2] / "apps" / "api" / "centrade_api"
-# Seuls noms de `centrade_core.secrets` que l'API peut importer : aucun ne déchiffre une ligne
-# de `secrets` (le TOTP a son propre AAD, qui n'en ouvre aucune).
+# Only `centrade_core.secrets` names the API may import: none decrypts a row
+# of `secrets` (TOTP has its own AAD, which opens none).
 ALLOWED = {"SecretStore", "AesGcmSecretStore", "encrypt_totp_secret", "decrypt_totp_secret"}
 FORBIDDEN = {"open_secret", "reveal", "secret_aad", "cipher", "AESGCM"}
 SENTINEL = "TEST-SECRET-DO-NOT-USE-{}-0xC0FFEE"
@@ -50,7 +50,7 @@ def _violations(source: str) -> list[str]:
         elif isinstance(node, ast.ImportFrom):
             names = [(node.module or "", a.name) for a in node.names]
         else:
-            # Par un autre chemin que l'import (attribut d'un module déjà chargé, importlib).
+            # Through a path other than import (attribute of an already loaded module, importlib).
             ident = getattr(node, "attr", None) or getattr(node, "id", None)
             text = node.value if isinstance(node, ast.Constant) else None
             text = text if isinstance(text, str) else ""
@@ -75,7 +75,7 @@ def test_i12_no_api_module_imports_decryption() -> None:
     assert len(modules) > 10
     for path in modules:
         assert _violations(path.read_text(encoding="utf-8")) == [], path
-    # Le contrôle mord : chacune de ces lignes, dans l'API, ferait échouer le test.
+    # The check has teeth: each of these lines, in the API, would fail the test.
     for bad in (
         "from centrade_worker.secrets import reveal",
         "from centrade_worker import secrets",
@@ -94,14 +94,14 @@ def test_i12_no_api_module_imports_decryption() -> None:
 
 
 def test_i12_started_api_does_not_load_decryption() -> None:
-    """Y compris par un import indirect : le module du worker n'est pas chargé par l'API."""
+    """Including through an indirect import: the worker module is not loaded by the API."""
     code = (
         "import sys, centrade_api.main\n"
         "assert 'centrade_api.accounts' in sys.modules\n"
         "print('centrade_worker.secrets' in sys.modules)"
     )
     env = {**os.environ, "PYTHONPATH": os.pathsep.join(sys.path)}
-    out = subprocess.run(  # noqa: S603  # interpréteur courant, code constant
+    out = subprocess.run(  # noqa: S603  # current interpreter, constant code
         [sys.executable, "-c", code], env=env, capture_output=True, text=True, check=True
     )
     assert out.stdout.strip().splitlines()[-1] == "False"
@@ -148,7 +148,7 @@ async def test_i12_entered_value_appears_nowhere(
         await viewer.get(A),
         await admin.post(f"{A}/{aid}/test"),
         await admin.post(f"{A}/{aid}/rotate", json={**put, "key": s[4], "secret": s[5]}),  # 409
-        # Refus de validation : Pydantic recopierait la valeur reçue dans son message.
+        # Validation refusal: Pydantic would copy the received value into its message.
         await admin.put(f"{A}/{aid}/secret", json={"usage": s[6], "key": s[6], "secret": s[6]}),
         await admin.put(f"{A}/{aid}/secret", json={**put, "key": s[6] * 100}),
         await admin.put(f"{A}/{aid}/secret", json={**put, "key": {"v": s[6]}, "secret": [s[6]]}),
@@ -164,7 +164,7 @@ async def test_i12_entered_value_appears_nowhere(
         await viewer.put(f"{A}/{aid}/secret", json={**put, "key": s[6]}),  # 403
         await admin.get(A, params={"cursor": "invalide"}),
     ]
-    # Sonde qui échoue avec la valeur dans son message, puis rotation réussie.
+    # Probe that fails with the value in its message, then a successful rotation.
     stack.app.dependency_overrides[get_permission_probe] = lambda: _Probe(RuntimeError(s[7]))
     responses.append(await admin.post(f"{A}/{aid}/test"))
     responses.append(
@@ -181,7 +181,7 @@ async def test_i12_entered_value_appears_nowhere(
     for r in responses:
         assert "TEST-SECRET" not in r.text and "TEST-SECRET" not in str(r.headers), r.request.url
     assert "TEST-SECRET" not in logs.getvalue() and "TEST-SECRET" not in caplog.text
-    assert "account_secret_stored" in logs.getvalue()  # les logs ont bien été capturés
+    assert "account_secret_stored" in logs.getvalue()  # the logs were indeed captured
 
     async with stack.world.sessions() as db:
         account = await db.get_one(Account, UUID(aid))
@@ -191,14 +191,14 @@ async def test_i12_entered_value_appears_nowhere(
             )
         ).all()
         secrets = (await db.scalars(select(Secret))).all()
-    # Audit : l'empreinte « après » est celle de champs sans valeur de secret.
+    # Audit: the "after" fingerprint covers fields holding no secret value.
     last = rows[-1]
     assert last.action == "account.secret.rotate"
     assert last.after_hash == fingerprint(
         {"usage": "trade", "key_version": 1, "secret_id": str(account.secret_ref)}
     )
     assert "TEST-SECRET" not in repr([vars(r) for r in rows])
-    # En base : chiffré seulement, et rien de lisible dans `repr`.
+    # In the database: encrypted only, and nothing readable in `repr`.
     for secret in secrets:
         assert b"TEST-SECRET" not in secret.ciphertext and "TEST-SECRET" not in repr(vars(secret))
     assert "TEST-SECRET" not in repr(vars(account))
@@ -213,8 +213,8 @@ async def test_i12_key_is_handed_only_to_the_engine_of_the_accounts_live_instanc
         value = await worker.reveal(s, KEY, secret_id=trade, instance_id=live, now=NOW)
         assert value.get_secret_value() == SENTINEL.format("trade")
         assert "TEST-SECRET" not in repr(value) + str(value)
-        assert (await s.get_one(Secret, trade)).last_used_at == NOW  # suivi du dernier usage
-        # La clé d'un autre compte, même pour une instance live : refus, rien d'écrit.
+        assert (await s.get_one(Secret, trade)).last_used_at == NOW  # last use is tracked
+        # Another account's key, even for a live instance: refused, nothing written.
         for secret_id, instance_id in ((other_trade, live), (trade, other_live)):
             with pytest.raises(worker.SecretRefusedError, match="compte de l'instance"):
                 await worker.reveal(s, KEY, secret_id=secret_id, instance_id=instance_id, now=NOW)
@@ -222,7 +222,7 @@ async def test_i12_key_is_handed_only_to_the_engine_of_the_accounts_live_instanc
                 await worker.write_instance_file(
                     s, tmp_path, instance_id=instance_id, secret_ids=[secret_id], content={}
                 )
-        # L'identifiant de moteur d'une autre instance ne se déchiffre pas (AAD).
+        # Another instance's engine identifier does not decrypt (AAD).
         with pytest.raises(InvalidTag):
             await worker.reveal(s, KEY, secret_id=other_api, instance_id=live, now=NOW)
         for missing in (
@@ -231,7 +231,7 @@ async def test_i12_key_is_handed_only_to_the_engine_of_the_accounts_live_instanc
         ):
             with pytest.raises(worker.SecretRefusedError):
                 await worker.reveal(s, KEY, now=NOW, **missing)
-        # Une référence détournée en base (clé d'un autre compte) ne se déchiffre pas non plus.
+        # A reference diverted in the database (another account's key) does not decrypt either.
         account = await s.get_one(Account, (await s.get_one(Instance, live)).account_id)
         account.secret_ref = other_trade
         await s.flush()
@@ -281,13 +281,13 @@ async def test_i12_instance_file_is_restricted_atomic_then_deleted(
         return real_open(path, flags, mode, **kw)  # type: ignore[arg-type]
 
     monkeypatch.setattr(os, "open", spy)
-    old_umask = os.umask(0)  # même sans umask protecteur
+    old_umask = os.umask(0)  # even without a protective umask
     try:
         async with session_factory() as s:
             path = await worker.write_instance_file(
                 s, tmp_path, instance_id=instance_id, secret_ids=[api], content=content
             )
-            # Réécriture (redéploiement) : remplace sans erreur.
+            # Rewrite (redeployment): replaces without error.
             await worker.write_instance_file(
                 s,
                 tmp_path,
@@ -304,16 +304,16 @@ async def test_i12_instance_file_is_restricted_atomic_then_deleted(
     assert json.loads(path.read_text()) == content
     assert stat.S_IMODE(path.stat().st_mode) == 0o400
     assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
-    # Droits posés à l'ouverture, création exclusive, sans suivre de lien.
+    # Permissions set at open, exclusive creation, without following links.
     flags, mode = opened[0]
     assert mode == 0o400 and flags & os.O_EXCL and flags & os.O_CREAT and flags & os.O_NOFOLLOW
-    assert [p.name for p in path.parent.iterdir()] == [worker.CREDENTIALS_FILE]  # aucun reste
+    assert [p.name for p in path.parent.iterdir()] == [worker.CREDENTIALS_FILE]  # nothing left over
 
     worker.remove_instance_file(tmp_path, instance_id)
     assert not path.exists()
-    worker.remove_instance_file(tmp_path, instance_id)  # déjà supprimé : sans effet
+    worker.remove_instance_file(tmp_path, instance_id)  # already deleted: no effect
 
-    # Dossier d'instance détourné par un lien : refus, rien n'est écrit ailleurs.
+    # Instance directory diverted by a link: refused, nothing is written elsewhere.
     _, other, _, other_api = await keyed_instance(mode="paper")
     target = tmp_path / "ailleurs"
     target.mkdir()
@@ -343,7 +343,7 @@ async def test_i12_write_failure_leaves_no_file(
             await worker.write_instance_file(
                 s, tmp_path, instance_id=instance_id, secret_ids=[api], content={"k": "v"}
             )
-        with pytest.raises(TypeError):  # contenu non sérialisable : refusé avant toute écriture
+        with pytest.raises(TypeError):  # non-serializable content: refused before any write
             await worker.write_instance_file(
                 s,
                 tmp_path,

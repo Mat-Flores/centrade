@@ -1,9 +1,9 @@
-"""Client REST du moteur : un appel court, borné en durée et en taille, en dehors de la boucle
-asynchrone.
+"""Engine REST client: one short call, bounded in time and size, outside the asynchronous
+loop.
 
-`freqtrade-client` n'est pas utilisé : il lit les nombres en flottants, ignore le code HTTP et
-avale les erreurs de connexion. C'est un écart au SPEC §5 et §7, à faire valider (ADR 0007). Les
-routes appelées sont les siennes (ADR 0008).
+`freqtrade-client` is not used: it reads numbers as floats, ignores the HTTP code and
+swallows connection errors. This deviates from SPEC §5 and §7, to be validated (ADR 0007). The
+routes called are its own (ADR 0008).
 """
 
 from __future__ import annotations
@@ -19,8 +19,8 @@ from centrade_core.engine.contract import CommandRejected, EngineUnreachable
 
 CONNECT_TIMEOUT_S = 2.0
 READ_TIMEOUT_S = 5.0
-EXIT_TIMEOUT_S = 20.0  # une sortie forcée passe par la venue : plus longue qu'une lecture
-# Plafond d'une réponse lue. Une page de 200 trades clos pèse de l'ordre du mégaoctet.
+EXIT_TIMEOUT_S = 20.0  # a forced exit goes through the venue: longer than a read
+# Cap on a response read. A page of 200 closed trades weighs about a megabyte.
 MAX_RESPONSE_BYTES = 16 * 1024**2
 
 
@@ -29,7 +29,7 @@ def _no_constant(name: str) -> Any:
 
 
 def _decode(text: str) -> Any:
-    # Argent : les nombres décimaux de la réponse deviennent des Decimal, jamais des float.
+    # Money: decimal numbers in the response become Decimal, never float.
     return json.loads(text, parse_float=Decimal, parse_constant=_no_constant)
 
 
@@ -59,7 +59,7 @@ class EngineApi:
                     headers={"Accept": "application/json", "Content-Type": "application/json"},
                     timeout=(CONNECT_TIMEOUT_S, read_s),
                     allow_redirects=False,
-                    stream=True,  # lu par morceaux : jamais plus que le plafond en mémoire
+                    stream=True,  # read in chunks: never more than the cap in memory
                 )
                 status, raw = resp.status_code, bytearray()
                 for chunk in resp.iter_content(64 * 1024):
@@ -70,9 +70,9 @@ class EngineApi:
             raise EngineUnreachable(f"API du moteur injoignable : {type(exc).__name__}") from exc
         try:
             data = _decode(raw.decode("utf-8")) if raw else None
-        except (ValueError, RecursionError) as exc:  # JSON invalide, trop profond, mal encodé
+        except (ValueError, RecursionError) as exc:  # invalid JSON, too deep, badly encoded
             raise EngineUnreachable("réponse du moteur illisible") from exc
-        if status == 502 and isinstance(data, dict):  # RPCException du moteur : refus métier
+        if status == 502 and isinstance(data, dict):  # engine RPCException: business refusal
             raise CommandRejected(str(data.get("detail") or data.get("error") or "refus du moteur"))
         if status in (401, 403) or status >= 500:
             raise EngineUnreachable(f"API du moteur : code {status}")

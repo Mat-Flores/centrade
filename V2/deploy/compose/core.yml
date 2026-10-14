@@ -1,4 +1,4 @@
-# Profil core (SPEC §5, §13). Sources : https://docs.docker.com/reference/compose-file/
+# Core profile (SPEC §5, §13). Sources: https://docs.docker.com/reference/compose-file/
 name: centrade
 
 x-hardened: &hardened
@@ -7,8 +7,8 @@ x-hardened: &hardened
   read_only: true
   restart: unless-stopped
 
-# Réglages des conteneurs applicatifs : chemins de secrets seulement, aucune valeur secrète.
-# Le rôle Postgres applicatif n'a ni DDL ni écriture sur audit_log (deploy/db/provision_roles.py).
+# Application container settings: secret paths only, no secret value.
+# The application Postgres role has neither DDL nor write access on audit_log (deploy/db/provision_roles.py).
 x-app-env: &app-env
   CENTRADE_LOG_LEVEL: ${CENTRADE_LOG_LEVEL:-INFO}
   CENTRADE_DB_USER: centrade_app
@@ -21,7 +21,7 @@ x-app-image: &app-image
     context: ../..
     dockerfile: apps/api/Dockerfile
   image: centrade/api:dev
-  pull_policy: build # jamais tirée d'un registre : le nom est résoluble sur Docker Hub
+  pull_policy: build # never pulled from a registry: the name is resolvable on Docker Hub
 
 services:
   postgres:
@@ -52,7 +52,7 @@ services:
     profiles: [core]
     image: redis:7.4.11-alpine@sha256:858f009f9709ce576febc734aa78b8f6d624b82571f9ddb6bda4377c833b3499
     user: "999:1000"
-    # Le fichier secret ne contient que `requirepass <valeur>` : rien en ligne de commande.
+    # The secret file contains only `requirepass <value>`: nothing on the command line.
     command: ["redis-server", "/run/secrets/redis_conf", "--appendonly", "yes"]
     secrets: [redis_conf]
     volumes:
@@ -64,7 +64,7 @@ services:
       timeout: 3s
       retries: 12
 
-  # Exécution unique : migrations (propriétaire de la base), puis droits du rôle applicatif.
+  # Single run: migrations (database owner), then the application role's rights.
   migrate:
     <<: [*hardened, *app-image]
     profiles: [core]
@@ -84,12 +84,12 @@ services:
   api:
     <<: [*hardened, *app-image]
     profiles: [core]
-    # Uvicorn ne croit X-Forwarded-For que de Caddy (adresse fixe sur edge), jamais de `*`.
+    # Uvicorn trusts X-Forwarded-For only from Caddy (fixed address on edge), never from `*`.
     command: ["uvicorn", "centrade_api.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips", "172.31.250.10"]
     environment:
       <<: *app-env
       CENTRADE_REDIS_CONF_FILE: /run/secrets/redis_conf
-      CENTRADE_MASTER_KEY_FILE: /run/secrets/master_key # l'API seule : TOTP, puis SecretStore
+      CENTRADE_MASTER_KEY_FILE: /run/secrets/master_key # the API only: TOTP, then SecretStore
     secrets: [app_db_password, master_key, redis_conf]
     tmpfs: [/tmp]
     networks: [edge, app, data]
@@ -117,7 +117,7 @@ services:
       migrate: {condition: service_completed_successfully}
       redis: {condition: service_healthy}
     healthcheck:
-      # Sain tant que sa clé de battement (TTL court) existe dans Redis.
+      # Healthy as long as its heartbeat key (short TTL) exists in Redis.
       test: ["CMD", "python", "-c", "import sys; from redis import Redis; from centrade_core.bus import HEARTBEAT_KEY; from centrade_core.settings import get_settings; sys.exit(0 if Redis.from_url(get_settings().redis_url, socket_timeout=2).exists(HEARTBEAT_KEY) else 1)"]
       interval: 5s
       timeout: 4s
@@ -160,7 +160,7 @@ services:
       - /config:uid=10002,mode=0700
     networks:
       edge:
-        ipv4_address: 172.31.250.10 # adresse que l'API croit pour X-Forwarded-For
+        ipv4_address: 172.31.250.10 # address the API trusts for X-Forwarded-For
     depends_on:
       api: {condition: service_healthy}
       web: {condition: service_healthy}
@@ -175,10 +175,10 @@ networks:
     ipam:
       config:
         - subnet: 172.31.250.0/24
-  # API et worker seulement ; sans route vers l'extérieur.
+  # API and worker only; no route to the outside.
   app:
     internal: true
-  # Postgres et Redis ; joignables par l'API, le worker et migrate seulement.
+  # Postgres and Redis; reachable by the API, the worker and migrate only.
   data:
     internal: true
 

@@ -1,7 +1,7 @@
-"""Ingestion idempotente : un événement déjà vu (même `id` ou `(instance_id, seq)`) est sans effet.
+"""Idempotent ingestion: an already-seen event (same `id` or `(instance_id, seq)`) has no effect.
 
-Un événement n'est qu'un indice (SPEC §7) : on le conserve, on met à jour l'historique des ordres,
-mais les positions et l'état observé ne viennent que des relevés (voir projection.py).
+An event is only a hint (SPEC §7): it is kept and the order history is updated,
+but positions and observed state come only from snapshots (see projection.py).
 """
 
 from __future__ import annotations
@@ -25,7 +25,7 @@ _ORDER_STATUS = {
     EventType.ORDER_CANCELED: "canceled",
     EventType.ORDER_REJECTED: "rejected",
 }
-# Un événement tardif ne fait jamais reculer un ordre ; seul un relevé peut le corriger.
+# A late event never moves an order backwards; only a snapshot can correct it.
 _RANK = {"open": 0, "unknown": 1, "filled": 2, "canceled": 2, "rejected": 2}
 
 
@@ -33,7 +33,7 @@ _RANK = {"open": 0, "unknown": 1, "filled": 2, "canceled": 2, "rejected": 2}
 class Ingested:
     new: bool
     anomaly: Anomaly | None
-    order_id: UUID | None = None  # ligne d'ordre créée ou modifiée, à annoncer au flux
+    order_id: UUID | None = None  # order row created or modified, to announce on the stream
 
 
 async def ingest(
@@ -76,7 +76,7 @@ async def ingest(
 
 async def _track_order(s: AsyncSession, ev: CanonicalEvent) -> UUID | None:
     p = ev.payload
-    if not isinstance(p, OrderPayload):  # PAYLOAD_MODELS l'exclut pour ces quatre types
+    if not isinstance(p, OrderPayload):  # PAYLOAD_MODELS excludes it for these four types
         return None
     status = _ORDER_STATUS[ev.type]
     order = await s.scalar(select(Order).where(Order.client_order_id == str(p.client_order_id)))
@@ -95,7 +95,7 @@ async def _track_order(s: AsyncSession, ev: CanonicalEvent) -> UUID | None:
             observed_at=ev.ts,
         )
         s.add(order)
-        await s.flush()  # l'identifiant de la ligne, pour l'annonce
+        await s.flush()  # the row identifier, for the announcement
     elif _RANK[status] > _RANK[order.status]:
         order.status = status
         order.observed_at = ev.ts

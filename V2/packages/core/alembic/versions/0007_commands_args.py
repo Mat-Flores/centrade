@@ -1,4 +1,4 @@
-"""Commandes : arguments (position à fermer, ordre d'entrée à annuler).
+"""Commands: arguments (position to close, entry order to cancel).
 
 Revision ID: 0007
 Revises: 0006

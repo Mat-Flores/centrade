@@ -1,5 +1,5 @@
-"""Déploiement par le worker (SPEC F9, I5, I10) : refus lisibles, aucun live avant la promotion,
-et annonce au flux des ordres et positions qui changent."""
+"""Deployment by the worker (SPEC F9, I5, I10): readable refusals, no live before promotion,
+and announcement to the stream of orders and positions that change."""
 
 from typing import Any
 from uuid import UUID, uuid4
@@ -19,7 +19,7 @@ async def test_runner_admission_refusal_becomes_a_readable_failure(stack: Stack)
     w = stack.world
     c = await stack.client("operator")
 
-    async def deploy(spec: Any) -> Any:  # ce que lève le runner quand la mémoire manque
+    async def deploy(spec: Any) -> Any:  # what the runner raises when memory is short
         raise CommandRejected("mémoire réservée insuffisante : 2 Gio demandés pour 1 Gio")
 
     w.fake.deploy = deploy  # type: ignore[method-assign]
@@ -34,8 +34,8 @@ async def test_runner_admission_refusal_becomes_a_readable_failure(stack: Stack)
 
 
 async def test_code_rejected_by_the_adapter_is_never_deployed(stack: Stack) -> None:
-    """Une instance sans version de stratégie ne tourne que sur un moteur qui accepte de n'avoir
-    aucun code : c'est l'adaptateur qui le dit, pas le worker."""
+    """An instance without a strategy version runs only on an engine that accepts having
+    no code: the adapter says so, not the worker."""
     w = stack.world
     c = await stack.client("operator")
     calls = spy(w.fake)
@@ -95,7 +95,7 @@ async def test_live_instance_is_never_deployed_or_resumed_before_promotion(
         (cmd,) = await commands(w, iid)
         assert cmd.status == "failed" and cmd.result is not None
         assert [r["code"] for r in cmd.result["reasons"]] == ["live"]
-        assert calls == []  # rien n'a atteint le moteur
+        assert calls == []  # nothing reached the engine
         assert [a.rule for a in await alerts(w, iid)] == ["entries_refused"]
 
 
@@ -128,12 +128,12 @@ async def test_orders_and_positions_are_announced_on_the_stream_when_they_change
         orders = set(await s.scalars(select(Order.id).where(Order.instance_id == ref.instance_id)))
     assert positions and orders
     assert {i for k, i in sent if k == "position"} == positions
-    assert {i for k, i in sent if k == "order"} == orders  # ouverts, exécutés, annulés
-    assert len(sent) == len(set(sent))  # une annonce par ligne et par tour
+    assert {i for k, i in sent if k == "order"} == orders  # opened, filled, cancelled
+    assert len(sent) == len(set(sent))  # one announcement per row and per cycle
 
     sent.clear()
-    await w.worker.run_once()  # rien n'a changé : pas une annonce par tour
+    await w.worker.run_once()  # nothing changed: not one announcement per cycle
     assert not [k for k, _ in sent if k in ("position", "order")]
-    w.clock.advance(10)  # cadence de rafraîchissement : la date d'observation avance
+    w.clock.advance(10)  # refresh cadence: the observation date advances
     await w.worker.run_once()
     assert {i for k, i in sent if k == "position"} == positions

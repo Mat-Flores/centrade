@@ -1,4 +1,4 @@
-"""Socle de données de M2 : comptes, secrets, stratégies, trades, jetons de service, déploiement.
+"""M2 data foundation: accounts, secrets, strategies, trades, service tokens, deployment.
 
 Revision ID: 0005
 Revises: 0004
@@ -104,7 +104,7 @@ def upgrade() -> None:
         _in("status", ("draft", "approved", "retired"), "status"),
     )
     op.create_index("ix_strategy_versions_strategy_id", "strategy_versions", ["strategy_id"])
-    # Une version déposée ne change plus (F1) : on en dépose une autre. Le statut reste modifiable.
+    # A submitted version no longer changes (F1): another one is submitted. Status stays editable.
     op.execute("""
         CREATE FUNCTION strategy_versions_immutable() RETURNS trigger LANGUAGE plpgsql AS $$
         BEGIN

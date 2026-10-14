@@ -1,7 +1,7 @@
-"""Classe de base de toute stratégie de la plateforme (SPEC §7, F2, F10, annexe C).
+"""Base class of every platform strategy (SPEC §7, F2, F10, annex C).
 
-Montée dans le conteneur à côté de la stratégie (`from control_plane import ControlPlaneStrategy`).
-Ne dépend que de Freqtrade et de la bibliothèque standard.
+Mounted in the container next to the strategy (`from control_plane import ControlPlaneStrategy`).
+Depends only on Freqtrade and the standard library.
 """
 
 from __future__ import annotations
@@ -15,12 +15,12 @@ from freqtrade.strategy import IStrategy
 
 logger = logging.getLogger(__name__)
 
-PROTECTED: frozenset[str] = frozenset()  # rempli après la classe, à partir de ce qu'elle définit
+PROTECTED: frozenset[str] = frozenset()  # filled after the class, from what it defines
 
 
 class _Sealed(ABCMeta):
-    """Métaclasse : un nom protégé ne se réaffecte ni ne se supprime sur la classe de base ou
-    sur une sous-classe (`S.confirm_trade_entry = …`). `IStrategy` est une ABC (tag 2026.9)."""
+    """Metaclass: a protected name is neither reassigned nor deleted on the base class or
+    on a subclass (`S.confirm_trade_entry = …`). `IStrategy` is an ABC (tag 2026.9)."""
 
     def __setattr__(cls, name: str, value: Any) -> None:
         if name in PROTECTED:
@@ -34,25 +34,25 @@ class _Sealed(ABCMeta):
 
 
 class ControlPlaneStrategy(IStrategy, metaclass=_Sealed):
-    can_short = False  # spot seulement (V1)
-    _boot_dry_run = False  # refus tant que __init__ n'a pas lu le mode
+    can_short = False  # spot only (V1)
+    _boot_dry_run = False  # refuse until __init__ has read the mode
 
     def __init__(self, config: dict[str, Any], *args: Any, **kwargs: Any) -> None:
         super().__init__(config, *args, **kwargs)
-        # Mode lu une fois, à la construction : la stratégie ne le change pas après coup.
+        # Mode read once, at construction: the strategy does not change it afterwards.
         object.__setattr__(self, "_boot_dry_run", config.get("dry_run") is True)
 
     def __init_subclass__(cls, **kwargs: Any) -> None:
         super().__init_subclass__(**kwargs)
-        mro = cls.__mro__  # la sous-classe et toute classe placée avant la base
+        mro = cls.__mro__  # the subclass and any class placed before the base
         clash = sorted(
             {n for k in mro[: mro.index(ControlPlaneStrategy)] for n in vars(k)} & PROTECTED
         )
-        if clash:  # TypeError : non attrapée par le chargeur de Freqtrade, le moteur ne démarre pas
+        if clash:  # TypeError: not caught by Freqtrade's loader, the engine does not start
             raise TypeError(f"{cls.__name__} redéfinit des noms de la plateforme : {clash}")
 
     def __setattr__(self, name: str, value: Any) -> None:
-        if name in PROTECTED:  # pas de méthode de la plateforme masquée sur l'instance
+        if name in PROTECTED:  # no platform method masked on the instance
             raise TypeError(f"{name} : nom de la plateforme, non modifiable")
         super().__setattr__(name, value)
 
@@ -62,18 +62,18 @@ class ControlPlaneStrategy(IStrategy, metaclass=_Sealed):
         super().__delattr__(name)
 
     def _intact(self) -> bool:
-        """Les noms protégés résolus sur ce type sont ceux de la base : rien ne les masque, ni une
-        classe placée avant elle, ni l'instance. Couvre une écriture qui aurait évité
-        `__setattr__` ; pas un remplacement de `confirm_trade_entry` lui-même ni de la base."""
+        """The protected names resolved on this type are the base's: nothing masks them, neither a
+        class placed before it, nor the instance. Covers a write that would have avoided
+        `__setattr__`; not a replacement of `confirm_trade_entry` itself nor of the base."""
         mro = type(self).__mro__
         before = mro[: mro.index(ControlPlaneStrategy)]
         shadows = [vars(k).keys() & PROTECTED for k in before]
         return not any(shadows) and not vars(self).keys() & (PROTECTED - {"_boot_dry_run"})
 
     def _entry_allowed(self, **order: Any) -> bool:
-        """Point d'extension M3 : remplacer par POST /api/v1/risk/check (jeton lié à l'instance,
-        request_id déterministe, délai 500 ms). Toute réponse autre qu'un `accept` valide et non
-        expiré doit retourner False. À M2 il n'y a pas de Risk service : dry-run seulement."""
+        """M3 extension point: replace with POST /api/v1/risk/check (token bound to the instance,
+        deterministic request_id, 500 ms timeout). Any response other than a valid, unexpired
+        `accept` must return False. In M2 there is no Risk service: dry-run only."""
         return self._boot_dry_run is True and self.config.get("dry_run") is True
 
     def confirm_trade_entry(
@@ -88,7 +88,7 @@ class ControlPlaneStrategy(IStrategy, metaclass=_Sealed):
         side: str,
         **kwargs: Any,
     ) -> bool:
-        # Une exception vaut acceptation côté moteur (annexe C, fait 2) : on attrape tout.
+        # An exception counts as acceptance on the engine side (annex C, fact 2): catch all.
         try:
             if not self._intact():
                 logger.error("confirm_trade_entry : noms de la plateforme masqués, refus")
@@ -99,24 +99,24 @@ class ControlPlaneStrategy(IStrategy, metaclass=_Sealed):
             return False
 
     def confirm_trade_exit(self, *args: Any, **kwargs: Any) -> bool:
-        return True  # une sortie n'est jamais bloquée (I4)
+        return True  # an exit is never blocked (I4)
 
     def adjust_trade_position(self, *args: Any, **kwargs: Any) -> None:
-        return None  # pas de renfort : il échapperait à confirm_trade_entry
+        return None  # no top-up: it would escape confirm_trade_entry
 
     def adjust_order_price(self, *args: Any, current_order_rate: float, **kwargs: Any) -> float:
-        # Seul adjust_order_price est défini : le moteur refuse au chargement une stratégie qui
-        # le redéfinit en plus de adjust_entry_price ou adjust_exit_price (ADR 0008). Il couvre
-        # les ordres d'entrée et de sortie ; l'ordre en place est maintenu, jamais remplacé.
+        # Only adjust_order_price is defined: the engine refuses at load a strategy that
+        # redefines it in addition to adjust_entry_price or adjust_exit_price (ADR 0008). It covers
+        # entry and exit orders; the order in place is kept, never replaced.
         return current_order_rate
 
     def leverage(self, *args: Any, **kwargs: Any) -> float:
         return 1.0
 
 
-# Noms qu'une sous-classe ne peut pas redéfinir : tout ce que la base définit (hors bruit de
-# Python et d'ABC), plus deux hooks que le moteur refuse avec adjust_order_price. checks.py
-# dérive la même liste de ce fichier ; un test vérifie qu'elles ne divergent pas.
+# Names a subclass cannot redefine: everything the base defines (apart from Python and ABC
+# noise), plus two hooks the engine refuses alongside adjust_order_price. checks.py
+# derives the same list from this file; a test checks that they do not diverge.
 _OWN_DUNDERS = ("__init__", "__init_subclass__", "__setattr__", "__delattr__")
 PROTECTED = frozenset(
     n

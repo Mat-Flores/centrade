@@ -1,6 +1,6 @@
-"""Erreurs RFC 7807 (application/problem+json), SPEC §8.
+"""RFC 7807 errors (application/problem+json), SPEC §8.
 
-Source : https://fastapi.tiangolo.com/tutorial/handling-errors/
+Source: https://fastapi.tiangolo.com/tutorial/handling-errors/
 """
 
 from collections.abc import Mapping
@@ -18,7 +18,7 @@ def _problem(
 ) -> JSONResponse:
     try:
         title = HTTPStatus(status).phrase
-    except ValueError:  # statut hors registre (499…)
+    except ValueError:  # status outside the registry (499…)
         title = "Error"
     body = {
         "type": "about:blank",
@@ -35,16 +35,16 @@ def _problem(
 def install_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(StarletteHTTPException)
     async def _http(request: Request, exc: StarletteHTTPException) -> JSONResponse:
-        # Les en-têtes portent `Allow`, `WWW-Authenticate`, `Retry-After`.
+        # The headers carry `Allow`, `WWW-Authenticate`, `Retry-After`.
         return _problem(request, exc.status_code, exc.headers, detail=exc.detail)
 
     @app.exception_handler(Exception)
     async def _unhandled(request: Request, exc: Exception) -> JSONResponse:
-        # Aucun détail : le message d'une exception peut contenir un secret.
+        # No detail: an exception message may contain a secret.
         return _problem(request, 500)
 
     @app.exception_handler(RequestValidationError)
     async def _validation(request: Request, exc: RequestValidationError) -> JSONResponse:
-        # Ni "input" ni "ctx" : la valeur reçue peut être un secret.
+        # Neither "input" nor "ctx": the received value may be a secret.
         errors = [{"loc": e["loc"], "msg": e["msg"], "type": e["type"]} for e in exc.errors()]
         return _problem(request, 422, errors=errors)
