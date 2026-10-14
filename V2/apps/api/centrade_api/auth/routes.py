@@ -92,9 +92,9 @@ async def login(
     db: Annotated[AsyncSession, Depends(get_db)],
     now: Annotated[datetime, Depends(utcnow)],
 ) -> LoginOut:
-    """Étape 1. Ouvre une pré-session, qui ne donne accès qu'à `/auth/totp`.
+    """Step 1. Opens a pre-session, which grants access to `/auth/totp` only.
 
-    Compte inconnu, mot de passe faux, compte verrouillé ou sans TOTP : même réponse, même coût.
+    Unknown account, wrong password, locked account or no TOTP: same response, same cost.
     """
     ip = client_ip(request)
     username = body.username.strip().lower()
@@ -207,7 +207,7 @@ async def totp(
     settings: Annotated[Settings, Depends(get_settings)],
     pre_token: Annotated[str, Depends(pre_session_token)],
 ) -> Me:
-    """Étape 2. Code TOTP ou code de récupération : ferme la pré-session, ouvre la session."""
+    """Step 2. TOTP code or recovery code: closes the pre-session, opens the session."""
     ip = client_ip(request)
     opened: tuple[str, Me, str] | None = None
     failure = unauthorized("Code refusé.")
@@ -312,10 +312,11 @@ async def confirm_totp(
     settings: Annotated[Settings, Depends(get_settings)],
     principal: Annotated[Principal, Depends(current_user)],
 ) -> None:
-    """Ré-authentification d'une session ouverte : rafraîchit le TOTP de cette session, lui seul.
+    """Re-authentication of an open session: refreshes the TOTP of this session, and only it.
 
-    Code TOTP seul : un code de récupération rend un accès, il n'autorise pas une action
-    dangereuse. Un refus ne ferme pas la session et ne dit pas si le code est faux ou rejoué.
+    TOTP code only: a recovery code restores access, it does not authorize a dangerous
+    action. A refusal does not close the session and does not tell whether the code is wrong
+    or replayed.
     """
     ip = client_ip(request)
     actor = principal.actor

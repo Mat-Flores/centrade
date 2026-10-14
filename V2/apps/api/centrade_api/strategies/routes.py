@@ -195,7 +195,7 @@ async def change_status(
     db: Db,
     now: Now,
 ) -> VersionOut:
-    """draft -> approved -> retired ; le seul champ modifiable d'une version."""
+    """draft -> approved -> retired; the only editable field of a version."""
     v = await _version(db, strategy_id, version, lock=True)
     if (v.status, body.status) not in TRANSITIONS:
         raise HTTPException(409, f"Transition interdite : {v.status} vers {body.status}.")

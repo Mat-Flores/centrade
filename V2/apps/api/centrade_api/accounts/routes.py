@@ -129,7 +129,7 @@ async def create_account(
 async def put_secret(
     account_id: UUID, body: SecretIn, request: Request, user: Admin, db: Db, now: Now, store: Store
 ) -> KeyOut:
-    """Stocke ou remplace une clé, sans la tester : le compte redevient non vérifié."""
+    """Stores or replaces a key without testing it: the account becomes unverified again."""
     account = await _locked(db, account_id)
     _key_holder(account)
     old: UUID | None = getattr(account, _REF[body.usage])
@@ -162,7 +162,7 @@ async def put_secret(
 async def check_permissions(
     account_id: UUID, request: Request, user: Admin, db: Db, now: Now, probe: Probe
 ) -> PermissionTestOut:
-    """Teste la clé de trading. Le compte reflète le dernier test : seul `verified` le date."""
+    """Tests the trading key. The account reflects the last test: only `verified` dates it."""
     account = await _locked(db, account_id)
     if account.secret_ref is None:
         raise HTTPException(409, "Aucune clé de trading à tester.")
@@ -196,10 +196,10 @@ async def rotate_secret(
     store: Store,
     probe: Probe,
 ) -> KeyOut:
-    """Nouvelle clé stockée, testée, puis bascule ; l'ancienne est révoquée après la bascule.
+    """New key stored, tested, then switched over; the old one is revoked after the switch.
 
-    Tout se fait dans une transaction : un test qui n'aboutit pas l'annule, l'ancienne clé et
-    l'état du compte restent tels quels.
+    Everything happens in one transaction: a test that does not succeed rolls it back, the old
+    key and the account state stay as they were.
     """
     # shortcut: the probe is called inside the transaction, before any commit; a probe that
     # reads the new key from another process (M7) will need an intermediate commit.

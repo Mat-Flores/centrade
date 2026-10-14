@@ -138,8 +138,8 @@ def create_app() -> FastAPI:
         redis: Annotated[Redis | None, Depends(get_redis)],
         request: Request,
     ) -> Health:
-        """Sans session. Base, bus et battement du worker : chacun observé et daté (I1).
-        Toujours 200 : un composant en panne rend `degraded`, il ne fait pas redémarrer l'API."""
+        """No session. Database, bus and worker heartbeat: each observed and dated (I1).
+        Always 200: a failed component yields `degraded`, it does not restart the API."""
 
         async def probe(name: str, check: Callable[[], Awaitable[str | None]]) -> Check:
             try:

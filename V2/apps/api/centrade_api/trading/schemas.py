@@ -17,7 +17,7 @@ Mode = Literal["paper", "live"]
 
 
 class _Owned(BaseModel):
-    """Ce que toute ligne dit de son instance : modes et compte (None : instance sans compte)."""
+    """What every row says about its instance: modes and account (None: no account)."""
 
     instance_id: UUID
     mode: Mode  # = desired_mode, kept for existing clients

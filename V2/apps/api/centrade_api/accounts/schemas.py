@@ -54,7 +54,7 @@ class SecretIn(BaseModel):
 
 
 class KeyOut(BaseModel):
-    """Tout ce qu'on dit d'une clé : jamais sa valeur, ni un préfixe, ni une empreinte."""
+    """Everything said about a key: never its value, a prefix or a fingerprint."""
 
     usage: str
     key_version: int
