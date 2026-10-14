@@ -433,7 +433,10 @@ class Worker:
         self._notes.extend(n for n in written if n[0] == "alert")
         # Positions and orders: announced when the snapshot changes, then at the instance's
         # cadence (their observation date advances); never every round.
-        sig = (status.state, status.mode, snap.positions, snap.orders, snap.stops, snap.closed)
+        sig = (
+            status.state, status.mode, snap.positions, snap.orders, snap.stops, snap.closed,
+            snap.balances,
+        )  # fmt: skip
         if self._note_instance(ref.instance_id, sig):
             self._notes.extend(n for n in written if n[0] != "alert")
         tick_log.info("resync", reason=reason, state=status.state)

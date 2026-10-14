@@ -147,3 +147,49 @@ async def test_i01_aggregates_are_stale_beyond_threshold(stack: Stack) -> None:
     assert stale_at is not None and stale_at < inst["state"]["observed_at"]  # last value, its date
     assert inst["realized_pnl"]["value"] == money and inst["open_positions"]["value"] == 1
     assert all(inst[k]["stale"] is True and inst[k]["observed_at"] == stale_at for k in AGGREGATES)
+
+
+async def test_i01_balance_never_observed_is_unknown_not_zero(stack: Stack) -> None:
+    w, c = stack.world, await stack.client("operator")
+    created = await create_instance(c)  # the worker has not run: never observed
+    assert created["balances"] == UNKNOWN
+    listed = next(
+        i for i in (await get(c, "/api/v1/instances"))["items"] if i["id"] == created["id"]
+    )
+    assert listed["balances"] == UNKNOWN
+
+    silent = await create_instance(c, failures=["silent"])  # unreachable from the start
+    await w.worker.run_once()
+    assert (await get(c, f"/api/v1/instances/{silent['id']}"))["balances"] == UNKNOWN
+
+    # A snapshot without any balance is indistinguishable from "never observed": unknown, not 0.
+    async with w.sessions.begin() as s:
+        await apply_observation(
+            s,
+            UUID(created["id"]),
+            InstanceStatus(state="exits_only", mode="paper", observed_at=w.clock.now),
+            Snapshot(positions=(), orders=(), balances=(), stops=(), observed_at=w.clock.now),
+        )
+    assert (await get(c, f"/api/v1/instances/{created['id']}"))["balances"] == UNKNOWN
+
+
+async def test_i01_balance_is_stale_beyond_threshold(stack: Stack) -> None:
+    w, c = stack.world, await stack.client("operator")
+    created = await create_instance(c)
+    await w.worker.run_once()
+    fresh = await get(c, f"/api/v1/instances/{created['id']}")
+    usdt = [{"currency": "USDT", "free": "1000", "total": "1000"}]  # FakeEngine balance
+    assert fresh["balances"] == {
+        "value": usdt, "observed_at": fresh["state"]["observed_at"], "stale": False
+    }  # fmt: skip
+
+    w.fake.set_failure(ref_of(created["id"]), Failure.SILENT)  # the engine stops answering
+    w.clock.advance(stack.settings.observed_stale_after_s + 1)
+    await w.worker.run_once()  # unreachable: state unknown, the balance rows stay
+
+    inst = await get(c, f"/api/v1/instances/{created['id']}")
+    assert inst["state"]["value"] == "unknown"
+    # Last value, with its own (old) date, marked stale: never presented as current.
+    assert inst["balances"] == {
+        "value": usdt, "observed_at": fresh["balances"]["observed_at"], "stale": True
+    }  # fmt: skip

@@ -9,14 +9,24 @@ from dataclasses import dataclass
 from datetime import datetime
 from uuid import UUID
 
+import structlog
 from centrade_core.audit import SYSTEM_WORKER, write_audit
 from centrade_core.engine.types import EXIT_CAUSES, InstanceStatus, Snapshot
-from centrade_core.models.trading import Alert, Instance, Order, Position, Trade
+from centrade_core.models.trading import (
+    Alert,
+    BalanceSnapshot,
+    Instance,
+    Order,
+    Position,
+    Trade,
+)
 from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 UNREACHABLE_RULE = "engine_unreachable"
+log = structlog.get_logger("worker.projection")
 
 
 def _currency(symbol: str) -> str:
@@ -121,6 +131,15 @@ async def apply_observation(
             .returning(Order.id)
         )
         notes.extend(("order", i) for i in written)
+    try:
+        # Own savepoint: a failed balance write never costs the positions, orders and commands
+        # of this snapshot (I4); nothing else reads the balances.
+        async with s.begin_nested():
+            await _balances(s, instance_id, snap)
+    except SQLAlchemyError as exc:
+        log.error(
+            "balance_projection_failed", instance_id=str(instance_id), error=type(exc).__name__
+        )
     resolved = (  # the engine answers again: the alert resolves
         await s.scalars(
             update(Alert)
@@ -143,6 +162,38 @@ async def apply_observation(
             after={"status": "resolved"},
         )
     return [("alert", a) for a in resolved] + notes
+
+
+async def _balances(s: AsyncSession, instance_id: UUID, snap: Snapshot) -> None:
+    """Last balance per currency. An older snapshot (out of order) never overwrites nor deletes
+    a newer one; a currency absent from the snapshot is deleted.
+    shortcut: after a snapshot with no balance deleted every row, an older late snapshot can
+    write its rows back (with their old date, so stale); fixing it needs a stored last date."""
+    newest = await s.scalar(
+        select(func.max(BalanceSnapshot.observed_at)).where(
+            BalanceSnapshot.instance_id == instance_id
+        )
+    )
+    if newest is not None and snap.observed_at < newest:
+        return
+    await s.execute(
+        delete(BalanceSnapshot).where(
+            BalanceSnapshot.instance_id == instance_id,
+            BalanceSnapshot.currency.not_in([b.currency for b in snap.balances]),
+            BalanceSnapshot.observed_at <= snap.observed_at,
+        )
+    )
+    for b in snap.balances:
+        row = {"free": b.free, "total": b.total, "observed_at": snap.observed_at}
+        stmt = insert(BalanceSnapshot).values(instance_id=instance_id, currency=b.currency, **row)
+        await s.execute(
+            stmt.on_conflict_do_update(
+                index_elements=["instance_id", "currency"],
+                set_={**row, "updated_at": func.now()},
+                # Row-level guard as well: holds even if two writers race on one instance.
+                where=stmt.excluded.observed_at >= BalanceSnapshot.observed_at,
+            )
+        )
 
 
 @dataclass(frozen=True)

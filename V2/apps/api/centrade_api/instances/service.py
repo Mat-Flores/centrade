@@ -14,6 +14,7 @@ from centrade_core.commands import (
 from centrade_core.engine.types import Manifest
 from centrade_core.models.trading import (
     Account,
+    BalanceSnapshot,
     Command,
     Engine,
     Instance,
@@ -30,6 +31,7 @@ from sqlalchemy.orm import defer
 
 from centrade_api.instances.schemas import (
     AccountRef,
+    BalanceOut,
     DriftItem,
     InstanceCreate,
     InstanceOut,
@@ -85,6 +87,8 @@ async def instances_out(
     closed: dict[UUID, int] = defaultdict(int)
     held_n: dict[UUID, int] = {}
     held_at: dict[UUID, datetime] = {}
+    balances: dict[UUID, list[BalanceOut]] = defaultdict(list)
+    balances_at: dict[UUID, datetime] = {}
     if ids:
         cmds = await db.scalars(
             select(Command)
@@ -121,6 +125,18 @@ async def instances_out(
         )
         for iid, n, at in held:
             held_n[iid], held_at[iid] = n, at
+        cash = await db.scalars(
+            select(BalanceSnapshot)
+            .where(BalanceSnapshot.instance_id.in_(ids))
+            .order_by(BalanceSnapshot.instance_id, BalanceSnapshot.currency)
+        )
+        for b in cash:
+            balances[b.instance_id].append(
+                BalanceOut(currency=b.currency, free=_dec(b.free), total=_dec(b.total))
+            )
+            # The oldest row dates the whole list: the prudent side (I1).
+            oldest = balances_at.get(b.instance_id, b.observed_at)
+            balances_at[b.instance_id] = min(oldest, b.observed_at)
     return [
         InstanceOut.of(
             i,
@@ -135,6 +151,8 @@ async def instances_out(
             closed=closed.get(i.id, 0),
             positions=held_n.get(i.id, 0),
             positions_seen=held_at.get(i.id),
+            balances=balances.get(i.id, []),
+            balances_seen=balances_at.get(i.id),
         )
         for i, kind, version, name, acc in rows
     ]

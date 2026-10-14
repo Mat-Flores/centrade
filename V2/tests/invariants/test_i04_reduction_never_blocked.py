@@ -2,15 +2,23 @@
 platform outage (worker absent for a long time, bus down, another instance in error)."""
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
 import httpx
 import pytest
 from centrade_api.testing import Stack, act, create_instance, get, ref_of
 from centrade_core.bus import Bus
-from centrade_fake.engine import Failure
+from centrade_core.engine.types import Balance, InstanceStatus, Position, Snapshot
+from centrade_fake.engine import SYMBOL, Failure
+from centrade_worker import projection
+from centrade_worker.projection import apply_observation
 from centrade_worker.worker import Worker
 from redis.exceptions import ConnectionError as RedisConnectionError
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+from structlog.testing import capture_logs
 
 REDUCTIONS = {"pause-entries": "exits_only", "flatten": "running", "stop": "stopped"}
 
@@ -162,3 +170,46 @@ async def test_i04_pause_is_dispatched_even_if_engine_was_silent_on_previous_tic
     assert r.status_code == 202
     await w.worker.run_once()
     assert (await get(c, f"/api/v1/commands/{r.json()['command_id']}"))["status"] == "verified"
+
+
+async def test_i04_balance_projection_failure_keeps_positions_and_dispatch(
+    stack: Stack, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    c, iid = await _running(stack)
+    w = stack.world
+    before = (await get(c, f"/api/v1/instances/{iid}"))["balances"]
+    assert before["value"]  # the FakeEngine reported a balance
+
+    async def broken(s: AsyncSession, *_: object) -> None:
+        await s.execute(text("SELECT 1 / 0"))  # a real database error inside the savepoint
+
+    monkeypatch.setattr(projection, "_balances", broken)
+    cid = (await act(c, iid, "pause-entries")).json()["command_id"]
+    with capture_logs() as logs:
+        await w.worker.run_once()
+    # The exit-side command was dispatched and verified despite the failing balance write.
+    assert (await get(c, f"/api/v1/commands/{cid}"))["status"] == "verified"
+    assert (await get(c, f"/api/v1/instances/{iid}"))["state"]["value"] == "exits_only"
+    failed = [e for e in logs if e["event"] == "balance_projection_failed"]
+    assert failed and failed[0]["instance_id"] == iid and failed[0]["error"] == "DBAPIError"
+    assert not any("1000" in str(v) for e in failed for v in e.values())  # no amount logged
+
+    # The positions of the same snapshot are committed; the balance keeps its last value.
+    seen = w.clock.now
+    snap = Snapshot(
+        positions=(
+            Position(
+                position_id="open-1", symbol=SYMBOL, side="buy", qty=Decimal("1"),
+                entry_price=Decimal("100"), opened_at=seen,
+            ),
+        ),
+        orders=(), stops=(), observed_at=seen,
+        balances=(Balance(currency="USDT", free=Decimal("1"), total=Decimal("2")),),
+    )  # fmt: skip
+    async with w.sessions.begin() as s:
+        await apply_observation(
+            s, UUID(iid), InstanceStatus(state="exits_only", mode="paper", observed_at=seen), snap
+        )
+    inst = await get(c, f"/api/v1/instances/{iid}")
+    assert inst["open_positions"]["value"] == 1
+    assert inst["balances"]["value"] == before["value"]

@@ -119,6 +119,21 @@ class Position(Base):
     updated_at: Mapped[datetime] = updated_at()
 
 
+class BalanceSnapshot(Base):
+    """Last observed balance per instance and currency; a derived projection, no history."""
+
+    __tablename__ = "balance_snapshots"
+    __table_args__ = (UniqueConstraint("instance_id", "currency"),)
+
+    id: Mapped[UUID] = uuid_pk()
+    instance_id: Mapped[UUID] = mapped_column(ForeignKey("instances.id"), index=True)
+    currency: Mapped[str]
+    free: Mapped[Decimal]
+    total: Mapped[Decimal]
+    observed_at: Mapped[datetime]
+    updated_at: Mapped[datetime] = updated_at()
+
+
 class Order(Base):
     __tablename__ = "orders"
     __table_args__ = (Index("ix_orders_created_at_id", "created_at", "id"),)  # GET /orders sort

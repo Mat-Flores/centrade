@@ -141,6 +141,31 @@ def test_migration_0005_upgrade_downgrade_and_m1_data(
     command.upgrade(cfg, "head")
 
 
+def test_migration_0010_balance_snapshots_upgrade_and_downgrade(
+    pg_url: str, make_alembic_config: Callable[[str], Config]
+) -> None:
+    asyncio.run(_rows(pg_url, "CREATE DATABASE mig0010"))
+    url = make_url(pg_url).set(database="mig0010").render_as_string(hide_password=False)
+    cfg = make_alembic_config(url)
+    tables = "SELECT tablename FROM pg_tables WHERE schemaname = 'public'"
+
+    command.upgrade(cfg, "0010")
+    assert "balance_snapshots" in {r[0] for r in asyncio.run(_rows(url, tables))}
+    cols = ("SELECT column_name, data_type, numeric_precision, numeric_scale "
+            "FROM information_schema.columns WHERE table_name = 'balance_snapshots'")  # fmt: skip
+    types = {r[0]: r[1:] for r in asyncio.run(_rows(url, cols))}
+    assert types["free"] == types["total"] == ("numeric", 38, 18)  # money: never float
+    uniques = ("SELECT conname FROM pg_constraint "
+               "WHERE conrelid = 'balance_snapshots'::regclass AND contype = 'u'")  # fmt: skip
+    assert [r[0] for r in asyncio.run(_rows(url, uniques))] == [
+        "uq_balance_snapshots_instance_id_currency"
+    ]
+
+    command.downgrade(cfg, "0009")
+    assert "balance_snapshots" not in {r[0] for r in asyncio.run(_rows(url, tables))}
+    command.upgrade(cfg, "head")
+
+
 async def _version(s: AsyncSession) -> Any:
     sid, vid = uuid7(), uuid7()
     await s.execute(

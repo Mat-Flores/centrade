@@ -191,7 +191,10 @@ async def test_listing_200_instances_takes_a_fixed_number_of_queries(stack: Stac
     def record(conn: Any, cursor: Any, statement: str, *rest: Any) -> None:
         seen.append(statement)
 
-    TABLES = ("instances", "commands", "trades", "positions", "strategy_versions", "accounts")
+    TABLES = (
+        "instances", "commands", "trades", "positions", "balance_snapshots", "strategy_versions",
+        "accounts",
+    )  # fmt: skip
 
     async def count(path: str) -> tuple[int, int, dict[str, Any]]:
         seen.clear()
@@ -206,7 +209,7 @@ async def test_listing_200_instances_takes_a_fixed_number_of_queries(stack: Stac
     finally:
         event.remove(stack.world.db.sync_engine, "before_cursor_execute", record)
     assert len(page["items"]) == 200
-    assert listing_all <= 5 and total_all == total_one and listing_all == listing_one
+    assert listing_all <= 6 and total_all == total_one and listing_all == listing_one
     row = page["items"][0]
     assert row["realized_pnl"]["value"] == [
         {"currency": "EUR", "amount": "0.9", "fees": "0.1"},

@@ -88,6 +88,14 @@ class Money(BaseModel):
     fees: str
 
 
+class BalanceOut(BaseModel):
+    """Balance of one currency as reported by the engine, as normalized decimal strings."""
+
+    currency: str
+    free: str
+    total: str
+
+
 RUNNING_STATES = frozenset({"running", "exits_only", "halted"})  # observed states with a start time
 
 
@@ -110,6 +118,9 @@ class InstanceOut(BaseModel):
     realized_pnl: Observed[list[Money] | None]  # one entry per currency; [] = no closed trade
     closed_trades: Observed[int | None]
     open_positions: Observed[int | None]
+    # Last observed balances, dated by the oldest of their rows; None = never observed (or
+    # last snapshot without balances): "unknown", never zero (I1).
+    balances: Observed[list[BalanceOut] | None]
     created_at: AwareDatetime
     server_time: AwareDatetime
 
@@ -129,6 +140,8 @@ class InstanceOut(BaseModel):
         closed: int,
         positions: int,
         positions_seen: datetime | None,  # latest `observed_at` of the open positions
+        balances: list[BalanceOut],
+        balances_seen: datetime | None,  # oldest `observed_at` of the balance rows
     ) -> InstanceOut:
         # `unknown`: never the last known value presented as current.
         state = cast(ObservedState, i.observed_state if i.observed_at is not None else "unknown")
@@ -155,6 +168,8 @@ class InstanceOut(BaseModel):
             realized_pnl=observe(money if known else None, seen, now, stale_after_s),
             closed_trades=observe(closed if known else None, seen, now, stale_after_s),
             open_positions=observe(positions if known else None, seen, now, stale_after_s),
+            # Own rows, own date: they keep it when the engine becomes unreachable.
+            balances=observe(balances or None, balances_seen, now, stale_after_s),
             created_at=i.created_at,
             server_time=now,
         )
