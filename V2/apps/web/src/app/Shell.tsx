@@ -58,8 +58,9 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }) {
         <Menu className="nav-menu" label={fr.nav.menu} ariaLabel={fr.nav.main} align="left" items={navItems} />
         <span className="spacer" />
         {/* Open session only: no bot state is read yet, and none is assumed. */}
-        <Link className="conn" to={{ page: "instances" }} role="status" data-tip={fr.shell.connectedTip}>
-          <i className="conn-dot" aria-hidden="true" />{fr.shell.connected}
+        <Link className="conn" to={{ page: "instances" }} data-tip={fr.shell.connectedTip}>
+          {/* role="status" on the text, not the link: on the <a> it would hide the link and its name. */}
+          <i className="conn-dot" aria-hidden="true" /><span role="status">{fr.shell.connected}</span>
         </Link>
         <SoonButton variant="danger" small>{fr.shell.emergencyStop}</SoonButton>
         <Menu ghost btnClassName="acct" ariaLabel={fr.shell.account(me.email)} items={account}

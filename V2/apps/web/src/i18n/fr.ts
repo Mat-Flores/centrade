@@ -1,6 +1,26 @@
 // User-facing texts (French). Code and comments stay in English; no French string lives outside this file.
+import type { LoginFailure } from "@/lib/login";
+
 export const fr = {
   productName: "Centrade",
+  login: {
+    title: "Connexion",
+    access: "Accès réservé à l'opérateur, par VPN.",
+    username: "Identifiant",
+    password: "Mot de passe",
+    submit: "Se connecter",
+    pending: "Connexion en cours…",
+    errorTitle: "Connexion impossible",
+  },
+  totp: {
+    title: "Vérification en deux étapes",
+    help: "Saisir le code à 6 chiffres de l'application d'authentification, ou un code de récupération.",
+    code: "Code",
+    submit: "Valider le code",
+    pending: "Vérification en cours…",
+    errorTitle: "Code non validé",
+    back: "Revenir au mot de passe",
+  },
   errors: {
     apiUnreachable: "API injoignable",
     notJson: "Réponse inattendue : ce n'est pas du JSON",
@@ -137,8 +157,29 @@ export const fr = {
   },
   screens: {
     pending: "Écran branché à une étape suivante de la fusion",
-    loginTitle: "Connexion",
     libraryTabs: { keys: "Clés", strategies: "Stratégies", automations: "Automatisations" },
   },
   timeframes: { "5m": "5 min", "15m": "15 min", "1h": "1 h", "4h": "4 h", "1d": "1 j" },
 } as const;
+
+/** Known cause + possible action (neutral tone, infinitive). */
+export function loginErrorMessage(failure: LoginFailure, step: "password" | "totp"): string {
+  switch (failure.cause) {
+    case "refused":
+      return step === "password"
+        ? "Identifiant ou mot de passe refusé, ou compte temporairement verrouillé. Vérifier la saisie, puis réessayer ; après des échecs répétés, patienter avant un nouvel essai."
+        : "Code refusé, ou connexion expirée. Vérifier le code, puis réessayer ; au besoin, revenir au mot de passe.";
+    case "locked":
+      return "Compte verrouillé après des échecs répétés. Patienter avant de réessayer ; au besoin, demander à un administrateur de le déverrouiller.";
+    case "rate-limited":
+      return "Trop de tentatives. Patienter quelques minutes, puis réessayer.";
+    case "network":
+      return "L'API est injoignable. Vérifier la connexion VPN et que l'API est démarrée, puis réessayer.";
+    case "unexpected":
+      return "La réponse reçue n'est pas celle de l'API de connexion. Vérifier la configuration du serveur frontal, puis réessayer.";
+    case "http":
+      return failure.status === 404
+        ? "Le service de connexion est introuvable (HTTP 404). Vérifier que l'API est démarrée et à jour, puis réessayer."
+        : `L'API a répondu par une erreur (HTTP ${failure.status}). Vérifier qu'elle est démarrée, puis réessayer.`;
+  }
+}
