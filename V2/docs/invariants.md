@@ -33,8 +33,8 @@ Convention : un invariant `In` a son module `tests/invariants/test_iNN_<slug>.py
 ### I4 — Jamais d'obstacle à une sortie
 - Énoncé : aucune panne, limite, décision de risque ni kill switch ne bloque une sortie, un stop ou une réduction (§1.2, §10).
 - Jalon : M3
-- Module : `tests/invariants/test_i04_sortie_jamais_bloquee.py`
-- Tests prévus : `test_i04_sortie_passe_si_risk_service_en_panne`, `test_i04_sortie_passe_sous_kill_switch`, `test_i04_sortie_passe_limite_depassee` (propriétés, `risk-failclosed-testing`)
+- Module : `tests/invariants/test_i04_exit_never_blocked.py`
+- Tests prévus : `test_i04_exit_goes_through_when_the_risk_service_is_down`, `test_i04_exit_goes_through_under_the_kill_switch`, `test_i04_exit_goes_through_when_a_limit_is_exceeded` (propriétés, `risk-failclosed-testing`)
 - Scénarios : S12, S3
 - Partiel à M1 (commandes seulement, `tests/invariants/test_i04_reduction_never_blocked.py`, verts) : `test_i04_risk_reducing_command_never_expires_before_dispatch`, `test_i04_pause_deadline_runs_from_dispatch`, `test_i04_bus_outage_blocks_neither_dispatch_nor_snapshot`, `test_i04_error_on_one_instance_does_not_block_the_others`, `test_i04_write_failure_for_one_command_does_not_block_dispatching_the_others`, `test_i04_pause_is_dispatched_even_if_engine_was_silent_on_previous_tick`. Le module prévu ci-dessus reste celui de M3.
 - État : prévu
@@ -43,7 +43,7 @@ Convention : un invariant `In` a son module `tests/invariants/test_iNN_<slug>.py
 - Énoncé : entrée, renfort, hausse de limite, passage en live : doute, panne, donnée périmée ou erreur = refus (§1.2, §10).
 - Jalon : M3
 - Module : `tests/invariants/test_i05_default_refusal.py`
-- Tests prévus : `test_i05_entree_refusee_en_cas_de_timeout`, `test_i05_entree_refusee_sur_donnee_perimee`, `test_i05_reponse_malformee_du_hook_refusee`, `test_i05_hausse_de_limite_et_passage_live_refuses_en_cas_de_doute`
+- Tests prévus : `test_i05_entry_is_rejected_on_timeout`, `test_i05_entry_is_rejected_on_stale_data`, `test_i05_malformed_hook_response_is_rejected`, `test_i05_limit_increase_and_live_promotion_are_rejected_when_in_doubt`
 - Scénarios : S2, S11
 - Partiel à M1 (commandes seulement, `tests/invariants/test_i05_default_refusal.py`, verts) : `test_i05_risk_increasing_actions_are_rejected_by_default`, `test_i05_resume_is_rechecked_just_before_dispatch`, `test_i05_stale_resume_is_never_dispatched`, `test_i05_dispatch_itself_drops_a_stale_resume`, `test_i05_resume_is_accepted_and_verified_when_nothing_opposes_it`, `test_i05_start_is_rejected_unless_the_instance_is_stopped`. Le module prévu ci-dessus reste celui de M3.
 - État : prévu
@@ -51,16 +51,16 @@ Convention : un invariant `In` a son module `tests/invariants/test_iNN_<slug>.py
 ### I6 — Aucune entrée sans décision
 - Énoncé : tout ordre d'entrée observé correspond à une décision `accept` valide ; sinon alerte critique et pause des entrées de l'instance (§1.2, §10).
 - Jalon : M3
-- Module : `tests/invariants/test_i06_entree_sans_decision.py`
-- Tests prévus : `test_i06_entree_sans_decision_accept_leve_order_unauthorized`, `test_i06_entree_sans_decision_met_les_entrees_en_pause`, `test_i06_decision_accept_expiree_ne_couvre_pas_l_entree`
+- Module : `tests/invariants/test_i06_entry_without_decision.py`
+- Tests prévus : `test_i06_entry_without_accept_decision_raises_order_unauthorized`, `test_i06_entry_without_decision_pauses_entries`, `test_i06_expired_accept_decision_does_not_cover_the_entry`
 - Scénarios : S6
 - État : prévu
 
 ### I7 — Position protégée
 - Énoncé : toute position live a un stop actif ; un stop tenu par le moteur ne compte que si le moteur bat ; sans protection, alerte critique (§1.2, §13 : 30 s / 60 s).
 - Jalon : M3
-- Module : `tests/invariants/test_i07_position_protegee.py`
-- Tests prévus : `test_i07_position_live_sans_stop_leve_alerte_critique`, `test_i07_stop_moteur_ne_compte_que_si_moteur_bat`, `test_i07_ordre_stop_manquant_sur_venue_alerte_en_60s`
+- Module : `tests/invariants/test_i07_protected_position.py`
+- Tests prévus : `test_i07_live_position_without_stop_raises_a_critical_alert`, `test_i07_engine_held_stop_counts_only_while_the_engine_heartbeats`, `test_i07_missing_stop_order_on_venue_raises_an_alert_within_60s`
 - Scénarios : S4
 - État : prévu
 
@@ -78,7 +78,7 @@ Convention : un invariant `In` a son module `tests/invariants/test_iNN_<slug>.py
 - Module : `tests/invariants/test_i09_platform_independence.py`
 - Tests (livrés à M2, verts) : `test_i09_worker_shutdown_touches_no_container` et `test_i09_adoption_does_not_restart_the_container` (Docker local), `test_i09_worker_shutdown_has_no_effect_on_instances`, `test_i09_platform_restart_restarts_no_instance`, `test_i09_exits_made_during_outage_are_resynced_without_duplicates`, `test_i09_orphan_container_is_reported_and_left_intact`, `test_i09_different_label_fingerprint_and_missing_container_are_reported`
 - Scénarios : S5
-- Reste à écrire : `test_i09_aucune_entree_pendant_la_panne`. Il tient au contrôle d'entrée du moteur quand le Risk service ne répond pas (hook de risque, M3, S11).
+- Reste à écrire : `test_i09_no_entry_happens_during_the_outage`. Il tient au contrôle d'entrée du moteur quand le Risk service ne répond pas (hook de risque, M3, S11).
 - État : testé (M2) pour l'indépendance et la reprise sans doublon ; partiel pour « entrées refusées pendant la panne » (M3).
 
 ### I10 — Empreinte de déploiement
@@ -87,14 +87,14 @@ Convention : un invariant `In` a son module `tests/invariants/test_iNN_<slug>.py
 - Module : `tests/invariants/test_i10_fingerprint.py`
 - Tests (livrés à M2, verts) : `test_i10_same_input_gives_same_fingerprint`, `test_i10_each_field_changes_the_fingerprint`, `test_i10_mode_is_not_part_of_the_fingerprint`, `test_i10_fingerprint_is_independent_of_key_order`, `test_i10_different_params_give_different_fingerprints`, `test_i10_different_image_code_or_config_rejects_entries`, `test_i10_mode_specific_fields_are_excluded_from_comparison`, `test_i10_fingerprint_recorded_at_deploy_is_that_of_what_runs`
 - Scénarios : S1, S8
-- Reste à écrire : `test_i10_promotion_refusee_si_empreinte_differente` (la promotion arrive à M7).
+- Reste à écrire : `test_i10_promotion_is_rejected_when_the_fingerprint_differs` (la promotion arrive à M7).
 - État : testé (M2). Toute clé écrite dans la configuration générée est dans l'empreinte ; la propriété d'indépendance à l'ordre des clés porte sur un JSON canonique.
 
 ### I11 — Aucun ordre émis par la plateforme
 - Énoncé : aucun composant de la plateforme n'appelle une fonction d'ordre d'une venue ; ses accès aux venues sont en lecture (§1.2, §13 « Contrôle de I11 »).
 - Jalon : M7
-- Module : `tests/invariants/test_i11_aucun_ordre_plateforme.py`
-- Tests prévus : `test_i11_code_plateforme_n_atteint_aucune_fonction_d_ordre` (analyse statique des imports), `test_i11_acces_venue_en_lecture_seule`
+- Module : `tests/invariants/test_i11_no_platform_order.py`
+- Tests prévus : `test_i11_platform_code_reaches_no_order_function` (analyse statique des imports), `test_i11_venue_access_is_read_only`
 - Scénarios : S14
 - État : prévu
 
@@ -109,8 +109,8 @@ Convention : un invariant `In` a son module `tests/invariants/test_iNN_<slug>.py
 ### I13 — Noyau indépendant de la périphérie
 - Énoncé : n8n, agents et Grafana arrêtés, la gouvernance, le risque, le kill switch et les alertes critiques fonctionnent (§1.2, §11).
 - Jalon : M4
-- Module : `tests/invariants/test_i13_noyau_independant.py`
-- Tests prévus : `test_i13_risque_et_kill_switch_sans_n8n_ni_grafana_ni_agents`, `test_i13_alerte_critique_part_par_le_canal_direct`
+- Module : `tests/invariants/test_i13_independent_core.py`
+- Tests prévus : `test_i13_risk_and_kill_switch_work_without_n8n_grafana_or_agents`, `test_i13_critical_alert_goes_out_through_the_direct_channel`
 - Scénarios : S13
 - État : prévu
 
@@ -129,16 +129,16 @@ Tests de bout en bout sur FakeEngine sauf mention (§14). Fichiers sous `tests/s
 | N° | Jalon | Fichier prévu | Objet | État |
 | --- | --- | --- | --- | --- |
 | S1 | M2 | `tests/scenarios/test_s01_paper_deployment.py` | Déploiement en paper, sorties seules puis entrées ouvertes | testé (M2) : `test_s01_paper_deployment_end_to_end` |
-| S2 | M3 | `tests/scenarios/test_s02_limite_depassee.py` | Limite dépassée : entrée refusée, raison visible | prévu |
-| S3 | M3 | `tests/scenarios/test_s03_kill_switch_global.py` | Kill switch global sur 20 instances | prévu |
-| S4 | M3 | `tests/scenarios/test_s04_moteur_plante_position_ouverte.py` | Moteur planté avec position ouverte | prévu |
+| S2 | M3 | `tests/scenarios/test_s02_limit_exceeded.py` | Limite dépassée : entrée refusée, raison visible | prévu |
+| S3 | M3 | `tests/scenarios/test_s03_global_kill_switch.py` | Kill switch global sur 20 instances | prévu |
+| S4 | M3 | `tests/scenarios/test_s04_engine_crash_with_open_position.py` | Moteur planté avec position ouverte | prévu |
 | S5 | M2 | `tests/scenarios/test_s05_platform_outage.py` | Plateforme arrêtée 5 minutes puis relancée | testé (M2) : `test_s05_platform_outage_of_5_minutes_then_restart` (indépendance et reprise sans doublon) ; partiel pour « entrées refusées pendant la panne », qui tient au hook de risque (M3) |
-| S6 | M3 | `tests/scenarios/test_s06_moteur_hors_de_controle.py` | Entrée sans décision, pause, arrêt du conteneur | prévu |
+| S6 | M3 | `tests/scenarios/test_s06_engine_out_of_control.py` | Entrée sans décision, pause, arrêt du conteneur | prévu |
 | S7 | M2 | `tests/scenarios/test_s07_mode_mismatch.py` | Moteur live déclaré pour une instance paper | testé (M2) : `test_s07_mode_mismatch_never_opens_entries` |
 | S8 | M2 | `tests/scenarios/test_s08_config_drift.py` | Configuration modifiée hors plateforme, détectée en 60 s | testé (M2) : `test_s08_drift_detected_within_60_s_exits_only_critical_alert`, `test_s08_owned_key_missing_from_the_reread_is_drift` (horloge injectée ; la borne de 60 s tient depuis que le worker traite chaque instance dans sa propre tâche) |
 | S9 | M1 | `tests/scenarios/test_s09_degraded_events.py` | Événements dupliqués, désordonnés ou perdus | testé (M1) : `test_s09_projections_are_exact_after_resync`, `test_s09_chained_modes_on_the_same_instance` |
 | S10 | M1 | `tests/scenarios/test_s10_unanswered_command.py` | Commande sans réponse : `timed_out` | testé (M1) : `test_s10_unanswered_command_is_timed_out_visible_never_verified` |
-| S11 | M3 | `tests/scenarios/test_s11_hook_en_erreur.py` | Hook en erreur (Freqtrade dry-run) : aucune entrée | prévu |
-| S12 | M3 | `tests/scenarios/test_s12_sortie_risk_service_en_panne.py` | Sortie pendant une panne du Risk service (dry-run) | prévu |
-| S13 | M4 | `tests/scenarios/test_s13_peripherie_arretee.py` | n8n, Grafana et agents arrêtés : S2 et S3 passent | prévu |
-| S14 | M7 | `tests/scenarios/test_s14_repetition_live_bac_a_sable.py` | Répétition du live en bac à sable (clé fournie par l'opérateur) | prévu |
+| S11 | M3 | `tests/scenarios/test_s11_hook_error.py` | Hook en erreur (Freqtrade dry-run) : aucune entrée | prévu |
+| S12 | M3 | `tests/scenarios/test_s12_exit_during_risk_service_outage.py` | Sortie pendant une panne du Risk service (dry-run) | prévu |
+| S13 | M4 | `tests/scenarios/test_s13_periphery_stopped.py` | n8n, Grafana et agents arrêtés : S2 et S3 passent | prévu |
+| S14 | M7 | `tests/scenarios/test_s14_live_sandbox_rehearsal.py` | Répétition du live en bac à sable (clé fournie par l'opérateur) | prévu |
