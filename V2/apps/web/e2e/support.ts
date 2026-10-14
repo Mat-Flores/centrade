@@ -33,8 +33,9 @@ export async function mockAuth(page: Page, opts: { authenticated?: boolean; code
 }
 
 /** Theme is the stored choice of the app (dark by default), set before the first script runs. */
-export const useTheme = (page: Page, theme: "light" | "dark") =>
+export const storeTheme = (page: Page, theme: "light" | "dark") =>
   page.addInitScript((t) => localStorage.setItem("centrade-theme", t), theme);
+export const useTheme = storeTheme;
 
 /** Page errors and console errors, minus the browser's own line for an HTTP error status (an expected 401 on /auth/me). */
 export function watchConsole(page: Page): string[] {
@@ -127,6 +128,8 @@ export const wireCommand = (c: CommandSpec, nowMs = Date.now()) => ({
   status: c.status,
   requested_at: new Date(nowMs - (c.agoS ?? 5) * 1000).toISOString(),
   deadline_at: new Date(nowMs + 20_000).toISOString(),
+  // The stage reached carries its own date, as the server does: progress is read from these.
+  ...(["dispatched", "acknowledged", "verified", "failed", "timed_out"].includes(c.status) ? { [`${c.status}_at`]: new Date(nowMs).toISOString() } : {}),
   result: c.reason ? { reason: c.reason } : null,
   server_time: new Date(nowMs).toISOString(),
 });

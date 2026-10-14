@@ -20,7 +20,7 @@ function hint(f: ParamField): string | undefined {
     f.initial !== null && f.kind !== "boolean" ? t.defaultIs(f.initial) : null,
     f.min !== null || f.max !== null ? t.range(f.min === null ? null : String(f.min), f.max === null ? null : String(f.max)) : null,
   ];
-  return parts.filter(Boolean).join(" ") || undefined;
+  return parts.filter(Boolean).join(" · ") || undefined;
 }
 
 /** One generated parameter field: control by kind, the schema's hint, and the validation message once shown. */

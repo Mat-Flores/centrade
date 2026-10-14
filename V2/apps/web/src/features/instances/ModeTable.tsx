@@ -9,7 +9,7 @@ import { InstanceRow, type RowContext } from "./InstanceRow";
 import { Totals } from "./Totals";
 
 // Eight columns as shares of the width: the table always fits its frame (see app/table.tsx).
-const COLS = columnShares(2.2, 1.4, 1.4, 1.3, 1.1, 0.8, 1, 1.4);
+const COLS = columnShares(1.7, 1.3, 1.6, 1.5, 0.8, 0.8, 1, 1.8);
 const RIGHT = [2, 3, 4, 5, 6];
 const HIDE = [5, 6];
 

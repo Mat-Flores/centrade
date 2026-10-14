@@ -33,6 +33,16 @@ export function DataTable({ label, cols, head, right = [], hideNarrow = [], chil
   if (wasNarrow !== narrow) { setWasNarrow(narrow); setCustom(null); }
   const tpl = custom && custom.length === shown.length ? custom.map((w) => `minmax(0, ${w}fr)`).join(" ") : shown.map((n) => cols[n]).join(" ");
 
+  // Current width of each shown column, for the separators' value (a focusable separator needs one).
+  const [px, setPx] = useState<number[]>([]);
+  useEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const measure = () => setPx(Array.from(el.querySelectorAll<HTMLElement>('[role="columnheader"]')).filter((c) => c.offsetParent !== null).map((c) => Math.round(c.getBoundingClientRect().width)));
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [tpl]);
   const widths = () => Array.from(root.current!.querySelectorAll<HTMLElement>('[role="columnheader"]')).filter((c) => c.offsetParent !== null).map((c) => c.getBoundingClientRect().width);
   /** Moves the limit between column i and the next: the total width does not change. */
   const shift = (w: number[], i: number, d: number) => {
@@ -56,7 +66,7 @@ export function DataTable({ label, cols, head, right = [], hideNarrow = [], chil
             <span key={n} role="columnheader" className={`${right.includes(n) ? "right" : ""} ${hideNarrow.includes(n) ? "hide-sm" : ""}`}>
               {h || <span className="sr">{fr.ui.columnAction}</span>}
               {shown.indexOf(n) >= 0 && shown.indexOf(n) < shown.length - 1 && (
-                <i role="separator" aria-orientation="vertical" aria-label={fr.ui.columnWidth} tabIndex={0} className="col-rz" data-tip={fr.ui.columnResizeTip}
+                <i role="separator" aria-orientation="vertical" aria-label={fr.ui.columnWidth} aria-valuemin={MIN} aria-valuenow={px[shown.indexOf(n)] ?? MIN} tabIndex={0} className="col-rz" data-tip={fr.ui.columnResizeTip}
                   onPointerDown={down(shown.indexOf(n))} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={() => setCustom(null)} onKeyDown={key(shown.indexOf(n))} />
               )}
             </span>

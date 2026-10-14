@@ -89,7 +89,7 @@
 .tbl .r:last-child { border-bottom: 0; }
 .tbl .r:hover { background: var(--c-raised); }
 .tbl .r > span.t, .tbl .r > span.r-name { font-family: var(--font-ui); }
-.tbl .r.warn-row { background: var(--c-loss-heat); }
+.tbl .r.warn-row { box-shadow: inset 3px 0 0 var(--c-loss); } /* a bar, not a tint: red text on a red tint fails contrast */
 .tbl .r .r-name { font-size: 15px; font-weight: 600; }
 .tbl .r a.cover { color: var(--c-ink); text-decoration: none; font-family: var(--font-ui); font-size: 15px; font-weight: 600; }
 .tbl .r a.cover::after { content: ""; position: absolute; inset: 0; z-index: 0; }
@@ -97,7 +97,6 @@
 .tbl .r:has(a.cover:focus-visible) { outline: 2px solid var(--c-accent); outline-offset: -2px; }
 .tbl .r .act-cell { position: relative; z-index: 1; display: flex; justify-content: flex-end; gap: 8px; align-items: center; }
 .tbl .r .act-cell .btn { min-width: 0; overflow: hidden; text-overflow: ellipsis; display: inline-block; line-height: calc(var(--btn-sm) - 2px); }
-.tbl .r.warn-row .st-word { color: var(--c-loss); }
 .tbl .r.wrap-row { padding: 8px 0; }
 .tbl .r.wrap-row > span { white-space: normal; overflow: visible; }
 .tbl .r .sec { display: block; font-size: 13px; color: var(--c-mute); font-weight: 400; }
@@ -108,7 +107,7 @@
 .tbl .foot-row .label { font: 600 13px var(--font-ui); letter-spacing: 0; text-transform: none; color: var(--c-mute); }
 .tbl .link-btn { font: 600 15px var(--font-ui); }
 @media (pointer: coarse) { .tbl .r, .tbl .r.tall { min-height: 56px; } }
-.dim-stale { opacity: 0.5; }
+.dim-stale, .tbl .r .dim-stale .line { color: var(--c-mute); } /* stale: muted and worded "périmé", never faded below contrast */
 .tag-pair { color: var(--c-mute); }
 
 /* status pill: a word and an age, never color alone */
@@ -226,9 +225,12 @@ textarea.code { font-size: 12px; line-height: 1.55; white-space: pre; overflow: 
 .login-card .panel { padding: 24px; display: grid; gap: 20px; }
 
 /* ---------- instances list ---------- */
-.tbl .r .line { display: block; overflow: hidden; text-overflow: ellipsis; }
+.tbl .r .line, .tbl .foot-row .line { display: block; white-space: normal; overflow-wrap: break-word; } /* a long figure or its "(périmé)" wraps, never cut */
+.tbl .foot-row > span { overflow: hidden; }
+.tbl .foot-row { padding-block: 6px; }
 .tbl .foot-row .label .line { margin-top: 2px; font-weight: 400; }
-.tbl .r .state-sub { display: flex; flex-wrap: wrap; gap: 2px 8px; margin-top: 4px; white-space: nowrap; }
+.tbl .r .state-sub { white-space: normal; display: flex; flex-wrap: wrap; gap: 2px 8px; margin-top: 4px; }
+.tbl .r .chip { height: auto; min-height: 28px; padding-top: 3px; padding-bottom: 3px; white-space: normal; }
 .tbl .r .row-err { position: relative; z-index: 1; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; white-space: normal; overflow: visible; }
 .tbl .r .act-cell .icon { flex: none; }
 .skel-rows { display: grid; gap: 12px; padding: 20px; }

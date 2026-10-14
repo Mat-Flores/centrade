@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { Button } from "@/ui/ui";
 
@@ -79,7 +80,8 @@ export function Menu({ label, items, head, align = "right", ghost, small = true,
         onClick={() => (open ? close(false) : show())}
         onKeyDown={(e) => { if (e.key === "ArrowDown" && !open) { e.preventDefault(); show(); } }}
       >{label}</Button>
-      {pos && <MenuPanel id={id} items={items} head={head} style={pos} ariaLabel={panelLabel ?? ariaLabel} onClose={close} anchor={wrap} />}
+      {/* In the body: a table row's own stacking context must not hide the panel. */}
+      {pos && createPortal(<MenuPanel id={id} items={items} head={head} style={pos} ariaLabel={panelLabel ?? ariaLabel} onClose={close} anchor={wrap} />, document.body)}
     </div>
   );
 }
