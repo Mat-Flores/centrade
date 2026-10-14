@@ -10,7 +10,8 @@ Convention : un invariant `In` a son module `tests/invariants/test_iNN_<slug>.py
 - Énoncé : tout état affiché est observé et daté ; périmé au-delà du seuil de fraîcheur ; inconnu affiché « inconnu » ; l'état voulu n'est jamais présenté comme réel (§1.2, §9, §13 : 5 s flux, 30 s moteur).
 - Jalon : M1
 - Module : `tests/invariants/test_i01_display_truth.py`
-- Tests (livrés, verts) : `test_i01_displayed_state_carries_observation_timestamp`, `test_i01_state_is_stale_beyond_threshold`, `test_i01_unknown_state_is_displayed_as_unknown`, `test_i01_desired_state_is_never_shown_as_observed`
+- Tests (livrés, verts) : `test_i01_displayed_state_carries_observation_timestamp`, `test_i01_state_is_stale_beyond_threshold`, `test_i01_unknown_state_is_displayed_as_unknown`, `test_i01_desired_state_is_never_shown_as_observed`, `test_i01_aggregates_are_unknown_when_engine_never_observed`, `test_i01_aggregates_are_stale_beyond_threshold` ; réconciliation des agrégats de la liste avec `GET /trades` : `tests/properties/test_instance_aggregates.py::test_list_aggregates_equal_the_decimal_sums_of_the_instance_trades`
+- Agrégats de la liste des instances (PnL réalisé par devise, trades clos, positions ouvertes) : datés par `instances.observed_at` quand l'état est connu, sinon par la dernière observation des positions restantes (donc périmés), sinon « inconnu » (valeur `None`, jamais 0). Le PnL réalisé est net de frais, comme le contrat moteur (`ClosedTrade.pnl`) ; le FakeEngine y est aligné (avant : brut).
 - Scénarios : S9, S10 (aussi S1, S7)
 - État : testé (M1)
 

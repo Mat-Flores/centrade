@@ -1,8 +1,13 @@
 """I1: every displayed state is observed and dated; stale beyond the threshold; unknown is displayed
 as unknown; the wanted state is never presented as real (SPEC §1.2, §9)."""
 
+from decimal import Decimal
+from uuid import UUID
+
 from centrade_api.testing import Stack, act, create_instance, get, ref_of
-from centrade_fake.engine import Failure
+from centrade_core.engine.types import ClosedTrade, InstanceStatus, Position, Snapshot
+from centrade_fake.engine import SYMBOL, Failure
+from centrade_worker.projection import apply_observation
 from centrade_worker.testing import T0
 
 
@@ -68,3 +73,77 @@ async def test_i01_desired_state_is_never_shown_as_observed(stack: Stack) -> Non
     await stack.world.worker.run_once()
     inst = await get(c, f"/api/v1/instances/{created['id']}")
     assert inst["state"]["value"] == "running" and inst["active_command"] is None
+
+
+UNKNOWN = {"value": None, "observed_at": None, "stale": False}
+AGGREGATES = ("realized_pnl", "closed_trades", "open_positions")
+
+
+async def test_i01_aggregates_are_unknown_when_engine_never_observed(stack: Stack) -> None:
+    c = await stack.client("operator")
+    created = await create_instance(c)  # the worker has not run: never observed
+    assert all(created[k] == UNKNOWN for k in AGGREGATES)
+    listed = next(
+        i for i in (await get(c, "/api/v1/instances"))["items"] if i["id"] == created["id"]
+    )
+    assert all(listed[k] == UNKNOWN for k in AGGREGATES)
+
+    # Unreachable from the start: the instance row gets a fresh date with an `unknown` state,
+    # which must not date the aggregates (no zero presented as observed).
+    silent = await create_instance(c, failures=["silent"])
+    await stack.world.worker.run_once()
+    inst = await get(c, f"/api/v1/instances/{silent['id']}")
+    assert inst["state"]["value"] == "unknown" and inst["state"]["observed_at"] is not None
+    assert all(inst[k]["value"] is None and inst[k]["observed_at"] is None for k in AGGREGATES)
+
+
+async def test_i01_aggregates_are_stale_beyond_threshold(stack: Stack) -> None:
+    w, c = stack.world, await stack.client("operator")
+    created = await create_instance(c)
+    await w.worker.run_once()
+    fresh = await get(c, f"/api/v1/instances/{created['id']}")
+    at = fresh["state"]["observed_at"]
+    assert fresh["realized_pnl"] == {"value": [], "observed_at": at, "stale": False}
+    assert fresh["closed_trades"] == {"value": 0, "observed_at": at, "stale": False}
+    assert fresh["open_positions"] == {"value": 0, "observed_at": at, "stale": False}
+
+    seen = w.clock.now
+    snap = Snapshot(
+        positions=(
+            Position(
+                position_id="open-1", symbol=SYMBOL, side="buy", qty=Decimal("1"),
+                entry_price=Decimal("100"), opened_at=seen,
+            ),
+        ),
+        orders=(), balances=(), stops=(), observed_at=seen,
+        closed=(
+            ClosedTrade(
+                position_id="closed-1", symbol=SYMBOL, side="buy", qty=Decimal("1"),
+                entry_price=Decimal("100"), exit_price=Decimal("90"), pnl=Decimal("-10.1"),
+                fees=Decimal("0.1"), exit_cause="stop_loss", opened_at=seen, closed_at=seen,
+            ),
+        ),
+    )  # fmt: skip
+    async with w.sessions.begin() as s:
+        await apply_observation(
+            s,
+            UUID(created["id"]),
+            InstanceStatus(state="exits_only", mode="paper", observed_at=seen),
+            snap,
+        )
+    w.fake.set_failure(ref_of(created["id"]), Failure.SILENT)  # the engine stops answering
+    w.clock.advance(stack.settings.observed_stale_after_s + 1)
+
+    inst = await get(c, f"/api/v1/instances/{created['id']}")
+    money = [{"currency": "USDT", "amount": "-10.1", "fees": "0.1"}]
+    assert inst["realized_pnl"]["value"] == money and inst["realized_pnl"]["stale"] is True
+    assert inst["closed_trades"]["value"] == 1 and inst["open_positions"]["value"] == 1
+    assert all(inst[k]["stale"] is True for k in AGGREGATES)
+
+    await w.worker.run_once()  # unreachable: `unknown` state with a fresh date on the instance
+    inst = await get(c, f"/api/v1/instances/{created['id']}")
+    assert inst["state"]["value"] == "unknown"
+    stale_at = inst["open_positions"]["observed_at"]
+    assert stale_at is not None and stale_at < inst["state"]["observed_at"]  # last value, its date
+    assert inst["realized_pnl"]["value"] == money and inst["open_positions"]["value"] == 1
+    assert all(inst[k]["stale"] is True and inst[k]["observed_at"] == stale_at for k in AGGREGATES)

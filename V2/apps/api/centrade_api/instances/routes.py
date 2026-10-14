@@ -16,11 +16,9 @@ from centrade_core.commands import (
 )
 from centrade_core.ids import uuid7
 from centrade_core.models.trading import (
-    Account,
     Command,
     Engine,
     Instance,
-    Strategy,
     StrategyVersion,
 )
 from fastapi import APIRouter, HTTPException, Query, Request, Response
@@ -42,15 +40,19 @@ from centrade_api.core.observed import observe
 from centrade_api.core.pagination import Page, encode_cursor, page_args
 from centrade_api.instances.commands import announce, find_replay, new_command, request_command
 from centrade_api.instances.schemas import (
-    AccountRef,
     CommandAccepted,
     CommandOut,
     InstanceCreate,
     InstanceDetail,
     InstanceOut,
-    StrategyRef,
 )
-from centrade_api.instances.service import drift_items, from_registry, instance_out, instances_out
+from centrade_api.instances.service import (
+    drift_items,
+    from_registry,
+    instance_out,
+    instances_out,
+    listing,
+)
 
 router = APIRouter(prefix="/api/v1", tags=["instances"])
 
@@ -67,11 +69,9 @@ async def list_instances(
     cursor: str | None = None,
     limit: Limit = 50,
 ) -> Page[InstanceOut]:
-    stmt = select(Instance, Engine.kind).join(Engine, Engine.id == Instance.engine_id)
-    if strategy_id is not None:
-        stmt = stmt.join(StrategyVersion, StrategyVersion.id == Instance.strategy_version_id).where(
-            StrategyVersion.strategy_id == strategy_id
-        )
+    stmt = listing()
+    if strategy_id is not None:  # on the outer join: instances without a version drop out
+        stmt = stmt.where(StrategyVersion.strategy_id == strategy_id)
     if (at := page_args(cursor)) is not None:
         stmt = stmt.where(tuple_(Instance.created_at, Instance.id) < tuple_(*at))
     rows = (
@@ -80,7 +80,7 @@ async def list_instances(
         )
     ).all()
     more = len(rows) > limit
-    page = [(r[0], r[1]) for r in rows[:limit]]
+    page = rows[:limit]
     nxt = encode_cursor(page[-1][0].created_at, page[-1][0].id) if more else None
     return Page(items=await instances_out(db, page, now, cfg), next_cursor=nxt, server_time=now)
 
@@ -91,37 +91,12 @@ async def get_instance(instance_id: UUID, _: Viewer, db: Db, now: Now, cfg: Cfg)
     inst = await db.get(Instance, instance_id)
     if out is None or inst is None:
         raise HTTPException(404, "Instance inconnue.")
-    strategy = account = None
-    if inst.strategy_version_id is not None:
-        row = (
-            await db.execute(
-                select(StrategyVersion, Strategy.name)
-                .join(Strategy, Strategy.id == StrategyVersion.strategy_id)
-                .where(StrategyVersion.id == inst.strategy_version_id)
-            )
-        ).one()
-        v = row[0]
-        strategy = StrategyRef(
-            version_id=v.id,
-            strategy_id=v.strategy_id,
-            name=row[1],
-            version=v.version,
-            status=v.status,
-            code_hash=v.code_hash,
-            exits=v.exits,
-        )
-    if inst.account_id is not None:
-        acc = await db.get(Account, inst.account_id)
-        if acc is not None:
-            account = AccountRef.model_validate(acc, from_attributes=True)
     at, stale = inst.effective_config_at, cfg.observed_stale_after_s
     seen = at is not None and inst.effective_config is not None
     version = (inst.effective_config or {}).get("engine_version") if seen else None
     return InstanceDetail(
         **out.model_dump(),
         engine_version=observe(version if isinstance(version, str) else None, at, now, stale),
-        strategy=strategy,
-        account=account,
         deployment_fingerprint=inst.deployment_fingerprint,
         config_hash=inst.config_hash,
         effective_config=observe(inst.effective_config if seen else None, at, now, stale),
@@ -235,7 +210,10 @@ async def create_instance(
     await db.commit()
     await announce(redis, ("instance", inst.id), ("command", cmd.id))
     response.headers["Location"] = f"/api/v1/instances/{inst.id}"
-    return InstanceOut.of(inst, engine.kind, cmd, now, cfg.observed_stale_after_s)
+    out = await instance_out(db, inst.id, now, cfg)
+    if out is None:  # deleted between the commit and this read
+        raise HTTPException(404, "Instance inconnue.")
+    return out
 
 
 def _action(slug: str, type_: ActionType) -> None:

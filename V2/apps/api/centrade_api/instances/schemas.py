@@ -58,6 +58,39 @@ class CommandOut(BaseModel):
         )
 
 
+class StrategyRef(BaseModel):
+    version_id: UUID
+    strategy_id: UUID
+    name: str
+    version: int
+    status: str
+    code_hash: str
+    exits: dict[str, Any]  # exit policy of the version (F10)
+
+
+class AccountRef(BaseModel):
+    """Never a secret reference (I12)."""
+
+    id: UUID
+    venue: str
+    type: str
+    environment: str
+    label: str
+    currency: str
+
+
+class Money(BaseModel):
+    """Sums for one currency, as normalized decimal strings; never converted or added across
+    currencies."""
+
+    currency: str
+    amount: str  # realized PnL, net of fees
+    fees: str
+
+
+RUNNING_STATES = frozenset({"running", "exits_only", "halted"})  # observed states with a start time
+
+
 class InstanceOut(BaseModel):
     id: UUID
     name: str
@@ -68,6 +101,15 @@ class InstanceOut(BaseModel):
     observed_mode: Observed[ObservedMode]  # observed
     mode_mismatch: bool  # observed mode known and different from the desired mode (I3)
     active_command: CommandOut | None  # most recent non-terminal command
+    strategy: StrategyRef | None  # None: instance without a registry version (simulated creation)
+    account: AccountRef | None
+    # Last verified `deploy` or `start`; None unless the observed state says the instance runs.
+    started_at: AwareDatetime | None
+    # Closed trades and open positions of the instance, dated by the last observation that
+    # wrote them; value None = never observed, hence "unknown" (I1), never zero.
+    realized_pnl: Observed[list[Money] | None]  # one entry per currency; [] = no closed trade
+    closed_trades: Observed[int | None]
+    open_positions: Observed[int | None]
     created_at: AwareDatetime
     server_time: AwareDatetime
 
@@ -79,12 +121,24 @@ class InstanceOut(BaseModel):
         active: Command | None,
         now: datetime,
         stale_after_s: float,
+        *,
+        strategy: StrategyRef | None,
+        account: AccountRef | None,
+        last_start: datetime | None,
+        money: list[Money],
+        closed: int,
+        positions: int,
+        positions_seen: datetime | None,  # latest `observed_at` of the open positions
     ) -> InstanceOut:
         # `unknown`: never the last known value presented as current.
         state = cast(ObservedState, i.observed_state if i.observed_at is not None else "unknown")
         mode = cast(
             ObservedMode, i.observed_mode if i.observed_mode and i.observed_at else "unknown"
         )
+        # Aggregates come from the projections. An `unknown` state carries a fresh date (engine
+        # unreachable) that must not date them: they keep the date of the rows still there.
+        seen = i.observed_at if state != "unknown" else positions_seen
+        known = seen is not None
         return cls(
             id=i.id,
             name=i.name,
@@ -95,6 +149,12 @@ class InstanceOut(BaseModel):
             observed_mode=observe(mode, i.observed_at, now, stale_after_s),
             mode_mismatch=mode != "unknown" and mode != i.mode,
             active_command=None if active is None else CommandOut.of(active, now),
+            strategy=strategy,
+            account=account,
+            started_at=last_start if state in RUNNING_STATES else None,
+            realized_pnl=observe(money if known else None, seen, now, stale_after_s),
+            closed_trades=observe(closed if known else None, seen, now, stale_after_s),
+            open_positions=observe(positions if known else None, seen, now, stale_after_s),
             created_at=i.created_at,
             server_time=now,
         )
@@ -132,27 +192,6 @@ class InstanceCreate(BaseModel):
         return value
 
 
-class StrategyRef(BaseModel):
-    version_id: UUID
-    strategy_id: UUID
-    name: str
-    version: int
-    status: str
-    code_hash: str
-    exits: dict[str, Any]  # exit policy of the version (F10)
-
-
-class AccountRef(BaseModel):
-    """Jamais de référence de secret (I12)."""
-
-    id: UUID
-    venue: str
-    type: str
-    environment: str
-    label: str
-    currency: str
-
-
 class DriftItem(BaseModel):
     key: str
     expected: Any
@@ -160,8 +199,6 @@ class DriftItem(BaseModel):
 
 
 class InstanceDetail(InstanceOut):
-    strategy: StrategyRef | None  # None: instance without a registry version (simulated creation)
-    account: AccountRef | None
     deployment_fingerprint: str | None  # computed by the platform (I10)
     config_hash: str | None
     # Version the engine declares, re-read (F9): value None = never observed, hence "unknown".

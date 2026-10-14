@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from decimal import Decimal
+from decimal import Context, Decimal
 from typing import Any, cast
 from uuid import UUID
 
@@ -21,7 +21,8 @@ ENTRY_INTENTS = frozenset({"entry"})  # only cancellable order: reinforcements a
 
 
 def _dec(d: Decimal) -> str:
-    return format(d.normalize(), "f")
+    # normalize() rounds to the context precision (28 digits): give it every digit of `d`.
+    return format(d.normalize(Context(prec=max(1, len(d.as_tuple().digits)))), "f")
 
 
 def _opt(d: Decimal | None) -> str | None:

@@ -123,7 +123,7 @@ async def test_engine_closed_trade_is_visible_in_get_trades_with_cause_and_mode(
             x.closed_at,
         )
         assert x.exit_price != x.entry_price and x.pnl != 0 and x.fees > 0
-        assert t.pnl == (t.exit_price - t.entry_price) * t.quantity
+        assert t.pnl == (t.exit_price - t.entry_price) * t.quantity - t.fees  # net of fees
 
 
 async def test_exit_cause_db_constraint_equals_exit_causes(stack: Stack) -> None:

@@ -199,7 +199,7 @@ EXIT_CAUSES = (
 
 class ClosedTrade(Model):
     """Closed position, re-read from the engine. `position_id` identifies the trade (unique per
-    instance).
+    instance). `pnl` is realized and net of fees; `fees` is reported beside it.
     Cause absent or outside `EXIT_CAUSES`: the worker writes `unknown`, it guesses nothing."""
 
     position_id: str

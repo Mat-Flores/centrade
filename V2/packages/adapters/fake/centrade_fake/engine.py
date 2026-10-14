@@ -447,6 +447,7 @@ class FakeEngine:
             status="filled",
         )
         self._emit(inst, EventType.ORDER_FILLED, self._order_payload(inst, exit_order, None))
+        fees = exit_price * pos.qty * Decimal("0.001")
         inst.closed.append(
             ClosedTrade(
                 position_id=pos.position_id,
@@ -455,8 +456,8 @@ class FakeEngine:
                 qty=pos.qty,
                 entry_price=pos.entry_price,
                 exit_price=exit_price,
-                pnl=(exit_price - pos.entry_price) * pos.qty,
-                fees=exit_price * pos.qty * Decimal("0.001"),
+                pnl=(exit_price - pos.entry_price) * pos.qty - fees,  # net, like the contract
+                fees=fees,
                 entry_cause="signal",
                 exit_cause=_F10_CAUSE[cause],
                 opened_at=pos.opened_at,

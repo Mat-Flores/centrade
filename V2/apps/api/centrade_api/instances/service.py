@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Any
 from uuid import UUID
@@ -15,26 +17,74 @@ from centrade_core.models.trading import (
     Command,
     Engine,
     Instance,
+    Position,
+    Strategy,
     StrategyVersion,
+    Trade,
 )
 from centrade_core.settings import Settings
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import Row, Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import defer
 
 from centrade_api.instances.schemas import (
+    AccountRef,
     DriftItem,
     InstanceCreate,
     InstanceOut,
+    Money,
+    StrategyRef,
 )
 from centrade_api.strategies.checks import CHECKS
+from centrade_api.trading.projections import _dec
+
+# Outer joins: the last three columns may be None despite the declared types.
+ListingRow = Row[Instance, str, StrategyVersion, str, Account]
+
+
+def listing() -> Select[Instance, str, StrategyVersion, str, Account]:
+    """Instance, engine type, strategy version, strategy name and account: outer joins, one
+    query for a whole page. The version's code and manifest are never read here."""
+    return (
+        select(Instance, Engine.kind, StrategyVersion, Strategy.name, Account)
+        .join(Engine, Engine.id == Instance.engine_id)
+        .outerjoin(StrategyVersion, StrategyVersion.id == Instance.strategy_version_id)
+        .outerjoin(Strategy, Strategy.id == StrategyVersion.strategy_id)
+        .outerjoin(Account, Account.id == Instance.account_id)
+        .options(
+            defer(StrategyVersion.code, raiseload=True),
+            defer(StrategyVersion.manifest, raiseload=True),
+            defer(StrategyVersion.static_checks, raiseload=True),
+        )
+    )
+
+
+def _strategy(v: StrategyVersion | None, name: str | None) -> StrategyRef | None:
+    if v is None or name is None:
+        return None
+    return StrategyRef(
+        version_id=v.id,
+        strategy_id=v.strategy_id,
+        name=name,
+        version=v.version,
+        status=v.status,
+        code_hash=v.code_hash,
+        exits=v.exits,
+    )
 
 
 async def instances_out(
-    db: AsyncSession, rows: list[tuple[Instance, str]], now: datetime, cfg: Settings
+    db: AsyncSession, rows: Sequence[ListingRow], now: datetime, cfg: Settings
 ) -> list[InstanceOut]:
-    ids = [i.id for i, _ in rows]
+    """Rows of `listing()`. A fixed number of queries, whatever the number of rows."""
+    ids = [r[0].id for r in rows]
     active: dict[UUID, Command] = {}
+    starts: dict[UUID, datetime] = {}
+    money: dict[UUID, list[Money]] = defaultdict(list)
+    closed: dict[UUID, int] = defaultdict(int)
+    held_n: dict[UUID, int] = {}
+    held_at: dict[UUID, datetime] = {}
     if ids:
         cmds = await db.scalars(
             select(Command)
@@ -42,23 +92,59 @@ async def instances_out(
             .order_by(Command.requested_at, Command.id)
         )
         active = {c.instance_id: c for c in cmds}  # the most recent wins
+        verified = await db.execute(
+            select(Command.instance_id, func.max(Command.verified_at))
+            .where(
+                Command.instance_id.in_(ids),
+                Command.type.in_(("deploy", "start")),
+                Command.status == "verified",
+            )
+            .group_by(Command.instance_id)
+        )
+        starts = {iid: at for iid, at in verified if at is not None}
+        sums = await db.execute(
+            select(
+                Trade.instance_id, Trade.currency, func.sum(Trade.pnl), func.sum(Trade.fees),
+                func.count(),
+            )
+            .where(Trade.instance_id.in_(ids))
+            .group_by(Trade.instance_id, Trade.currency)
+            .order_by(Trade.instance_id, Trade.currency)
+        )  # fmt: skip
+        for iid, currency, pnl, fees, n in sums:
+            money[iid].append(Money(currency=currency, amount=_dec(pnl), fees=_dec(fees)))
+            closed[iid] += n
+        held = await db.execute(
+            select(Position.instance_id, func.count(), func.max(Position.observed_at))
+            .where(Position.instance_id.in_(ids))
+            .group_by(Position.instance_id)
+        )
+        for iid, n, at in held:
+            held_n[iid], held_at[iid] = n, at
     return [
-        InstanceOut.of(i, kind, active.get(i.id), now, cfg.observed_stale_after_s)
-        for i, kind in rows
+        InstanceOut.of(
+            i,
+            kind,
+            active.get(i.id),
+            now,
+            cfg.observed_stale_after_s,
+            strategy=_strategy(version, name),
+            account=None if acc is None else AccountRef.model_validate(acc, from_attributes=True),
+            last_start=starts.get(i.id),
+            money=money.get(i.id, []),
+            closed=closed.get(i.id, 0),
+            positions=held_n.get(i.id, 0),
+            positions_seen=held_at.get(i.id),
+        )
+        for i, kind, version, name, acc in rows
     ]
 
 
 async def instance_out(
     db: AsyncSession, instance_id: UUID, now: datetime, cfg: Settings
 ) -> InstanceOut | None:
-    row = (
-        await db.execute(
-            select(Instance, Engine.kind)
-            .join(Engine, Engine.id == Instance.engine_id)
-            .where(Instance.id == instance_id)
-        )
-    ).one_or_none()
-    return (await instances_out(db, [(row[0], row[1])], now, cfg))[0] if row else None
+    row = (await db.execute(listing().where(Instance.id == instance_id))).one_or_none()
+    return (await instances_out(db, [row], now, cfg))[0] if row else None
 
 
 def drift_items(raw: Any) -> list[DriftItem]:
