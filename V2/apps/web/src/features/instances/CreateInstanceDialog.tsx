@@ -52,6 +52,7 @@ function CreateForm({ formId, pending, onSubmit }: { formId: string; pending: bo
 
   return (
     <form id={formId} onSubmit={submit} noValidate className="form-grid" aria-label={t.title}>
+      {(strategies.data?.next_cursor != null || accounts.data?.next_cursor != null || versions.data?.next_cursor != null) && <p role="status" className="inline-err">{t.truncated}</p>}
       <Field label={t.name} required hint={t.nameHint} error={shown && !nameOk ? t.nameInvalid : undefined}>
         <input className="input" value={name} disabled={pending} autoComplete="off" spellCheck={false} aria-invalid={shown && !nameOk ? true : undefined} onChange={(e) => setName(e.target.value)} />
       </Field>

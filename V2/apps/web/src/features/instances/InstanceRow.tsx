@@ -55,7 +55,7 @@ export function InstanceRow({ instance, ctx }: { instance: Instance; ctx: RowCon
       {command?.tone === "problem" && (
         <span role="cell" className="row-err">
           <span role="alert">
-            <strong>{fr.instances.command.problemTitle}.</strong> {command.line}. {fr.instances.command.reason} : {command.reason}{" "}
+            <strong>{fr.instances.command.problemHead}</strong> {fr.instances.command.problemDetail(command.line, command.reason ?? fr.cockpit.command.noReason)}{" "}
           </span>
           <Button small onClick={() => ctx.onSeen(command.command.id)}>{fr.instances.command.seen}</Button>
         </span>

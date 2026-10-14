@@ -5,7 +5,8 @@ import { fr } from "@/i18n/fr";
 import { useServerNow } from "@/lib/clock";
 import { degradation } from "@/lib/cockpit";
 import { connectionSummary } from "@/lib/connection";
-import { healthQuery, instancesQuery } from "@/lib/instances";
+import { alertsQuery, commandsQuery, healthQuery, instancesQuery } from "@/lib/instances";
+import { useAnnouncement } from "@/lib/announce";
 import { endSession, logout, type Me } from "@/lib/session";
 import { useCockpitStream } from "@/lib/stream";
 import { SoonButton } from "@/ui/ui";
@@ -26,6 +27,7 @@ const NAV: { label: string; to: Route; on: (r: Route) => boolean }[] = [
   { label: fr.nav.advanced, to: { page: "advanced" }, on: (r) => r.page === "advanced" },
 ];
 
+const NONE: never[] = []; // a stable empty list: the announcer compares by reference
 const initials = (email: string) => email.slice(0, 2).toUpperCase();
 
 /** Top bar, left to right: where I am (navigation), whether it is reachable (connection), the safety command,
@@ -39,12 +41,19 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }) {
 
   // The cockpit's single stream, opened once here: every screen reads the same cache.
   const instances = useQuery(instancesQuery);
+  const commands = useQuery(commandsQuery);
+  const alerts = useQuery(alertsQuery);
   const health = useQuery(healthQuery);
   const { silentMs } = useCockpitStream();
   const nowMs = Date.parse(useServerNow());
   const report = health.isError ? undefined : health.data;
   const degraded = degradation({ streamSilentMs: silentMs, health: report, healthFailed: health.isError });
   const conn = connectionSummary(instances.data?.items, degraded, nowMs);
+  // Spoken changes (WCAG 4.1.3): observed state, command outcome, alert, degraded mode. A failed alerts read must not mute the rest.
+  const announced = useAnnouncement(
+    { instances: instances.data?.items ?? NONE, commands: commands.data?.items ?? NONE, alerts: alerts.data?.items ?? NONE, degraded: degraded.degraded },
+    instances.isSuccess && commands.isSuccess && (alerts.isSuccess || alerts.isError),
+  );
 
   // Screen change: the content takes the focus (the screen reader announces the title). Never on the first display.
   const page = route.page;
@@ -79,6 +88,7 @@ export function Shell({ me, children }: { me: Me; children: ReactNode }) {
           label={<span className="avatar" aria-hidden="true">{initials(me.email)}</span>}
           head={<><b>{me.email}</b><span>{fr.shell.accountRole(fr.roles[me.role])}</span></>} />
       </header>
+      <div className="sr" aria-live="polite" aria-atomic="true" data-testid="announcer">{announced}</div>
       <InlineError message={signOut.isError ? fr.shell.logoutFailed : null} />
       <main id="contenu" ref={main} tabIndex={-1} style={{ outline: "none" }}><DegradationProvider value={degraded}>{children}</DegradationProvider></main>
       <ColorDialog open={colors} onClose={() => setColors(false)} />

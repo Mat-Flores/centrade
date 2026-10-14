@@ -68,7 +68,12 @@ describe("rowAction: from the observed state, refusal by default", () => {
 
   it("gives a viewer no action and blocks a second request while one is in flight", () => {
     expect(rowAction(makeInstance(), { ...ctx, role: "viewer" })).toEqual({ kind: "open" });
-    expect(rowAction(makeInstance(), { ...ctx, busy: true })).toMatchObject({ enabled: false });
+    expect(rowAction(makeInstance({ stateValue: "stopped" }), { ...ctx, busy: true })).toMatchObject({ action: "start", enabled: false });
+    expect(rowAction(makeInstance({ stateValue: "exits_only" }), { ...ctx, busy: true })).toMatchObject({ action: "resume_entries", enabled: false });
+  });
+
+  it("never blocks a risk reduction because a command is in flight (I4)", () => {
+    expect(rowAction(makeInstance({ stateValue: "running" }), { ...ctx, busy: true })).toMatchObject({ action: "pause_entries", enabled: true });
   });
 });
 

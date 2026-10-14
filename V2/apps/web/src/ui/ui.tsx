@@ -123,9 +123,11 @@ export function Progress({ value, label }: { value: number; label: string }) {
 const FIELD = 'input:not([type=hidden]):not([type=color]):not([type=checkbox]):not([type=radio]):not(:disabled), select:not(:disabled), textarea:not(:disabled)';
 
 /** Centered modal (native dialog: trapped focus, Escape, focus returned to the trigger). Focus enters the first field, else the main button. */
-export function Dialog({ open, onClose, title, children, foot, wide, narrow }: { open: boolean; onClose: () => void; title: string; children: ReactNode; foot?: ReactNode; wide?: boolean; narrow?: boolean }) {
+export function Dialog({ open, onClose, title, children, foot, wide, narrow, locked }: { open: boolean; onClose: () => void; title: string; children: ReactNode; foot?: ReactNode; wide?: boolean; narrow?: boolean; locked?: boolean }) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
+  // `locked` (a send in flight): Escape, the backdrop and the cross do nothing, so a failure cannot be missed.
+  const close = () => { if (!locked) onClose(); };
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
@@ -138,14 +140,14 @@ export function Dialog({ open, onClose, title, children, foot, wide, narrow }: {
   }, [open]);
   return (
     <dialog
-      ref={ref} className={`dialog ${wide ? "wide" : ""} ${narrow ? "narrow" : ""}`} onClose={onClose} aria-labelledby={titleId}
-      onClick={(e) => e.target === ref.current && onClose()}
+      ref={ref} className={`dialog ${wide ? "wide" : ""} ${narrow ? "narrow" : ""}`} onClose={onClose} onCancel={(e) => locked && e.preventDefault()} onKeyDown={(e) => locked && e.key === "Escape" && e.preventDefault()} aria-labelledby={titleId}
+      onClick={(e) => e.target === ref.current && close()}
     >
       {open && (
         <>
           <header className="dialog-head">
             <h2 id={titleId}>{title}</h2>
-            <Button variant="ghost" className="icon" aria-label={fr.ui.close} onClick={onClose}>
+            <Button variant="ghost" className="icon" aria-label={fr.ui.close} aria-disabled={locked ? true : undefined} onClick={close}>
               <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"><path d="M3.5 3.5l9 9M12.5 3.5l-9 9" /></svg>
             </Button>
           </header>

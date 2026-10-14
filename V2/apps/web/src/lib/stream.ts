@@ -98,9 +98,9 @@ export function useEventStream(handlers: StreamHandlers): { silentMs: number } {
       };
       for (const name of EVENTS) {
         es.addEventListener(name, (e) => {
-          setLastMessageAt(Date.now());
           const message = parseStreamMessage(name, (e as MessageEvent<string>).data);
-          if (!message) return;
+          if (!message) return; // an invalid message is not a sign of life: the silence keeps counting
+          setLastMessageAt(Date.now());
           observeServerTime(message.server_time);
           latest.current.onMessage(message);
         });

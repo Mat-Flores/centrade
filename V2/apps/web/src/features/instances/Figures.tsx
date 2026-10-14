@@ -1,5 +1,6 @@
 import { fr } from "@/i18n/fr";
-import { formatDuration, formatTimestamp } from "@/lib/format";
+import { stateView } from "@/lib/cockpit";
+import { formatDurationShort, formatTimestamp } from "@/lib/format";
 import { observedTip } from "@/lib/instance-row";
 import { summarizeRow } from "@/lib/instance-stats";
 import type { Instance } from "@/lib/instances";
@@ -38,13 +39,21 @@ export function TradesCell({ instance, nowMs }: { instance: Instance; nowMs: num
   const row = summarizeRow(instance, nowMs);
   if (instance.closed_trades.value === null) return unknown(fr.observed.unknownHint);
   const tip = [fr.instances.tradesTip(row.closedTrades, row.openPositions), observedTip(instance.closed_trades, nowMs)].filter(Boolean).join("\n");
-  return <span className={row.tradesStale ? "warn" : ""} data-tip={tip}>{row.tradesCompact}{row.tradesStale && <span className="sr">{fr.observed.stale}</span>}</span>;
+  // The compact text carries its own "+?" and "(périmé)"; the sentence below is what a screen reader gets.
+  return (
+    <span className={row.tradesStale ? "warn" : ""} data-tip={tip}>
+      <span aria-hidden="true">{row.tradesCompact}</span>
+      <span className="sr">{fr.instances.tradesTip(row.closedTrades, row.openPositions)}{row.tradesStale && ` (${fr.observed.stale})`}</span>
+    </span>
+  );
 }
 
-/** Since when the bot runs; empty when it does not (or when the start was never recorded). */
+/** Since when the bot runs; shown only while the observed state is known and fresh, else a dash. Empty when it does not run. */
 export function SinceCell({ instance, nowMs }: { instance: Instance; nowMs: number }) {
-  if (instance.started_at === null || instance.state.value === "stopped") return null;
+  const view = stateView(instance, nowMs);
+  if (view.kind !== "fresh") return <span className="dim" data-tip={fr.instances.sinceUnknownTip}>{fr.instances.sinceNone}</span>;
+  if (instance.started_at === null || view.state === "stopped") return null;
   const seconds = (nowMs - Date.parse(instance.started_at)) / 1000;
   if (Number.isNaN(seconds)) return null;
-  return <span data-tip={fr.instances.sinceTip(formatTimestamp(instance.started_at))}>{formatDuration(seconds).split(" ").slice(0, 4).join(" ")}</span>;
+  return <span data-tip={fr.instances.sinceTip(formatTimestamp(instance.started_at))}>{formatDurationShort(seconds)}</span>;
 }

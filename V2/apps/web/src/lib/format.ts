@@ -18,6 +18,17 @@ export function formatAge(ms: number): string {
   return fr.age.days(Math.floor(h / 24), h % 24);
 }
 
+/** Age as a bare span ("2 min", "0 s"), for sentences that bring their own words. */
+export function formatAgeBare(ms: number): string {
+  const s = Math.floor(Math.max(0, ms) / 1000);
+  if (s < 60) return fr.age.bare.seconds(s);
+  const min = Math.floor(s / 60);
+  if (min < 60) return fr.age.bare.minutes(min);
+  const h = Math.floor(min / 60);
+  if (h < 24) return fr.age.bare.hours(h, String(min % 60).padStart(2, "0"));
+  return fr.age.bare.days(Math.floor(h / 24), h % 24);
+}
+
 /** Elapsed time in seconds, shortened: "3 j 4 h 12 min". Under a minute: seconds only. */
 export function formatDuration(totalSeconds: number): string {
   const s = Math.max(0, Math.floor(totalSeconds));
@@ -26,6 +37,17 @@ export function formatDuration(totalSeconds: number): string {
   const h = Math.floor((s % 86400) / 3600);
   const m = Math.floor((s % 3600) / 60);
   return [d && fr.duration.days(d), (d || h) && fr.duration.hours(h), fr.duration.minutes(m)].filter(Boolean).join(" ");
+}
+
+/** The two leading units of an elapsed time: "3 j 4 h", "2 h 0 min", "5 min". */
+export function formatDurationShort(totalSeconds: number): string {
+  const s = Math.max(0, Math.floor(totalSeconds));
+  if (s < 60) return fr.duration.seconds(s);
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  if (d) return `${fr.duration.days(d)} ${fr.duration.hours(h)}`;
+  return h ? `${fr.duration.hours(h)} ${fr.duration.minutes(m)}` : fr.duration.minutes(m);
 }
 
 export type Timeframe = keyof typeof fr.timeframes;

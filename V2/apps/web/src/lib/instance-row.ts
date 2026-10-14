@@ -1,7 +1,7 @@
 import { fr } from "@/i18n/fr";
 
-import { currentCommand, describeCommand, actionPolicy, stateView, unseenProblems, VERIFIED_SHOWN_MS, ENGINE_STALE_MS } from "./cockpit";
-import { formatAge } from "./format";
+import { currentCommand, describeCommand, actionPolicy, RISK_REDUCING, stateView, unseenProblems, VERIFIED_SHOWN_MS, ENGINE_STALE_MS } from "./cockpit";
+import { formatAge, formatAgeBare } from "./format";
 import type { ActionType, Command, Instance, Observed } from "./instances";
 import type { Me } from "./session";
 
@@ -81,7 +81,7 @@ export const CONFIRMED: ReadonlySet<ActionType> = new Set(["flatten", "stop", "r
 /**
  * The one button of a row, from the OBSERVED state (never the wanted one). Unknown or faulty states only
  * offer to open the instance. Refusal by default: whatever increases risk goes through `actionPolicy`.
- * A command in flight disables the button (no double request), but never a reduction elsewhere.
+ * A command in flight disables an entry-side button (no double request), never a risk reduction (I4).
  */
 export function rowAction(
   instance: Instance,
@@ -107,7 +107,8 @@ export function rowAction(
       break;
   }
   const policy = actionPolicy(action, { instance, degraded: ctx.degraded, nowMs: ctx.nowMs, role: ctx.role });
-  if (ctx.busy) return { kind: "command", action, enabled: false, reason: fr.instances.commandPending };
+  // A command in flight blocks a second entry-side request, never a risk reduction (I4).
+  if (ctx.busy && !RISK_REDUCING.has(action)) return { kind: "command", action, enabled: false, reason: fr.instances.commandPending };
   return { kind: "command", action, ...policy };
 }
 
@@ -118,5 +119,5 @@ export function observedTip(obs: Observed<unknown> | null | undefined, nowMs: nu
   if (!obs?.observed_at) return null;
   const age = Math.max(0, nowMs - Date.parse(obs.observed_at));
   if (Number.isNaN(age)) return null;
-  return obs.stale || age > ENGINE_STALE_MS ? fr.observed.staleSince(formatAge(Math.max(0, age - ENGINE_STALE_MS))) : fr.instances.observedAge(formatAge(age));
+  return obs.stale || age > ENGINE_STALE_MS ? fr.observed.staleSince(formatAgeBare(Math.max(0, age - ENGINE_STALE_MS))) : fr.instances.observedAge(formatAge(age));
 }

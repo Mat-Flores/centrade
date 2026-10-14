@@ -10,11 +10,12 @@ export const problem = (route: Route, status: number, title: string) =>
   json(route, status, { type: "about:blank", title, status }, "application/problem+json");
 
 /** Simulates the auth API; `state.authenticated` flips when the code is accepted. `codes` records the posted codes. */
-export async function mockAuth(page: Page, opts: { authenticated?: boolean; codeStatus?: number } = {}) {
+export async function mockAuth(page: Page, opts: { authenticated?: boolean; codeStatus?: number; role?: string } = {}) {
   await mockStream(page); // the real EventSource would hit the file server and log a MIME error
   const state = { authenticated: opts.authenticated ?? false, logouts: 0, codes: [] as string[] };
+  const me = { ...ME, role: opts.role ?? ME.role };
   await page.route("**/api/v1/auth/me", (route) =>
-    state.authenticated ? json(route, 200, ME) : problem(route, 401, "Unauthorized"),
+    state.authenticated ? json(route, 200, me) : problem(route, 401, "Unauthorized"),
   );
   await page.route("**/api/v1/auth/login", (route) => json(route, 200, { totp_required: true }));
   await page.route("**/api/v1/auth/totp", (route) => {
@@ -22,7 +23,7 @@ export async function mockAuth(page: Page, opts: { authenticated?: boolean; code
     const status = opts.codeStatus ?? 200;
     if (status !== 200) return problem(route, status, "Refused");
     state.authenticated = true;
-    return json(route, 200, ME);
+    return json(route, 200, me);
   });
   await page.route("**/api/v1/auth/logout", (route) => {
     state.authenticated = false;
@@ -142,6 +143,10 @@ export interface World {
   accounts: { id: string; label: string; currency: string; type?: string }[];
   /** `instances` answers an error status (a 500) while set. */
   instancesStatus: number;
+  /** `commands` answers an error status while set. */
+  commandsStatus: number;
+  /** The instances page announces a next page: the list is truncated. */
+  instancesNextCursor: string | null;
   healthStatus: "ok" | "degraded";
   /** The next deployment answers this problem. */
   deployError: { status: number; body: unknown } | null;
@@ -150,10 +155,10 @@ export interface World {
 }
 
 export const emptyWorld = (): World => ({
-  instances: [], commands: [], strategies: [], versions: {}, accounts: [], instancesStatus: 200, healthStatus: "ok", deployError: null, posts: [],
+  instances: [], commands: [], strategies: [], versions: {}, accounts: [], instancesStatus: 200, commandsStatus: 200, instancesNextCursor: null, healthStatus: "ok", deployError: null, posts: [],
 });
 
-const page_ = <T,>(items: T[], nowMs = Date.now()) => ({ items, next_cursor: null, server_time: new Date(nowMs).toISOString() });
+const page_ = <T,>(items: T[], nowMs = Date.now(), nextCursor: string | null = null) => ({ items, next_cursor: nextCursor, server_time: new Date(nowMs).toISOString() });
 
 /** Replaces the browser's EventSource with one the test drives: `emit` delivers a stream event; a heartbeat every second unless muted. */
 export async function mockStream(page: Page, opts: { mute?: boolean } = {}) {
@@ -194,7 +199,7 @@ export async function mockCockpit(page: Page, world: World) {
     }
     if (world.instancesStatus !== 200) return problem(route, world.instancesStatus, "Boom");
     const now = Date.now();
-    return json(route, 200, page_(world.instances.map((s) => wireInstance(s, now)), now));
+    return json(route, 200, page_(world.instances.map((s) => wireInstance(s, now)), now, world.instancesNextCursor));
   });
   await page.route(/\/api\/v1\/instances\/[^/?]+\/(start|stop|pause-entries|resume-entries|flatten)$/, async (route) => {
     const req = route.request();
@@ -205,6 +210,7 @@ export async function mockCockpit(page: Page, world: World) {
     return json(route, 202, { command_id: command.id, command: wireCommand(command) });
   });
   await page.route(/\/api\/v1\/commands(\?.*)?$/, (route) => {
+    if (world.commandsStatus !== 200) return problem(route, world.commandsStatus, "Boom");
     const now = Date.now();
     const status = new URL(route.request().url()).searchParams.getAll("status");
     const items = world.commands.filter((c) => status.length === 0 || status.includes(c.status));

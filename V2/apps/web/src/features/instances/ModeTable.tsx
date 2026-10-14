@@ -2,6 +2,7 @@ import { columnShares, DataTable } from "@/app/table";
 import { Empty, SectionHead } from "@/app/common";
 import { fr } from "@/i18n/fr";
 import type { ModeGroupId } from "@/lib/instance-stats";
+import type { ActionPolicy } from "@/lib/cockpit";
 import type { Instance } from "@/lib/instances";
 import { Button, G, Panel, SimTag } from "@/ui/ui";
 
@@ -16,8 +17,19 @@ const HIDE = [5, 6];
 const c = fr.instances.columns;
 const HEAD = [c.name, c.state, c.balance, <G key="r" k="realized">{c.realized}</G>, <G key="u" k="unrealized">{c.unrealized}</G>, c.trades, c.since, ""];
 
+export type CreateAction = ActionPolicy & { open: () => void };
+
+/** "Nouvelle instance": the same rendering everywhere. Refused (degraded mode): aria-disabled with its reason, a click does nothing. */
+export function NewInstanceButton({ action }: { action: CreateAction }) {
+  return (
+    <Button variant="go" aria-disabled={action.enabled ? undefined : true} data-tip={action.reason ?? undefined} onClick={action.open}>
+      {fr.instances.create.open}
+    </Button>
+  );
+}
+
 /** One mode, one table. `all` is every instance of the mode (the filter only narrows `rows`). */
-export function ModeTable({ mode, all, rows, query, ctx, onCreate }: { mode: ModeGroupId; all: Instance[]; rows: Instance[]; query: string; ctx: RowContext; onCreate: (() => void) | null }) {
+export function ModeTable({ mode, all, rows, query, ctx, create, truncated }: { mode: ModeGroupId; all: Instance[]; rows: Instance[]; query: string; ctx: RowContext; create: CreateAction | null; truncated: boolean }) {
   const t = fr.instances;
   const title = t.modeGroups[mode];
   const empty = mode === "live" ? t.emptyLive : t.emptyPaper;
@@ -26,7 +38,7 @@ export function ModeTable({ mode, all, rows, query, ctx, onCreate }: { mode: Mod
       <SectionHead title={<><G k={mode === "live" ? "live" : "dryRun"} />{mode === "paper" && <SimTag />}<span className="count">{all.length}</span></>} desc={t.modeDesc[mode]} />
       <Panel className="tbl">
         {rows.length > 0 ? (
-          <DataTable label={t.tableLabel(title)} cols={COLS} head={HEAD} right={RIGHT} hideNarrow={HIDE} foot={<Totals group={{ mode, label: title, instances: all }} nowMs={ctx.nowMs} />}>
+          <DataTable label={t.tableLabel(title)} cols={COLS} head={HEAD} right={RIGHT} hideNarrow={HIDE} foot={<Totals group={{ mode, label: title, instances: all }} nowMs={ctx.nowMs} truncated={truncated} />}>
             {rows.map((i) => <InstanceRow key={i.id} instance={i} ctx={ctx} />)}
           </DataTable>
         ) : all.length > 0 ? (
@@ -34,7 +46,7 @@ export function ModeTable({ mode, all, rows, query, ctx, onCreate }: { mode: Mod
         ) : (
           <Empty title={empty.title}>
             <span>{empty.body}</span>
-            {mode === "paper" && onCreate && <Button variant="go" onClick={onCreate}>{t.create.open}</Button>}
+            {mode === "paper" && create && <NewInstanceButton action={create} />}
           </Empty>
         )}
       </Panel>

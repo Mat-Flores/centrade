@@ -61,7 +61,7 @@ export interface RowSummary {
   pnl: string[];
   /** Sign of each `pnl` line (0 when unknown or empty): the caller colors, the text already carries the sign. */
   pnlSigns: (-1 | 0 | 1)[];
-  /** "12 +2" (closed trades, open positions), or "inconnu". */
+  /** "12 +2" (closed trades, open positions), "12 +?" when the positions are unknown, "(périmé)" when stale, or "inconnu". */
   tradesCompact: string;
   tradesStale: boolean;
   /** Whether any figure of the row is stale. */
@@ -100,7 +100,11 @@ export function summarizeRow(instance: Instance, nowMs: number): RowSummary {
     tradesCompact:
       trades.kind === "unknown"
         ? fr.observed.unknown
-        : `${trades.value}${positions.kind === "known" && positions.value > 0 ? ` +${positions.value}` : ""}`,
+        : staleMark(
+            // An open-position count that is unknown is "?", never nothing: absence would read as zero.
+            `${trades.value}${positions.kind === "unknown" ? " +?" : positions.value > 0 ? ` +${positions.value}` : ""}`,
+            trades.stale || (positions.kind === "known" && positions.stale),
+          ),
     tradesStale: (trades.kind === "known" && trades.stale) || (positions.kind === "known" && positions.stale),
     balancesStale: balances.kind === "known" && balances.stale,
     pnlStale: pnl.kind === "known" && pnl.stale,

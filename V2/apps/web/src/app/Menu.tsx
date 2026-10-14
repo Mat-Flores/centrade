@@ -32,7 +32,7 @@ function MenuPanel({ id, items, head, style, ariaLabel, onClose, anchor }: {
 
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === "Escape") { e.stopPropagation(); onClose(true); return; }
-    if (e.key === "Tab") { onClose(false); return; }
+    if (e.key === "Tab") { onClose(true); return; } // focus goes back to the trigger first, then Tab moves on from it
     const list = entries();
     const at = list.indexOf(document.activeElement as HTMLElement);
     const to = e.key === "ArrowDown" ? (at + 1) % list.length : e.key === "ArrowUp" ? (at - 1 + list.length) % list.length : e.key === "Home" ? 0 : e.key === "End" ? list.length - 1 : -1;

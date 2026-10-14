@@ -139,6 +139,18 @@ describe("summarizeRow: compact figures", () => {
     expect(summarizeRow(makeInstance({ age: null }), NOW).tradesCompact).toBe("inconnu");
   });
 
+  it("never shows an unknown open-position count as zero", () => {
+    const unknownPositions = summarizeRow(makeInstance({ closed_trades: { value: 12, observed_at: iso(2), stale: false }, open_positions: { value: null, observed_at: null, stale: false } }), NOW);
+    expect(unknownPositions.tradesCompact).toBe("12 +?");
+    expect(unknownPositions.openPositions).toBe("inconnu");
+  });
+
+  it("marks a stale position count as stale in the text, not only by color", () => {
+    const stalePositions = summarizeRow(makeInstance({ closed_trades: { value: 12, observed_at: iso(2), stale: false }, open_positions: { value: 2, observed_at: iso(120), stale: false } }), NOW);
+    expect(stalePositions.tradesStale).toBe(true);
+    expect(stalePositions.tradesCompact).toBe("12 +2 (périmé)");
+  });
+
   it("flags a stale figure instead of presenting it as current", () => {
     const row = summarizeRow(makeInstance({ balances: bal([{ currency: "USDT", free: "1", total: "2" }], 120) }), NOW);
     expect(row.balancesStale).toBe(true);

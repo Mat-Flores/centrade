@@ -1,6 +1,7 @@
 import { Menu, type MenuItem } from "@/app/Menu";
 import { navigate, href, ALL_TAB } from "@/app/router";
 import { fr } from "@/i18n/fr";
+import { RISK_REDUCING } from "@/lib/cockpit";
 import { CONFIRMED, type RowAction } from "@/lib/instance-row";
 import type { ActionType, Instance } from "@/lib/instances";
 import { Button } from "@/ui/ui";
@@ -25,13 +26,15 @@ export function RowActions({ instance, action, canAct, sending, onSend, onConfir
   else if (action.kind === "starting") button = <Button small aria-disabled="true">{t.rowActions.starting}</Button>;
   else {
     const a = action.action;
+    // A send in flight blocks a second entry-side request, never a risk reduction (I4).
+    const blocked = sending && !RISK_REDUCING.has(a);
     button = (
       <Button
         small
         // aria-disabled keeps the button focusable; the reason is on hover and read with it.
-        aria-disabled={action.enabled && !sending ? undefined : true}
+        aria-disabled={action.enabled && !blocked ? undefined : true}
         data-tip={action.enabled ? t.rowActionTips[a as "start"] : (action.reason ?? undefined)}
-        onClick={() => action.enabled && !sending && press(a)}
+        onClick={() => action.enabled && !blocked && press(a)}
       >
         {t.rowActions[a as "start"]}
       </Button>

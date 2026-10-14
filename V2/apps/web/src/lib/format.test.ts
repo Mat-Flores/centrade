@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import {
   dayOffset,
   formatAge,
+  formatAgeBare,
   formatClock,
   formatDateTime,
   formatDecimalText,
   formatDuration,
+  formatDurationShort,
   formatMoney,
   formatPnl,
   formatTimeframe,
@@ -141,5 +143,24 @@ describe("Toronto clock helpers", () => {
 describe("formatTimeframe", () => {
   it("labels each timeframe", () => {
     expect((["5m", "15m", "1h", "4h", "1d"] as const).map(formatTimeframe)).toEqual(["5 min", "15 min", "1 h", "4 h", "1 j"]);
+  });
+});
+
+describe("bare age and short duration come from the translation file", () => {
+  it("formatAgeBare says the span without the 'il y a' prefix", () => {
+    expect(formatAgeBare(0)).toBe("0 s");
+    expect(formatAgeBare(12_000)).toBe("12 s");
+    expect(formatAgeBare(150_000)).toBe("2 min");
+    expect(formatAgeBare(3 * 3600_000 + 5 * 60_000)).toBe("3 h 05 min");
+    expect(formatAgeBare(2 * 86_400_000 + 4 * 3600_000)).toBe("2 j 4 h");
+    expect(formatAgeBare(-5)).toBe("0 s");
+  });
+
+  it("formatDurationShort keeps the two leading units", () => {
+    expect(formatDurationShort(42)).toBe("42 s");
+    expect(formatDurationShort(300)).toBe("5 min");
+    expect(formatDurationShort(2 * 3600)).toBe("2 h 0 min");
+    expect(formatDurationShort(3 * 86400 + 4 * 3600 + 12 * 60)).toBe("3 j 4 h");
+    expect(formatDurationShort(3 * 86400)).toBe("3 j 0 h");
   });
 });
