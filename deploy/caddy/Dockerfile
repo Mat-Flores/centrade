@@ -25,7 +25,7 @@ EXPOSE 8443
 
 # Contrat du front : apps/web/.node-version, package.json (champ packageManager),
 # pnpm-lock.yaml, script `build` qui produit apps/web/dist.
-FROM node:22.23.3-slim@sha256:c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392 AS web-build
+FROM node:26.11.1-slim@sha256:193fe51b64e77981119c98c2002c9e32a70e2f006fb4d25068ce0558998917f0 AS web-build
 ENV COREPACK_ENABLE_DOWNLOAD_PROMPT=0
 WORKDIR /web
 COPY apps/web/.node-version apps/web/package.json apps/web/pnpm-lock.yaml ./
