@@ -2,7 +2,7 @@
 # Sources : https://docs.astral.sh/uv/guides/integration/docker/
 FROM ghcr.io/astral-sh/uv:0.13.0@sha256:cdc6093146eb3ff6a40107b38f008b789e050e77ad87865e381d9917da55a168 AS uv
 
-FROM python:3.12.15-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1 AS build
+FROM python:3.15.0-slim@sha256:f5b92f2a669a4c347044f29367f31983280b648250ca94dea66f98c53bc87e58 AS build
 COPY --from=uv /uv /usr/local/bin/uv
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv UV_LINK_MODE=copy UV_PYTHON_DOWNLOADS=never
 WORKDIR /src
@@ -10,7 +10,7 @@ COPY pyproject.toml uv.lock ./
 # Dépendances de production seulement, exactement celles de uv.lock.
 RUN uv sync --frozen --no-dev --no-install-project
 
-FROM python:3.12.15-slim@sha256:a6e34c598f2467ed0e9a8d349809fcd8b5c603269512df273a0bb1784edc11b1
+FROM python:3.15.0-slim@sha256:f5b92f2a669a4c347044f29367f31983280b648250ca94dea66f98c53bc87e58
 RUN useradd --system --uid 10001 --no-create-home --shell /usr/sbin/nologin centrade
 COPY --from=build /opt/venv /opt/venv
 # Une seule image pour l'API, le worker et les migrations (commande choisie par Compose).
