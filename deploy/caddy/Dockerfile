@@ -14,7 +14,7 @@ COPY deploy/caddy/build/main.go ./
 RUN go build -trimpath -ldflags="-s -w" -o /caddy .
 
 # L'image officielle fournit le système de base, les certificats racine et les dossiers.
-FROM caddy:2.11.7-alpine@sha256:d8542f48d34a9cf4e4c11a478865229840e87e4c96ea3f439101f31a5d35f75f AS base
+FROM caddy:2.11.7-alpine@sha256:e70b164da81ef698b3ad19af799ea6086ce6d9e48ed4079eb9fe26f6fbf14ee5 AS base
 COPY --from=caddy-build /caddy /usr/bin/caddy
 RUN adduser -S -D -H -u 10002 caddy && chown -R 10002 /data /config
 USER 10002
